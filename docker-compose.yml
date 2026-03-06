@@ -16,23 +16,13 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    environment:
-      - DOCKER_API_VERSION=1.44
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
       - traefik-certs:/letsencrypt
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - traefik-public
       - luxview-net
-    labels:
-      # Global HTTP -> HTTPS redirect
-      - "traefik.http.routers.http-catchall.rule=HostRegexp(`.+`)"
-      - "traefik.http.routers.http-catchall.entrypoints=web"
-      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
 
   # ---------------------------------------------------------------------------
   # LuxView Engine — Go API (the brain)
@@ -77,13 +67,6 @@ services:
     networks:
       - luxview-net
       - traefik-public
-    labels:
-      # Route /api/* to engine
-      - "traefik.enable=true"
-      - "traefik.http.routers.engine.rule=Host(`${DOMAIN:-luxview.cloud}`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.engine.entrypoints=websecure"
-      - "traefik.http.routers.engine.tls.certresolver=letsencrypt"
-      - "traefik.http.services.engine.loadbalancer.server.port=8080"
 
   # ---------------------------------------------------------------------------
   # Dashboard — React SPA (Nginx)
@@ -96,13 +79,6 @@ services:
     restart: unless-stopped
     networks:
       - traefik-public
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`${DOMAIN:-luxview.cloud}`)"
-      - "traefik.http.routers.dashboard.entrypoints=websecure"
-      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.dashboard.priority=1"
-      - "traefik.http.services.dashboard.loadbalancer.server.port=80"
 
   # ---------------------------------------------------------------------------
   # PostgreSQL — Platform Database

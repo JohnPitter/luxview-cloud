@@ -1,0 +1,42 @@
+# =============================================================================
+# Traefik — Platform Routes (Engine + Dashboard)
+# =============================================================================
+
+http:
+  routers:
+    # API routes → Engine
+    engine-api:
+      rule: "Host(`luxview.cloud`) && PathPrefix(`/api`)"
+      entryPoints:
+        - websecure
+      service: engine-svc
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+        - rate-limit
+      priority: 10
+
+    # Dashboard (catch-all for luxview.cloud)
+    dashboard:
+      rule: "Host(`luxview.cloud`)"
+      entryPoints:
+        - websecure
+      service: dashboard-svc
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+        - gzip-compress
+      priority: 1
+
+  services:
+    engine-svc:
+      loadBalancer:
+        servers:
+          - url: "http://luxview-engine:8080"
+
+    dashboard-svc:
+      loadBalancer:
+        servers:
+          - url: "http://luxview-dashboard:80"

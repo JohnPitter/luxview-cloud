@@ -34,13 +34,7 @@ certificatesResolvers:
 
 # -- Providers ----------------------------------------------------------------
 providers:
-  # Docker provider for platform services (engine, dashboard)
-  docker:
-    endpoint: "unix:///var/run/docker.sock"
-    exposedByDefault: false
-    network: traefik-public
-
-  # File provider for static dynamic config
+  # File provider for platform routes + middleware
   file:
     directory: /etc/traefik/dynamic
     watch: true
