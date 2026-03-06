@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -57,20 +58,33 @@ func (b *Builder) Build(ctx context.Context, sourceDir string, bp buildpack.Buil
 	}
 	defer resp.Close()
 
-	// Read build output
+	// Read build output and check for errors
 	var buildLog strings.Builder
-	buf := make([]byte, 4096)
+	decoder := json.NewDecoder(resp)
+	var lastErr string
 	for {
-		n, readErr := resp.Read(buf)
-		if n > 0 {
-			buildLog.Write(buf[:n])
+		var msg struct {
+			Stream string `json:"stream"`
+			Error  string `json:"error"`
 		}
-		if readErr == io.EOF {
-			break
+		if err := decoder.Decode(&msg); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return buildLog.String(), fmt.Errorf("read build output: %w", err)
 		}
-		if readErr != nil {
-			return buildLog.String(), fmt.Errorf("read build output: %w", readErr)
+		if msg.Stream != "" {
+			buildLog.WriteString(msg.Stream)
 		}
+		if msg.Error != "" {
+			lastErr = msg.Error
+			buildLog.WriteString("ERROR: " + msg.Error + "\n")
+		}
+	}
+
+	if lastErr != "" {
+		log.Error().Str("image", imageTag).Str("error", lastErr).Msg("build failed")
+		return buildLog.String(), fmt.Errorf("docker build failed: %s", lastErr)
 	}
 
 	log.Info().Str("image", imageTag).Msg("build completed")
