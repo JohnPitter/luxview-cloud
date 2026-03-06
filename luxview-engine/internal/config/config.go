@@ -55,9 +55,8 @@ type Config struct {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:    envInt("PORT", 8080),
-		BaseURL: envStr("BASE_URL", "http://localhost:8080"),
-		Domain:  envStr("DOMAIN", "luxview.cloud"),
+		Port:   envInt("PORT", 8080),
+		Domain: envStr("DOMAIN", "luxview.cloud"),
 
 		DatabaseURL: envStr("DATABASE_URL", "postgres://luxview:luxview@localhost:5432/luxview_platform?sslmode=disable"),
 
@@ -99,6 +98,9 @@ func Load() (*Config, error) {
 
 		InternalToken: envStr("INTERNAL_TOKEN", ""),
 	}
+
+	// Derive BaseURL from DOMAIN if not explicitly set
+	cfg.BaseURL = envStr("BASE_URL", fmt.Sprintf("https://%s", cfg.Domain))
 
 	var missing []string
 	if cfg.EncryptionKey == "" {
