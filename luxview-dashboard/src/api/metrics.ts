@@ -10,9 +10,9 @@ export interface MetricPoint {
 
 export const metricsApi = {
   async get(appId: string, period = '1h'): Promise<MetricPoint[]> {
-    const { data } = await api.get<MetricPoint[]>(`/apps/${appId}/metrics`, {
+    const { data } = await api.get<{ metrics: MetricPoint[] }>(`/apps/${appId}/metrics`, {
       params: { period },
     });
-    return data;
+    return data.metrics ?? [];
   },
 };

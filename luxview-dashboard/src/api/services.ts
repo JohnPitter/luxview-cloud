@@ -21,7 +21,7 @@ export interface AppService {
 export const servicesApi = {
   async list(appId: string): Promise<AppService[]> {
     const { data } = await api.get<AppService[]>(`/apps/${appId}/services`);
-    return data;
+    return data ?? [];
   },
 
   async create(appId: string, serviceType: ServiceType): Promise<AppService> {

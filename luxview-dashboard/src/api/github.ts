@@ -22,11 +22,11 @@ export const githubApi = {
     const { data } = await api.get<GithubRepo[]>('/github/repos', {
       params: { page, perPage },
     });
-    return data;
+    return Array.isArray(data) ? data : [];
   },
 
   async listBranches(repoFullName: string): Promise<GithubBranch[]> {
     const { data } = await api.get<GithubBranch[]>(`/github/repos/${repoFullName}/branches`);
-    return data;
+    return Array.isArray(data) ? data : [];
   },
 };

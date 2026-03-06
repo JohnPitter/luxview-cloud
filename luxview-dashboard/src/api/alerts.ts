@@ -25,7 +25,7 @@ export interface CreateAlertPayload {
 export const alertsApi = {
   async list(appId: string): Promise<Alert[]> {
     const { data } = await api.get<Alert[]>(`/apps/${appId}/alerts`);
-    return data;
+    return data ?? [];
   },
 
   async create(appId: string, payload: CreateAlertPayload): Promise<Alert> {
