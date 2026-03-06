@@ -28,6 +28,7 @@ export function App() {
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/auth/callback" element={<Login />} />
       <Route
         path="/dashboard"
         element={
