@@ -17,10 +17,11 @@ export interface Deployment {
 
 export const deploymentsApi = {
   async list(appId: string, limit = 20, offset = 0): Promise<Deployment[]> {
-    const { data } = await api.get<Deployment[]>(`/apps/${appId}/deployments`, {
-      params: { limit, offset },
-    });
-    return data;
+    const { data } = await api.get<{ deployments: Deployment[]; total: number }>(
+      `/apps/${appId}/deployments`,
+      { params: { limit, offset } },
+    );
+    return data.deployments ?? [];
   },
 
   async get(appId: string, deployId: string): Promise<Deployment> {

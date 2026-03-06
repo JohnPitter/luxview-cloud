@@ -1,5 +1,26 @@
 import axios from 'axios';
 
+function snakeToCamel(str: string): string {
+  return str.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+function camelToSnake(str: string): string {
+  return str.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+}
+
+function transformKeys(obj: unknown, fn: (key: string) => string): unknown {
+  if (Array.isArray(obj)) return obj.map((item) => transformKeys(item, fn));
+  if (obj !== null && typeof obj === 'object' && !(obj instanceof Date)) {
+    return Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>).map(([key, value]) => [
+        fn(key),
+        transformKeys(value, fn),
+      ]),
+    );
+  }
+  return obj;
+}
+
 export const api = axios.create({
   baseURL: '/api',
   timeout: 30000,
@@ -14,11 +35,19 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  if (config.data && typeof config.data === 'object') {
+    config.data = transformKeys(config.data, camelToSnake);
+  }
   return config;
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (response.data && typeof response.data === 'object') {
+      response.data = transformKeys(response.data, snakeToCamel);
+    }
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('lv_token');

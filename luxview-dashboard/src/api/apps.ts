@@ -12,7 +12,7 @@ export interface App {
   repoBranch: string;
   stack: Stack;
   status: AppStatus;
-  containerId: string;
+  containerId?: string;
   internalPort: number;
   assignedPort: number;
   envVars: Record<string, string>;
@@ -40,8 +40,10 @@ export interface CreateAppPayload {
 
 export const appsApi = {
   async list(limit = 50, offset = 0): Promise<App[]> {
-    const { data } = await api.get<App[]>('/apps', { params: { limit, offset } });
-    return data;
+    const { data } = await api.get<{ apps: App[]; total: number }>('/apps', {
+      params: { limit, offset },
+    });
+    return data.apps ?? [];
   },
 
   async get(id: string): Promise<App> {

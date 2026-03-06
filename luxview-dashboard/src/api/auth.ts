@@ -2,13 +2,11 @@ import { api } from './client';
 
 export interface User {
   id: string;
-  githubId: number;
   username: string;
   email: string;
   avatarUrl: string;
   role: 'user' | 'admin';
   createdAt: string;
-  lastLoginAt: string;
 }
 
 export interface AuthResponse {
