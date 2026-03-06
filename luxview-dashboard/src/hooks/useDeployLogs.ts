@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useWebSocket } from './useWebSocket';
+import { useState, useCallback } from 'react';
 
 export interface LogLine {
   timestamp: string;
@@ -7,30 +6,11 @@ export interface LogLine {
   message: string;
 }
 
-export function useDeployLogs(appId: string, deployId?: string) {
+// WebSocket log streaming is not yet implemented on the backend.
+// This hook returns an empty log list until the /ws/logs endpoint is added.
+export function useDeployLogs(_appId: string, _deployId?: string) {
   const [logs, setLogs] = useState<LogLine[]>([]);
-  const [connected, setConnected] = useState(false);
-  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/logs/${appId}${deployId ? `/${deployId}` : ''}`;
-  const wsRef = useWebSocket(wsUrl);
-
-  useEffect(() => {
-    const client = wsRef.current;
-    if (!client) return;
-
-    const unsubLog = client.on('log', (data) => {
-      setLogs((prev) => [...prev, data as LogLine]);
-    });
-
-    const unsubConnected = client.on('connected', () => {
-      setConnected(true);
-    });
-
-    return () => {
-      unsubLog();
-      unsubConnected();
-    };
-  }, [wsRef]);
-
+  const connected = false;
   const clear = useCallback(() => setLogs([]), []);
 
   return { logs, connected, clear };

@@ -17,6 +17,16 @@ http:
         - rate-limit
       priority: 10
 
+    # WebSocket routes → Engine
+    engine-ws:
+      rule: "Host(`luxview.cloud`) && PathPrefix(`/ws`)"
+      entryPoints:
+        - websecure
+      service: engine-svc
+      tls:
+        certResolver: letsencrypt
+      priority: 10
+
     # Dashboard (catch-all for luxview.cloud)
     dashboard:
       rule: "Host(`luxview.cloud`)"
