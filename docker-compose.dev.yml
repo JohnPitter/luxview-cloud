@@ -1,0 +1,116 @@
+# =============================================================================
+# LuxView Cloud Platform — Development Override
+# =============================================================================
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Traefik — Dev mode (no SSL, dashboard enabled)
+  # ---------------------------------------------------------------------------
+  traefik:
+    ports:
+      - "80:80"
+      - "8080:8080"   # Traefik dashboard
+    volumes:
+      - ./traefik/traefik.dev.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      # Remove HTTPS redirect in dev
+      - "traefik.http.routers.http-catchall.rule="
+      - "traefik.http.routers.http-catchall.entrypoints="
+
+  # ---------------------------------------------------------------------------
+  # Engine — Dev mode with hot reload (air)
+  # ---------------------------------------------------------------------------
+  engine:
+    build:
+      context: ./luxview-engine
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./luxview-engine:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+      - build-cache:/tmp/builds
+    environment:
+      - PORT=8080
+      - DATABASE_URL=postgres://luxview:${DB_PASSWORD:-devpassword}@pg-platform:5432/luxview_platform?sslmode=disable
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-dev-encryption-key-min-32-chars!!}
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-me}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - DOMAIN=localhost
+      - LOG_LEVEL=debug
+      - SHARED_PG_HOST=pg-shared
+      - SHARED_PG_PORT=5432
+      - SHARED_PG_USER=luxview_admin
+      - SHARED_PG_PASSWORD=${SHARED_PG_PASSWORD:-devpassword}
+      - SHARED_REDIS_HOST=redis-shared
+      - SHARED_REDIS_PORT=6379
+      - SHARED_REDIS_PASSWORD=${SHARED_REDIS_PASSWORD:-devpassword}
+      - SHARED_MONGO_HOST=mongo-shared
+      - SHARED_MONGO_PORT=27017
+      - SHARED_MONGO_USER=luxview_admin
+      - SHARED_MONGO_PASSWORD=${SHARED_MONGO_PASSWORD:-devpassword}
+      - SHARED_RABBITMQ_HOST=rabbitmq-shared
+      - SHARED_RABBITMQ_PORT=5672
+      - SHARED_RABBITMQ_USER=luxview_admin
+      - SHARED_RABBITMQ_PASSWORD=${SHARED_RABBITMQ_PASSWORD:-devpassword}
+      - BUILD_CONCURRENCY=2
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.engine.rule=Host(`localhost`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.engine.entrypoints=web"
+      - "traefik.http.services.engine.loadbalancer.server.port=8080"
+
+  # ---------------------------------------------------------------------------
+  # Dashboard — Dev mode with Vite HMR
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: ./luxview-dashboard
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./luxview-dashboard:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"   # Vite dev server
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`localhost`)"
+      - "traefik.http.routers.dashboard.entrypoints=web"
+      - "traefik.http.routers.dashboard.priority=1"
+      - "traefik.http.services.dashboard.loadbalancer.server.port=5173"
+
+  # ---------------------------------------------------------------------------
+  # Databases — Exposed ports for local debugging
+  # ---------------------------------------------------------------------------
+  pg-platform:
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-devpassword}
+
+  pg-shared:
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_PASSWORD: ${SHARED_PG_PASSWORD:-devpassword}
+
+  redis-shared:
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ${SHARED_REDIS_PASSWORD:-devpassword} --appendonly yes
+
+  mongo-shared:
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_PASSWORD: ${SHARED_MONGO_PASSWORD:-devpassword}
+
+  rabbitmq-shared:
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # Management UI
+    environment:
+      RABBITMQ_DEFAULT_PASS: ${SHARED_RABBITMQ_PASSWORD:-devpassword}

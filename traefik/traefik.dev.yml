@@ -1,0 +1,42 @@
+# =============================================================================
+# Traefik v3 — Static Configuration (Development)
+# =============================================================================
+
+# -- Global -------------------------------------------------------------------
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+# -- Entrypoints (HTTP only, no SSL) -----------------------------------------
+entryPoints:
+  web:
+    address: ":80"
+
+# -- Providers ----------------------------------------------------------------
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: traefik-public
+
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+  http:
+    endpoint: "http://luxview-engine:8080/api/internal/traefik-config"
+    pollInterval: 5s
+    pollTimeout: 3s
+
+# -- API / Dashboard (enabled for development) --------------------------------
+api:
+  dashboard: true
+  insecure: true
+
+# -- Logging ------------------------------------------------------------------
+log:
+  level: DEBUG
+  format: common
+
+accessLog:
+  format: common

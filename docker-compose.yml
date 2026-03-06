@@ -1,0 +1,227 @@
+# =============================================================================
+# LuxView Cloud Platform — Production Docker Compose
+# =============================================================================
+# Usage: docker compose up -d
+# Docs:  docs/plans/2026-03-06-luxview-cloud-design.md
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Traefik — Reverse Proxy + SSL + Dynamic Routing
+  # ---------------------------------------------------------------------------
+  traefik:
+    image: traefik:v3.2
+    container_name: luxview-traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - traefik-certs:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - traefik-public
+      - luxview-net
+    labels:
+      # Global HTTP -> HTTPS redirect
+      - "traefik.http.routers.http-catchall.rule=HostRegexp(`.+`)"
+      - "traefik.http.routers.http-catchall.entrypoints=web"
+      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+
+  # ---------------------------------------------------------------------------
+  # LuxView Engine — Go API (the brain)
+  # ---------------------------------------------------------------------------
+  engine:
+    build:
+      context: ./luxview-engine
+      dockerfile: Dockerfile
+    container_name: luxview-engine
+    restart: unless-stopped
+    depends_on:
+      pg-platform:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - build-cache:/tmp/builds
+    environment:
+      - PORT=${ENGINE_PORT:-8080}
+      - DATABASE_URL=postgres://luxview:${DB_PASSWORD}@pg-platform:5432/luxview_platform?sslmode=disable
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - DOMAIN=${DOMAIN:-luxview.cloud}
+      - SHARED_PG_HOST=pg-shared
+      - SHARED_PG_PORT=5432
+      - SHARED_PG_USER=luxview_admin
+      - SHARED_PG_PASSWORD=${SHARED_PG_PASSWORD}
+      - SHARED_REDIS_HOST=redis-shared
+      - SHARED_REDIS_PORT=6379
+      - SHARED_REDIS_PASSWORD=${SHARED_REDIS_PASSWORD}
+      - SHARED_MONGO_HOST=mongo-shared
+      - SHARED_MONGO_PORT=27017
+      - SHARED_MONGO_USER=luxview_admin
+      - SHARED_MONGO_PASSWORD=${SHARED_MONGO_PASSWORD}
+      - SHARED_RABBITMQ_HOST=rabbitmq-shared
+      - SHARED_RABBITMQ_PORT=5672
+      - SHARED_RABBITMQ_USER=${SHARED_RABBITMQ_USER:-luxview_admin}
+      - SHARED_RABBITMQ_PASSWORD=${SHARED_RABBITMQ_PASSWORD}
+      - BUILD_CONCURRENCY=${BUILD_CONCURRENCY:-3}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    networks:
+      - luxview-net
+      - traefik-public
+    labels:
+      # Route /api/* to engine
+      - "traefik.enable=true"
+      - "traefik.http.routers.engine.rule=Host(`${DOMAIN:-luxview.cloud}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.engine.entrypoints=websecure"
+      - "traefik.http.routers.engine.tls.certresolver=letsencrypt"
+      - "traefik.http.services.engine.loadbalancer.server.port=8080"
+
+  # ---------------------------------------------------------------------------
+  # Dashboard — React SPA (Nginx)
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: ./luxview-dashboard
+      dockerfile: Dockerfile
+    container_name: luxview-dashboard
+    restart: unless-stopped
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`${DOMAIN:-luxview.cloud}`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.priority=1"
+      - "traefik.http.services.dashboard.loadbalancer.server.port=80"
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — Platform Database
+  # ---------------------------------------------------------------------------
+  pg-platform:
+    image: postgres:16-alpine
+    container_name: luxview-pg-platform
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: luxview_platform
+      POSTGRES_USER: luxview
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pg-platform-data:/var/lib/postgresql/data
+    networks:
+      - luxview-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U luxview -d luxview_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — Shared (User Apps)
+  # ---------------------------------------------------------------------------
+  pg-shared:
+    image: postgres:16-alpine
+    container_name: luxview-pg-shared
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: luxview_shared
+      POSTGRES_USER: luxview_admin
+      POSTGRES_PASSWORD: ${SHARED_PG_PASSWORD}
+    volumes:
+      - pg-shared-data:/var/lib/postgresql/data
+    networks:
+      - luxview-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U luxview_admin -d luxview_shared"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Redis — Shared (User Apps)
+  # ---------------------------------------------------------------------------
+  redis-shared:
+    image: redis:7-alpine
+    container_name: luxview-redis-shared
+    restart: unless-stopped
+    command: redis-server --requirepass ${SHARED_REDIS_PASSWORD} --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-shared-data:/data
+    networks:
+      - luxview-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${SHARED_REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # MongoDB — Shared (User Apps)
+  # ---------------------------------------------------------------------------
+  mongo-shared:
+    image: mongo:7
+    container_name: luxview-mongo-shared
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: luxview_admin
+      MONGO_INITDB_ROOT_PASSWORD: ${SHARED_MONGO_PASSWORD}
+    volumes:
+      - mongo-shared-data:/data/db
+    networks:
+      - luxview-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "-u", "luxview_admin", "-p", "${SHARED_MONGO_PASSWORD}", "--authenticationDatabase", "admin", "--quiet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # RabbitMQ — Shared (User Apps)
+  # ---------------------------------------------------------------------------
+  rabbitmq-shared:
+    image: rabbitmq:3-management-alpine
+    container_name: luxview-rabbitmq-shared
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${SHARED_RABBITMQ_USER:-luxview_admin}
+      RABBITMQ_DEFAULT_PASS: ${SHARED_RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq-shared-data:/var/lib/rabbitmq
+    networks:
+      - luxview-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  luxview-net:
+    name: luxview-net
+    driver: bridge
+    internal: true
+  traefik-public:
+    name: traefik-public
+    driver: bridge
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  pg-platform-data:
+  pg-shared-data:
+  redis-shared-data:
+  mongo-shared-data:
+  rabbitmq-shared-data:
+  traefik-certs:
+  build-cache:

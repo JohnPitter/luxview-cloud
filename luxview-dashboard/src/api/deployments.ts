@@ -1,0 +1,34 @@
+import { api } from './client';
+
+export type DeployStatus = 'pending' | 'building' | 'deploying' | 'live' | 'failed' | 'rolled_back';
+
+export interface Deployment {
+  id: string;
+  appId: string;
+  commitSha: string;
+  commitMessage: string;
+  status: DeployStatus;
+  buildLog: string;
+  durationMs: number;
+  imageTag: string;
+  createdAt: string;
+  finishedAt: string;
+}
+
+export const deploymentsApi = {
+  async list(appId: string, limit = 20, offset = 0): Promise<Deployment[]> {
+    const { data } = await api.get<Deployment[]>(`/apps/${appId}/deployments`, {
+      params: { limit, offset },
+    });
+    return data;
+  },
+
+  async get(appId: string, deployId: string): Promise<Deployment> {
+    const { data } = await api.get<Deployment>(`/apps/${appId}/deployments/${deployId}`);
+    return data;
+  },
+
+  async rollback(appId: string, deployId: string): Promise<void> {
+    await api.post(`/apps/${appId}/deployments/${deployId}/rollback`);
+  },
+};

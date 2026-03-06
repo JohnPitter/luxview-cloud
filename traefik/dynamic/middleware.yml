@@ -1,0 +1,30 @@
+# =============================================================================
+# Traefik — Dynamic Configuration (Shared Middlewares)
+# =============================================================================
+
+http:
+  middlewares:
+    # Security headers for all responses
+    security-headers:
+      headers:
+        browserXssFilter: true
+        contentTypeNosniff: true
+        frameDeny: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 31536000
+        customFrameOptionsValue: "SAMEORIGIN"
+        referrerPolicy: "strict-origin-when-cross-origin"
+
+    # Rate limiting: 100 requests per second per IP
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 200
+        period: 1s
+
+    # Compress responses
+    gzip-compress:
+      compress:
+        excludedContentTypes:
+          - "text/event-stream"

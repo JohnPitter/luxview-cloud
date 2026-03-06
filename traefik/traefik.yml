@@ -1,0 +1,66 @@
+# =============================================================================
+# Traefik v3 — Static Configuration (Production)
+# =============================================================================
+
+# -- Global -------------------------------------------------------------------
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+# -- Entrypoints --------------------------------------------------------------
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: letsencrypt
+
+# -- Certificate Resolvers (Let's Encrypt) ------------------------------------
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "${ACME_EMAIL}"
+      storage: /letsencrypt/acme.json
+      tlsChallenge: {}
+
+# -- Providers ----------------------------------------------------------------
+providers:
+  # Docker provider for platform services (engine, dashboard)
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: traefik-public
+
+  # File provider for static dynamic config
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+  # HTTP provider — polls Engine every 5s for user app routes
+  http:
+    endpoint: "http://luxview-engine:8080/api/internal/traefik-config"
+    pollInterval: 5s
+    pollTimeout: 3s
+
+# -- API / Dashboard (disabled in production) ---------------------------------
+api:
+  dashboard: false
+
+# -- Logging ------------------------------------------------------------------
+log:
+  level: WARN
+  format: json
+
+accessLog:
+  format: json
+  filters:
+    statusCodes:
+      - "400-599"
