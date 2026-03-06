@@ -63,7 +63,7 @@ func (hc *HealthChecker) CheckApp(ctx context.Context, app *model.App) bool {
 	}
 
 	// HTTP health check
-	url := fmt.Sprintf("http://localhost:%d/", app.AssignedPort)
+	url := fmt.Sprintf("http://host.docker.internal:%d/", app.AssignedPort)
 	resp, err := hc.client.Get(url)
 	if err != nil {
 		return false
@@ -77,7 +77,7 @@ func (hc *HealthChecker) CheckApp(ctx context.Context, app *model.App) bool {
 func (hc *HealthChecker) WaitForHealthy(ctx context.Context, appID uuid.UUID, port int, timeout time.Duration) bool {
 	log := logger.With("healthcheck")
 	deadline := time.Now().Add(timeout)
-	url := fmt.Sprintf("http://localhost:%d/", port)
+	url := fmt.Sprintf("http://host.docker.internal:%d/", port)
 
 	for time.Now().Before(deadline) {
 		resp, err := hc.client.Get(url)
