@@ -11,12 +11,12 @@ import (
 
 // TraefikConfig represents the dynamic Traefik configuration.
 type TraefikConfig struct {
-	HTTP TraefikHTTP `json:"http"`
+	HTTP *TraefikHTTP `json:"http,omitempty"`
 }
 
 type TraefikHTTP struct {
-	Routers  map[string]TraefikRouter  `json:"routers"`
-	Services map[string]TraefikService `json:"services"`
+	Routers  map[string]TraefikRouter  `json:"routers,omitempty"`
+	Services map[string]TraefikService `json:"services,omitempty"`
 }
 
 type TraefikRouter struct {
@@ -60,8 +60,13 @@ func (rs *RouterService) GenerateConfig(ctx context.Context) (*TraefikConfig, er
 		return nil, fmt.Errorf("list running apps: %w", err)
 	}
 
+	if len(apps) == 0 {
+		log.Debug().Msg("no running apps, returning empty config")
+		return &TraefikConfig{}, nil
+	}
+
 	config := &TraefikConfig{
-		HTTP: TraefikHTTP{
+		HTTP: &TraefikHTTP{
 			Routers:  make(map[string]TraefikRouter),
 			Services: make(map[string]TraefikService),
 		},
