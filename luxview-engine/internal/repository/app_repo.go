@@ -35,6 +35,7 @@ func (r *AppRepo) Create(ctx context.Context, app *model.App) error {
 func (r *AppRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.App, error) {
 	var app model.App
 	var rl json.RawMessage
+	var assignedPort *int
 	err := r.db.Pool.QueryRow(ctx,
 		`SELECT id, user_id, name, subdomain, repo_url, repo_branch, stack, status,
 		        container_id, internal_port, assigned_port, env_vars, resource_limits,
@@ -42,13 +43,16 @@ func (r *AppRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.App, error
 		 FROM apps WHERE id = $1`, id,
 	).Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain, &app.RepoURL,
 		&app.RepoBranch, &app.Stack, &app.Status, &app.ContainerID,
-		&app.InternalPort, &app.AssignedPort, &app.EnvVars, &rl,
+		&app.InternalPort, &assignedPort, &app.EnvVars, &rl,
 		&app.AutoDeploy, &app.CreatedAt, &app.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find app by id: %w", err)
+	}
+	if assignedPort != nil {
+		app.AssignedPort = *assignedPort
 	}
 	_ = json.Unmarshal(rl, &app.ResourceLimits)
 	return &app, nil
@@ -57,6 +61,7 @@ func (r *AppRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.App, error
 func (r *AppRepo) FindBySubdomain(ctx context.Context, subdomain string) (*model.App, error) {
 	var app model.App
 	var rl json.RawMessage
+	var assignedPort *int
 	err := r.db.Pool.QueryRow(ctx,
 		`SELECT id, user_id, name, subdomain, repo_url, repo_branch, stack, status,
 		        container_id, internal_port, assigned_port, env_vars, resource_limits,
@@ -64,13 +69,16 @@ func (r *AppRepo) FindBySubdomain(ctx context.Context, subdomain string) (*model
 		 FROM apps WHERE subdomain = $1`, subdomain,
 	).Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain, &app.RepoURL,
 		&app.RepoBranch, &app.Stack, &app.Status, &app.ContainerID,
-		&app.InternalPort, &app.AssignedPort, &app.EnvVars, &rl,
+		&app.InternalPort, &assignedPort, &app.EnvVars, &rl,
 		&app.AutoDeploy, &app.CreatedAt, &app.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find app by subdomain: %w", err)
+	}
+	if assignedPort != nil {
+		app.AssignedPort = *assignedPort
 	}
 	_ = json.Unmarshal(rl, &app.ResourceLimits)
 	return &app, nil
@@ -97,11 +105,15 @@ func (r *AppRepo) ListByUserID(ctx context.Context, userID uuid.UUID, limit, off
 	for rows.Next() {
 		var app model.App
 		var rl json.RawMessage
+		var assignedPort *int
 		if err := rows.Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain,
 			&app.RepoURL, &app.RepoBranch, &app.Stack, &app.Status,
-			&app.ContainerID, &app.InternalPort, &app.AssignedPort, &rl,
+			&app.ContainerID, &app.InternalPort, &assignedPort, &rl,
 			&app.AutoDeploy, &app.CreatedAt, &app.UpdatedAt); err != nil {
 			return nil, 0, err
+		}
+		if assignedPort != nil {
+			app.AssignedPort = *assignedPort
 		}
 		_ = json.Unmarshal(rl, &app.ResourceLimits)
 		apps = append(apps, app)
@@ -124,11 +136,15 @@ func (r *AppRepo) ListAllRunning(ctx context.Context) ([]model.App, error) {
 	for rows.Next() {
 		var app model.App
 		var rl json.RawMessage
+		var assignedPort *int
 		if err := rows.Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain,
 			&app.RepoURL, &app.RepoBranch, &app.Stack, &app.Status,
-			&app.ContainerID, &app.InternalPort, &app.AssignedPort, &rl,
+			&app.ContainerID, &app.InternalPort, &assignedPort, &rl,
 			&app.AutoDeploy, &app.CreatedAt, &app.UpdatedAt); err != nil {
 			return nil, err
+		}
+		if assignedPort != nil {
+			app.AssignedPort = *assignedPort
 		}
 		_ = json.Unmarshal(rl, &app.ResourceLimits)
 		apps = append(apps, app)
@@ -156,11 +172,15 @@ func (r *AppRepo) ListAll(ctx context.Context, limit, offset int) ([]model.App, 
 	for rows.Next() {
 		var app model.App
 		var rl json.RawMessage
+		var assignedPort *int
 		if err := rows.Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain,
 			&app.RepoURL, &app.RepoBranch, &app.Stack, &app.Status,
-			&app.ContainerID, &app.InternalPort, &app.AssignedPort, &rl,
+			&app.ContainerID, &app.InternalPort, &assignedPort, &rl,
 			&app.AutoDeploy, &app.CreatedAt, &app.UpdatedAt); err != nil {
 			return nil, 0, err
+		}
+		if assignedPort != nil {
+			app.AssignedPort = *assignedPort
 		}
 		_ = json.Unmarshal(rl, &app.ResourceLimits)
 		apps = append(apps, app)
