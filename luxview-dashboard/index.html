@@ -2,13 +2,55 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#09090b" />
+
+    <!-- SEO -->
+    <meta name="description" content="LuxView Cloud — Self-hosted PaaS platform. Deploy any app from GitHub with zero config. Auto-detect stack, free SSL, custom subdomains, managed databases, and real-time monitoring." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://luxview.cloud" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://luxview.cloud" />
+    <meta property="og:site_name" content="LuxView Cloud" />
+    <meta property="og:title" content="LuxView Cloud — Deploy from GitHub in seconds" />
+    <meta property="og:description" content="Self-hosted PaaS platform. Deploy any app from GitHub with zero config. Auto-detect stack, free SSL, custom subdomains, managed databases, and real-time monitoring." />
+    <meta property="og:image" content="/logo.svg" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="LuxView Cloud — Deploy from GitHub in seconds" />
+    <meta name="twitter:description" content="Self-hosted PaaS platform. Deploy any app from GitHub with zero config. Auto-detect stack, free SSL, custom subdomains, managed databases, and real-time monitoring." />
+
+    <!-- Favicon & Manifest -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-    <title>LuxView Cloud</title>
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "LuxView Cloud",
+      "description": "Self-hosted PaaS platform. Deploy any app from GitHub with zero config.",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Linux",
+      "url": "https://luxview.cloud",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    }
+    </script>
+
+    <title>LuxView Cloud — Self-hosted PaaS | Deploy from GitHub in seconds</title>
   </head>
   <body class="antialiased">
     <div id="root"></div>

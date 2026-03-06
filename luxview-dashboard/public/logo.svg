@@ -1,5 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
-  <rect width="40" height="40" rx="10" fill="#18181B"/>
-  <rect x="0.5" y="0.5" width="39" height="39" rx="9.5" stroke="#FBBF24" stroke-opacity="0.5"/>
-  <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="Inter, sans-serif" font-weight="700" font-size="16" fill="white" letter-spacing="-1">LV</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <defs>
+    <linearGradient id="cloudGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FBBF24"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+  <!-- Cloud shape with amber gradient -->
+  <path d="M10 35h30a8 8 0 0 0 2-15.7A11 11 0 0 0 20 12.5 10 10 0 0 0 6 22a8 8 0 0 0 4 13z" fill="url(#cloudGrad)"/>
+  <!-- White upward arrow/rocket -->
+  <polygon points="24,12 19,22 21.5,22 21.5,28 26.5,28 26.5,22 29,22" fill="#FFFFFF"/>
+  <!-- Small exhaust lines -->
+  <line x1="22.5" y1="29.5" x2="22.5" y2="32" stroke="#FFFFFF" stroke-width="1.2" stroke-linecap="round" opacity="0.7"/>
+  <line x1="24" y1="30" x2="24" y2="33" stroke="#FFFFFF" stroke-width="1.2" stroke-linecap="round" opacity="0.7"/>
+  <line x1="25.5" y1="29.5" x2="25.5" y2="32" stroke="#FFFFFF" stroke-width="1.2" stroke-linecap="round" opacity="0.7"/>
 </svg>

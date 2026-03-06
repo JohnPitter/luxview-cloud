@@ -1,0 +1,13 @@
+{
+  "name": "LuxView Cloud",
+  "short_name": "LuxView",
+  "description": "Self-hosted PaaS — Deploy anything from GitHub with zero config",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#FBBF24",
+  "icons": [
+    { "src": "/logo.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

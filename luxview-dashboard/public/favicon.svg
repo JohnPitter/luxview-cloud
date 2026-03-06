@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Cloud shape in amber -->
+  <path d="M8 24h18a6 6 0 0 0 1.5-11.8A8 8 0 0 0 12 10a6 6 0 0 0-4 14z" fill="#FBBF24"/>
+  <!-- Upward arrow cut-out in background color -->
+  <polygon points="16,10 12.5,18 14.5,18 14.5,22 17.5,22 17.5,18 19.5,18" fill="#09090b"/>
+</svg>
