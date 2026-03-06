@@ -96,6 +96,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Get("/github/repos/{owner}/{repo}/branches", appHandler.ListGitHubBranches)
 
 			// Apps
+			r.Get("/apps/check-subdomain/{subdomain}", appHandler.CheckSubdomain)
 			r.Post("/apps", appHandler.Create)
 			r.Get("/apps", appHandler.List)
 			r.Get("/apps/{id}", appHandler.Get)

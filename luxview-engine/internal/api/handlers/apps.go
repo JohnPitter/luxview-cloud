@@ -400,6 +400,25 @@ func (h *AppHandler) Stop(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "app stopped"})
 }
 
+// CheckSubdomain checks if a subdomain is available.
+func (h *AppHandler) CheckSubdomain(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	subdomain := strings.ToLower(chi.URLParam(r, "subdomain"))
+
+	if !subdomainRegex.MatchString(subdomain) {
+		writeJSON(w, http.StatusOK, map[string]bool{"available": false})
+		return
+	}
+
+	if model.ReservedSubdomains[subdomain] {
+		writeJSON(w, http.StatusOK, map[string]bool{"available": false})
+		return
+	}
+
+	existing, _ := h.appRepo.FindBySubdomain(ctx, subdomain)
+	writeJSON(w, http.StatusOK, map[string]bool{"available": existing == nil})
+}
+
 // ListGitHubRepos lists the user's GitHub repositories.
 func (h *AppHandler) ListGitHubRepos(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
