@@ -42,6 +42,8 @@ func NewExplorerHandler(
 }
 
 // decryptServiceCreds validates ownership and returns decrypted credentials.
+// For postgres services, if the app has a custom DATABASE_URL env var, it overrides
+// the provisioned URL so the explorer connects to the actual database the app uses.
 func (h *ExplorerHandler) decryptServiceCreds(r *http.Request) (*model.AppService, map[string]string, error) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)
@@ -72,6 +74,21 @@ func (h *ExplorerHandler) decryptServiceCreds(r *http.Request) (*model.AppServic
 	var creds map[string]string
 	if err := json.Unmarshal([]byte(decrypted), &creds); err != nil {
 		return nil, nil, fmt.Errorf("parse credentials: %w", err)
+	}
+
+	// For postgres: check if the app has a custom DATABASE_URL that differs from provisioned
+	if svc.ServiceType == model.ServicePostgres && app.EnvVars != nil {
+		var appEncrypted string
+		if err := json.Unmarshal(app.EnvVars, &appEncrypted); err == nil {
+			if appDecrypted, err := crypto.Decrypt(appEncrypted, h.encryptionKey); err == nil {
+				var appEnv map[string]string
+				if err := json.Unmarshal([]byte(appDecrypted), &appEnv); err == nil {
+					if dbURL, ok := appEnv["DATABASE_URL"]; ok && dbURL != "" {
+						creds["url"] = dbURL
+					}
+				}
+			}
+		}
 	}
 
 	return svc, creds, nil
