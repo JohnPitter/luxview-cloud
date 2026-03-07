@@ -1,4 +1,5 @@
 import { api } from './client';
+import type { Plan } from './plans';
 
 export interface User {
   id: string;
@@ -7,6 +8,8 @@ export interface User {
   avatarUrl: string;
   role: 'user' | 'admin';
   createdAt: string;
+  planId?: string;
+  plan?: Plan;
 }
 
 export interface AuthResponse {

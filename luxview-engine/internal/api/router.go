@@ -28,6 +28,7 @@ type Deps struct {
 	WebhookSvc  *service.WebhookService
 	BuildQueue  chan<- service.DeployRequest
 	EncryptKey  []byte
+	PlanRepo    *repository.PlanRepo
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -68,6 +69,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	explorerHandler := handlers.NewExplorerHandler(deps.ServiceRepo, deps.AppRepo, deps.EncryptKey)
 	traefikHandler := handlers.NewTraefikHandler(deps.Router)
 	webhookHandler := handlers.NewWebhookHandler(deps.WebhookSvc, deps.Config.InternalToken)
+	planHandler := handlers.NewPlanHandler(deps.PlanRepo, deps.UserRepo, deps.AppRepo)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 
@@ -75,6 +77,9 @@ func NewRouter(deps Deps) *chi.Mux {
 		// Auth (public)
 		r.Get("/auth/github", authHandler.GitHubLogin)
 		r.Get("/auth/github/callback", authHandler.GitHubCallback)
+
+		// Plans (public, for landing page)
+		r.Get("/plans", planHandler.ListActive)
 
 		// Webhooks (public, verified by signature)
 		r.Post("/webhooks/github", webhookHandler.GitHubWebhook)
@@ -149,6 +154,12 @@ func NewRouter(deps Deps) *chi.Mux {
 				r.Patch("/admin/users/{id}/role", adminHandler.UpdateUserRole)
 				r.Patch("/admin/apps/{id}/limits", adminHandler.UpdateAppLimits)
 				r.Get("/admin/vps-info", adminHandler.VPSInfo)
+				r.Get("/admin/plans", planHandler.ListAll)
+				r.Post("/admin/plans", planHandler.Create)
+				r.Patch("/admin/plans/{id}", planHandler.Update)
+				r.Delete("/admin/plans/{id}", planHandler.Delete)
+				r.Patch("/admin/plans/{id}/default", planHandler.SetDefault)
+				r.Patch("/admin/users/{id}/plan", planHandler.AssignUserPlan)
 			})
 		})
 	})

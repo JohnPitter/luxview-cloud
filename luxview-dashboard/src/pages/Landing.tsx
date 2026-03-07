@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { type Plan, plansApi } from '../api/plans';
 import {
   Github,
   Zap,
@@ -125,6 +126,20 @@ export function Landing() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { t } = useTranslation();
 
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+
+  const fetchPlans = useCallback(() => {
+    plansApi.listActive()
+      .then(setPlans)
+      .catch(() => {})
+      .finally(() => setPlansLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetchPlans();
+  }, [fetchPlans]);
+
   const features = [
     {
       icon: Zap,
@@ -205,17 +220,6 @@ export function Landing() {
       description: t('landing.howItWorks.shipIt.description'),
       visual: 'deploy',
     },
-  ];
-
-  const pricingFeatures = [
-    t('landing.pricing.features.unlimitedApps'),
-    t('landing.pricing.features.ram'),
-    t('landing.pricing.features.ssl'),
-    t('landing.pricing.features.subdomains'),
-    t('landing.pricing.features.databases'),
-    t('landing.pricing.features.autoDeploy'),
-    t('landing.pricing.features.logs'),
-    t('landing.pricing.features.rollback'),
   ];
 
   const navItems = [
@@ -587,45 +591,136 @@ export function Landing() {
             </p>
           </div>
 
-          <div className="max-w-lg mx-auto">
-            <div className="relative rounded-2xl bg-[#161b22] border border-[#30363d] p-8 shadow-2xl shadow-black/30 overflow-hidden">
-              {/* Glow border */}
-              <div className="absolute inset-0 rounded-2xl opacity-50" style={{
-                background: 'linear-gradient(135deg, rgba(56,189,248,0.1), rgba(139,92,246,0.1), rgba(251,191,36,0.1))',
-              }} />
-
-              <div className="relative">
-                <div className="flex items-baseline gap-3 mb-2">
-                  <span className="text-5xl font-extrabold text-[#e6edf3] tracking-tight">{t('landing.pricing.price')}</span>
-                  <span className="text-[#484f58] text-base">{t('landing.pricing.perMonth')}</span>
+          {plansLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="rounded-2xl bg-[#161b22] border border-[#30363d] p-8 animate-pulse">
+                  <div className="h-6 bg-[#30363d] rounded w-1/2 mb-4" />
+                  <div className="h-10 bg-[#30363d] rounded w-1/3 mb-6" />
+                  <div className="space-y-3">
+                    {[1, 2, 3, 4].map((j) => (
+                      <div key={j} className="h-4 bg-[#30363d] rounded" />
+                    ))}
+                  </div>
                 </div>
-                <div className="inline-flex items-center px-3 py-1 rounded-full bg-[#238636]/15 text-[#3fb950] text-xs font-semibold border border-[#238636]/30 mb-8">
-                  {t('landing.pricing.badge')}
-                </div>
-
-                <ul className="space-y-3.5 mb-8">
-                  {pricingFeatures.map((feat) => (
-                    <li key={feat} className="flex items-center gap-3 text-sm text-[#e6edf3]">
-                      <Check size={16} className="text-[#3fb950] flex-shrink-0" />
-                      {feat}
-                    </li>
-                  ))}
-                </ul>
-
-                <button
-                  onClick={handleAuth}
-                  className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl bg-[#238636] hover:bg-[#2ea043] text-white font-semibold transition-all duration-200 shadow-lg shadow-[#238636]/25 hover:shadow-[#238636]/40"
-                >
-                  <Github size={18} />
-                  {t('landing.pricing.cta')}
-                </button>
-
-                <p className="text-xs text-[#484f58] text-center mt-4">
-                  {t('landing.pricing.footer')}
-                </p>
-              </div>
+              ))}
             </div>
-          </div>
+          ) : plans.length === 0 ? null : (
+            <div className={`grid gap-6 max-w-5xl mx-auto ${
+              plans.length === 1 ? 'grid-cols-1 max-w-lg' :
+              plans.length === 2 ? 'grid-cols-1 md:grid-cols-2 max-w-3xl' :
+              'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+            }`}>
+              {plans.map((plan) => (
+                <div
+                  key={plan.id}
+                  className={`relative rounded-2xl bg-[#161b22] border p-8 shadow-2xl shadow-black/30 overflow-hidden transition-all duration-300 ${
+                    plan.highlighted
+                      ? 'border-amber-500/50 scale-105 z-10'
+                      : 'border-[#30363d]'
+                  }`}
+                >
+                  {plan.highlighted && (
+                    <>
+                      <div
+                        className="absolute inset-0 rounded-2xl opacity-50"
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(251,191,36,0.1), rgba(245,158,11,0.05))',
+                        }}
+                      />
+                      <div className="absolute top-4 right-4">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 text-[10px] font-semibold border border-amber-500/30">
+                          {t('landing.pricing.recommended')}
+                        </span>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="relative">
+                    <h3 className="text-lg font-bold text-[#e6edf3] mb-1">{plan.name}</h3>
+                    {plan.description && (
+                      <p className="text-sm text-[#8b949e] mb-4">{plan.description}</p>
+                    )}
+
+                    <div className="flex items-baseline gap-2 mb-6">
+                      <span className="text-4xl font-extrabold text-[#e6edf3] tracking-tight">
+                        {plan.price === 0
+                          ? t('landing.pricing.free')
+                          : `${plan.currency === 'BRL' ? 'R$' : plan.currency === 'EUR' ? '\u20AC' : '$'}${plan.price}`}
+                      </span>
+                      {plan.price > 0 && (
+                        <span className="text-[#484f58] text-sm">
+                          /{plan.billingCycle === 'monthly' ? t('landing.pricing.mo') : t('landing.pricing.yr')}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Limits summary */}
+                    <div className="space-y-2 mb-6 text-sm text-[#8b949e]">
+                      <div className="flex items-center gap-2">
+                        <Check size={14} className="text-[#3fb950]" />
+                        {t('landing.pricing.upToApps', { count: plan.maxApps })}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Check size={14} className="text-[#3fb950]" />
+                        {t('landing.pricing.cpuPerApp', { cpu: plan.maxCpuPerApp })}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Check size={14} className="text-[#3fb950]" />
+                        {t('landing.pricing.memoryPerApp', { memory: plan.maxMemoryPerApp.toUpperCase() })}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Check size={14} className="text-[#3fb950]" />
+                        {t('landing.pricing.servicesPerApp', { count: plan.maxServicesPerApp })}
+                      </div>
+                      {plan.autoDeployEnabled && (
+                        <div className="flex items-center gap-2">
+                          <Check size={14} className="text-[#3fb950]" />
+                          {t('landing.pricing.autoDeploy')}
+                        </div>
+                      )}
+                      {plan.customDomainEnabled && (
+                        <div className="flex items-center gap-2">
+                          <Check size={14} className="text-[#3fb950]" />
+                          {t('landing.pricing.customDomain')}
+                        </div>
+                      )}
+                      {plan.priorityBuilds && (
+                        <div className="flex items-center gap-2">
+                          <Check size={14} className="text-[#3fb950]" />
+                          {t('landing.pricing.priorityBuilds')}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Custom features list */}
+                    {plan.features.length > 0 && (
+                      <ul className="space-y-2 mb-6">
+                        {plan.features.map((feat, i) => (
+                          <li key={i} className="flex items-center gap-2 text-sm text-[#e6edf3]">
+                            <Check size={14} className="text-[#3fb950] flex-shrink-0" />
+                            {feat}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    <button
+                      onClick={handleAuth}
+                      className={`w-full flex items-center justify-center gap-2.5 py-3 rounded-xl text-white font-semibold transition-all duration-200 ${
+                        plan.highlighted
+                          ? 'bg-amber-500 hover:bg-amber-600 shadow-lg shadow-amber-500/25'
+                          : 'bg-[#238636] hover:bg-[#2ea043] shadow-lg shadow-[#238636]/25'
+                      }`}
+                    >
+                      <Github size={18} />
+                      {t('landing.pricing.cta')}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

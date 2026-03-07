@@ -138,6 +138,34 @@ func (db *DB) migrate(ctx context.Context) error {
 		)`,
 
 		`CREATE INDEX IF NOT EXISTS idx_alerts_app_id ON alerts(app_id)`,
+
+		`CREATE TABLE IF NOT EXISTS plans (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			name VARCHAR(100) NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			price DECIMAL(10,2) NOT NULL DEFAULT 0,
+			currency VARCHAR(3) NOT NULL DEFAULT 'USD',
+			billing_cycle VARCHAR(20) NOT NULL DEFAULT 'monthly',
+			max_apps INT NOT NULL DEFAULT 1,
+			max_cpu_per_app DECIMAL(4,2) NOT NULL DEFAULT 0.25,
+			max_memory_per_app VARCHAR(10) NOT NULL DEFAULT '512m',
+			max_disk_per_app VARCHAR(10) NOT NULL DEFAULT '1g',
+			max_services_per_app INT NOT NULL DEFAULT 1,
+			auto_deploy_enabled BOOLEAN NOT NULL DEFAULT false,
+			custom_domain_enabled BOOLEAN NOT NULL DEFAULT false,
+			priority_builds BOOLEAN NOT NULL DEFAULT false,
+			highlighted BOOLEAN NOT NULL DEFAULT false,
+			sort_order INT NOT NULL DEFAULT 0,
+			features JSONB NOT NULL DEFAULT '[]',
+			is_active BOOLEAN NOT NULL DEFAULT true,
+			is_default BOOLEAN NOT NULL DEFAULT false,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES plans(id)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_plans_active_order ON plans(is_active, sort_order)`,
 	}
 
 	for i, m := range migrations {

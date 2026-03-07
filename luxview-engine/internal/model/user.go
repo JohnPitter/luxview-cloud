@@ -23,15 +23,19 @@ type User struct {
 	Role        UserRole   `json:"role"`
 	CreatedAt   time.Time  `json:"created_at"`
 	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
+	PlanID      *uuid.UUID `json:"plan_id,omitempty"`
+	Plan        *Plan      `json:"plan,omitempty"`
 }
 
 type UserResponse struct {
-	ID        uuid.UUID `json:"id"`
-	Username  string    `json:"username"`
-	Email     string    `json:"email"`
-	AvatarURL string    `json:"avatar_url"`
-	Role      UserRole  `json:"role"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID  `json:"id"`
+	Username  string     `json:"username"`
+	Email     string     `json:"email"`
+	AvatarURL string     `json:"avatar_url"`
+	Role      UserRole   `json:"role"`
+	CreatedAt time.Time  `json:"created_at"`
+	PlanID    *uuid.UUID `json:"plan_id,omitempty"`
+	Plan      *Plan      `json:"plan,omitempty"`
 }
 
 func (u *User) ToResponse() UserResponse {
@@ -42,5 +46,7 @@ func (u *User) ToResponse() UserResponse {
 		AvatarURL: u.AvatarURL,
 		Role:      u.Role,
 		CreatedAt: u.CreatedAt,
+		PlanID:    u.PlanID,
+		Plan:      u.Plan,
 	}
 }

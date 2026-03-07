@@ -58,6 +58,7 @@ func main() {
 	serviceRepo := repository.NewServiceRepo(db)
 	metricRepo := repository.NewMetricRepo(db)
 	alertRepo := repository.NewAlertRepo(db)
+	planRepo := repository.NewPlanRepo(db)
 
 	// Services
 	portManager := service.NewPortManager(appRepo, cfg.PortRangeStart, cfg.PortRangeEnd)
@@ -96,6 +97,7 @@ func main() {
 		ServiceRepo: serviceRepo,
 		MetricRepo:  metricRepo,
 		AlertRepo:   alertRepo,
+		PlanRepo:    planRepo,
 		Container:   containerMgr,
 		Provisioner: provisioner,
 		Router:      routerSvc,

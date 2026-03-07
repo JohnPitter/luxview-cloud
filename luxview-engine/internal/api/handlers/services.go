@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -96,6 +97,16 @@ func (h *ServiceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if app.UserID != userID {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
+	}
+
+	// Plan enforcement: check max services per app
+	user := middleware.GetUser(ctx)
+	if user.Plan != nil {
+		existingServices, _ := h.serviceRepo.ListByAppID(ctx, appID)
+		if len(existingServices) >= user.Plan.MaxServicesPerApp {
+			writeError(w, http.StatusForbidden, fmt.Sprintf("Plan limit reached: your %s plan allows max %d services per app", user.Plan.Name, user.Plan.MaxServicesPerApp))
+			return
+		}
 	}
 
 	var req model.CreateServiceRequest

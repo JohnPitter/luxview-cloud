@@ -84,6 +84,16 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Plan enforcement: check max apps
+	user := middleware.GetUser(ctx)
+	if user.Plan != nil {
+		apps, _, _ := h.appRepo.ListByUserID(ctx, userID, 1000, 0)
+		if len(apps) >= user.Plan.MaxApps {
+			writeError(w, http.StatusForbidden, fmt.Sprintf("Plan limit reached: your %s plan allows max %d apps", user.Plan.Name, user.Plan.MaxApps))
+			return
+		}
+	}
+
 	branch := req.RepoBranch
 	if branch == "" {
 		branch = "main"
@@ -252,10 +262,43 @@ func (h *AppHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.RepoBranch != nil {
 		app.RepoBranch = *req.RepoBranch
 	}
+	if req.AutoDeploy != nil && *req.AutoDeploy {
+		user := middleware.GetUser(ctx)
+		if user.Plan != nil && !user.Plan.AutoDeployEnabled {
+			writeError(w, http.StatusForbidden, fmt.Sprintf("Auto-deploy is not available on your %s plan", user.Plan.Name))
+			return
+		}
+	}
 	if req.AutoDeploy != nil {
 		app.AutoDeploy = *req.AutoDeploy
 	}
 	if req.ResourceLimits != nil {
+		user := middleware.GetUser(ctx)
+		if user.Plan != nil {
+			if req.ResourceLimits.CPU != "" {
+				reqCPU, _ := strconv.ParseFloat(req.ResourceLimits.CPU, 64)
+				if reqCPU > user.Plan.MaxCPUPerApp {
+					writeError(w, http.StatusForbidden, fmt.Sprintf("CPU limit %s exceeds your %s plan maximum of %.2f", req.ResourceLimits.CPU, user.Plan.Name, user.Plan.MaxCPUPerApp))
+					return
+				}
+			}
+			if req.ResourceLimits.Memory != "" {
+				reqMem := parseMemoryString(req.ResourceLimits.Memory)
+				planMem := parseMemoryString(user.Plan.MaxMemoryPerApp)
+				if reqMem > planMem {
+					writeError(w, http.StatusForbidden, fmt.Sprintf("Memory limit %s exceeds your %s plan maximum of %s", req.ResourceLimits.Memory, user.Plan.Name, user.Plan.MaxMemoryPerApp))
+					return
+				}
+			}
+			if req.ResourceLimits.Disk != "" {
+				reqDisk := parseMemoryString(req.ResourceLimits.Disk)
+				planDisk := parseMemoryString(user.Plan.MaxDiskPerApp)
+				if reqDisk > planDisk {
+					writeError(w, http.StatusForbidden, fmt.Sprintf("Disk limit %s exceeds your %s plan maximum of %s", req.ResourceLimits.Disk, user.Plan.Name, user.Plan.MaxDiskPerApp))
+					return
+				}
+			}
+		}
 		app.ResourceLimits = *req.ResourceLimits
 	}
 	if len(req.EnvVars) > 0 {

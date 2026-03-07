@@ -18,6 +18,12 @@ import {
   MemoryStick,
   HardDrive,
   Monitor,
+  CreditCard,
+  Plus,
+  Star,
+  Pencil,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react';
 import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
@@ -27,9 +33,52 @@ import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { useThemeStore } from '../stores/theme.store';
 import { useNotificationsStore } from '../stores/notifications.store';
 import { adminApi, type AdminStats, type AdminUser, type AdminApp, type VPSInfo } from '../api/admin';
+import { plansApi, type Plan, type CreatePlanPayload } from '../api/plans';
 import { formatRelativeTime } from '../lib/format';
 
-type Tab = 'overview' | 'users' | 'apps';
+type Tab = 'overview' | 'users' | 'apps' | 'plans';
+
+function getDefaultPlanForm(): CreatePlanPayload {
+  return {
+    name: '',
+    description: '',
+    price: 0,
+    currency: 'USD',
+    billingCycle: 'monthly',
+    maxApps: 3,
+    maxCpuPerApp: 0.5,
+    maxMemoryPerApp: '512m',
+    maxDiskPerApp: '1g',
+    maxServicesPerApp: 2,
+    autoDeployEnabled: true,
+    customDomainEnabled: false,
+    priorityBuilds: false,
+    highlighted: false,
+    sortOrder: 0,
+    features: [],
+  };
+}
+
+function planToForm(plan: Plan): CreatePlanPayload {
+  return {
+    name: plan.name,
+    description: plan.description,
+    price: plan.price,
+    currency: plan.currency,
+    billingCycle: plan.billingCycle,
+    maxApps: plan.maxApps,
+    maxCpuPerApp: plan.maxCpuPerApp,
+    maxMemoryPerApp: plan.maxMemoryPerApp,
+    maxDiskPerApp: plan.maxDiskPerApp,
+    maxServicesPerApp: plan.maxServicesPerApp,
+    autoDeployEnabled: plan.autoDeployEnabled,
+    customDomainEnabled: plan.customDomainEnabled,
+    priorityBuilds: plan.priorityBuilds,
+    highlighted: plan.highlighted,
+    sortOrder: plan.sortOrder,
+    features: [...plan.features],
+  };
+}
 
 const CPU_OPTIONS = ['0.25', '0.5', '1.0', '2.0', '4.0'];
 const MEMORY_OPTIONS = ['256m', '512m', '1g', '2g', '4g', '8g'];
@@ -44,6 +93,7 @@ export function Admin() {
     { id: 'overview', label: t('admin.tabs.overview'), icon: <Activity size={14} /> },
     { id: 'users', label: t('admin.tabs.users'), icon: <Users size={14} /> },
     { id: 'apps', label: t('admin.tabs.applications'), icon: <Server size={14} /> },
+    { id: 'plans', label: t('admin.tabs.plans'), icon: <CreditCard size={14} /> },
   ];
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -61,19 +111,29 @@ export function Admin() {
   const [deleteApp, setDeleteApp] = useState<AdminApp | null>(null);
   const [editLimits, setEditLimits] = useState({ cpu: '1.0', memory: '512m', disk: '5g' });
 
+  // Plans state
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [editPlan, setEditPlan] = useState<Plan | null>(null);
+  const [showCreatePlan, setShowCreatePlan] = useState(false);
+  const [deletePlanTarget, setDeletePlanTarget] = useState<Plan | null>(null);
+  const [planFormData, setPlanFormData] = useState<CreatePlanPayload>(getDefaultPlanForm());
+  const [planUserTarget, setPlanUserTarget] = useState<AdminUser | null>(null);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [statsData, vpsData, usersData, appsData] = await Promise.all([
+      const [statsData, vpsData, usersData, appsData, plansData] = await Promise.all([
         adminApi.stats(),
         adminApi.vpsInfo(),
         adminApi.listUsers(100, 0),
         adminApi.listApps(100, 0),
+        plansApi.listAll(),
       ]);
       setStats(statsData);
       setVpsInfo(vpsData);
       setUsers(usersData.users ?? []);
       setApps(appsData.apps ?? []);
+      setPlans(plansData ?? []);
     } catch {
       addNotification({ type: 'error', title: t('admin.failedToLoad') });
     } finally {
@@ -120,6 +180,62 @@ export function Admin() {
       addNotification({ type: 'error', title: t('admin.deleteDialog.failedToDelete') });
     }
     setDeleteApp(null);
+  };
+
+  const handleCreatePlan = async () => {
+    try {
+      const created = await plansApi.create(planFormData);
+      setPlans((prev) => [...prev, created]);
+      addNotification({ type: 'success', title: t('admin.plans.planCreated', { name: created.name }) });
+      setShowCreatePlan(false);
+    } catch {
+      addNotification({ type: 'error', title: t('admin.plans.failedToCreate') });
+    }
+  };
+
+  const handleUpdatePlan = async () => {
+    if (!editPlan) return;
+    try {
+      const updated = await plansApi.update(editPlan.id, planFormData);
+      setPlans((prev) => prev.map((p) => (p.id === editPlan.id ? updated : p)));
+      addNotification({ type: 'success', title: t('admin.plans.planUpdated', { name: updated.name }) });
+      setEditPlan(null);
+    } catch {
+      addNotification({ type: 'error', title: t('admin.plans.failedToUpdate') });
+    }
+  };
+
+  const handleDeletePlan = async () => {
+    if (!deletePlanTarget) return;
+    try {
+      await plansApi.delete(deletePlanTarget.id);
+      setPlans((prev) => prev.filter((p) => p.id !== deletePlanTarget.id));
+      addNotification({ type: 'success', title: t('admin.plans.planDeleted', { name: deletePlanTarget.name }) });
+    } catch {
+      addNotification({ type: 'error', title: t('admin.plans.failedToDelete') });
+    }
+    setDeletePlanTarget(null);
+  };
+
+  const handleSetDefault = async (planId: string) => {
+    try {
+      await plansApi.setDefault(planId);
+      setPlans((prev) => prev.map((p) => ({ ...p, isDefault: p.id === planId })));
+      addNotification({ type: 'success', title: t('admin.plans.defaultSet') });
+    } catch {
+      addNotification({ type: 'error', title: t('admin.plans.failedToUpdate') });
+    }
+  };
+
+  const handleAssignPlan = async (userId: string, planId: string) => {
+    const user = users.find((u) => u.id === userId);
+    try {
+      await plansApi.assignUserPlan(userId, planId);
+      addNotification({ type: 'success', title: t('admin.plans.planAssigned', { username: user?.username ?? '' }) });
+    } catch {
+      addNotification({ type: 'error', title: t('admin.plans.failedToAssign') });
+    }
+    setPlanUserTarget(null);
   };
 
   const filteredUsers = users.filter(
@@ -408,6 +524,7 @@ export function Admin() {
                         <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.users.tableHeaders.user')}</th>
                         <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.users.tableHeaders.email')}</th>
                         <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.users.tableHeaders.role')}</th>
+                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.users.tableHeaders.plan')}</th>
                         <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.users.tableHeaders.joined')}</th>
                         <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.users.tableHeaders.actions')}</th>
                       </tr>
@@ -415,7 +532,7 @@ export function Admin() {
                     <tbody>
                       {filteredUsers.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="text-center py-12 text-sm text-zinc-500">
+                          <td colSpan={6} className="text-center py-12 text-sm text-zinc-500">
                             {t('admin.users.noUsersFound')}
                           </td>
                         </tr>
@@ -448,17 +565,31 @@ export function Admin() {
                                 {u.role}
                               </span>
                             </td>
+                            <td className="px-6 py-3">
+                              <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-zinc-800/50 text-zinc-400">
+                                {plans.find((p) => p.id === (u as AdminUser & { planId?: string }).planId)?.name ?? t('admin.plans.noPlan')}
+                              </span>
+                            </td>
                             <td className="px-6 py-3 text-xs text-zinc-500">
                               {formatRelativeTime(u.createdAt)}
                             </td>
                             <td className="px-6 py-3">
-                              <PillButton
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setRoleChangeUser(u)}
-                              >
-                                {t('admin.users.changeRole')}
-                              </PillButton>
+                              <div className="flex items-center gap-1">
+                                <PillButton
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setRoleChangeUser(u)}
+                                >
+                                  {t('admin.users.changeRole')}
+                                </PillButton>
+                                <PillButton
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setPlanUserTarget(u)}
+                                >
+                                  {t('admin.users.changePlan')}
+                                </PillButton>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -573,7 +704,89 @@ export function Admin() {
               </GlassCard>
             </div>
           )}
+          {/* ==================== PLANS ==================== */}
+          {activeTab === 'plans' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-zinc-500">
+                  {t('admin.plans.subtitle', { count: plans.length })}
+                </p>
+                <PillButton
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    setPlanFormData(getDefaultPlanForm());
+                    setShowCreatePlan(true);
+                  }}
+                  icon={<Plus size={14} />}
+                >
+                  {t('admin.plans.addPlan')}
+                </PillButton>
+              </div>
+
+              {plans.length === 0 ? (
+                <GlassCard>
+                  <div className="text-center py-12 text-sm text-zinc-500">
+                    {t('admin.plans.subtitle', { count: 0 })}
+                  </div>
+                </GlassCard>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {plans.map((plan) => (
+                    <PlanCard
+                      key={plan.id}
+                      plan={plan}
+                      onEdit={() => {
+                        setEditPlan(plan);
+                        setPlanFormData(planToForm(plan));
+                      }}
+                      onDelete={() => setDeletePlanTarget(plan)}
+                      onSetDefault={() => handleSetDefault(plan.id)}
+                      isDark={isDark}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </>
+      )}
+
+      {/* ==================== PLAN FORM MODAL ==================== */}
+      {(showCreatePlan || editPlan) && (
+        <PlanFormModal
+          formData={planFormData}
+          setFormData={setPlanFormData}
+          isEdit={!!editPlan}
+          onSave={editPlan ? handleUpdatePlan : handleCreatePlan}
+          onClose={() => {
+            setShowCreatePlan(false);
+            setEditPlan(null);
+          }}
+          isDark={isDark}
+        />
+      )}
+
+      {/* ==================== DELETE PLAN CONFIRM ==================== */}
+      <ConfirmDialog
+        open={!!deletePlanTarget}
+        title={t('admin.plans.deleteConfirmTitle')}
+        message={t('admin.plans.deleteConfirmMessage', { name: deletePlanTarget?.name })}
+        confirmLabel={t('admin.plans.deletePlan')}
+        variant="danger"
+        onConfirm={handleDeletePlan}
+        onCancel={() => setDeletePlanTarget(null)}
+      />
+
+      {/* ==================== ASSIGN PLAN MODAL ==================== */}
+      {planUserTarget && (
+        <AssignPlanModal
+          user={planUserTarget}
+          plans={plans}
+          onAssign={(planId) => handleAssignPlan(planUserTarget.id, planId)}
+          onClose={() => setPlanUserTarget(null)}
+          isDark={isDark}
+        />
       )}
 
       {/* ==================== ROLE CHANGE MODAL ==================== */}
@@ -891,5 +1104,474 @@ function StatCard({ icon, label, value, sub, color }: StatCardProps) {
       </p>
       {sub && <p className="text-[11px] text-zinc-500 mt-1">{sub}</p>}
     </GlassCard>
+  );
+}
+
+/* ==================== PLAN CARD ==================== */
+
+interface PlanCardProps {
+  plan: Plan;
+  onEdit: () => void;
+  onDelete: () => void;
+  onSetDefault: () => void;
+  isDark: boolean;
+}
+
+function PlanCard({ plan, onEdit, onDelete, onSetDefault, isDark }: PlanCardProps) {
+  const { t } = useTranslation();
+  return (
+    <GlassCard>
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <h3 className={`text-[15px] font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+            {plan.name}
+          </h3>
+          {plan.description && (
+            <p className="text-[11px] text-zinc-500 mt-0.5">{plan.description}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onEdit}
+            className="p-1.5 text-zinc-500 hover:text-amber-400 transition-colors rounded-lg hover:bg-amber-400/10"
+            title={t('admin.plans.editPlan')}
+          >
+            <Pencil size={14} />
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors rounded-lg hover:bg-red-400/10"
+            title={t('admin.plans.deletePlan')}
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* Price */}
+      <div className="flex items-baseline gap-1 mb-3">
+        <span className={`text-xl font-bold tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+          {plan.price === 0 ? t('landing.pricing.free') : `${plan.currency === 'BRL' ? 'R$' : plan.currency === 'EUR' ? '\u20AC' : '$'}${plan.price}`}
+        </span>
+        {plan.price > 0 && (
+          <span className="text-[11px] text-zinc-500">
+            /{plan.billingCycle === 'monthly' ? t('landing.pricing.mo') : t('landing.pricing.yr')}
+          </span>
+        )}
+      </div>
+
+      {/* Badges */}
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {plan.isDefault && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+            <Star size={10} />
+            {t('admin.plans.default')}
+          </span>
+        )}
+        {plan.highlighted && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
+            {t('admin.plans.highlighted')}
+          </span>
+        )}
+        {!plan.isActive && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/30">
+            {t('admin.plans.inactive')}
+          </span>
+        )}
+      </div>
+
+      {/* Limits */}
+      <div className="space-y-1 text-[11px] text-zinc-400 mb-4">
+        <div>{t('admin.plans.maxApps')}: {plan.maxApps}</div>
+        <div>{t('admin.plans.maxCpuPerApp')}: {plan.maxCpuPerApp}</div>
+        <div>{t('admin.plans.maxMemoryPerApp')}: {plan.maxMemoryPerApp.toUpperCase()}</div>
+        <div>{t('admin.plans.maxDiskPerApp')}: {plan.maxDiskPerApp.toUpperCase()}</div>
+        <div>{t('admin.plans.maxServicesPerApp')}: {plan.maxServicesPerApp}</div>
+      </div>
+
+      {/* Features */}
+      {plan.features.length > 0 && (
+        <div className="space-y-1 mb-4">
+          {plan.features.map((feat, i) => (
+            <div key={i} className="flex items-center gap-1.5 text-[11px] text-zinc-300">
+              <Check size={10} className="text-emerald-400 flex-shrink-0" />
+              {feat}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Set Default */}
+      {!plan.isDefault && (
+        <PillButton
+          variant="ghost"
+          size="sm"
+          className="w-full"
+          onClick={onSetDefault}
+        >
+          {t('admin.plans.setDefault')}
+        </PillButton>
+      )}
+    </GlassCard>
+  );
+}
+
+/* ==================== PLAN FORM MODAL ==================== */
+
+interface PlanFormModalProps {
+  formData: CreatePlanPayload;
+  setFormData: React.Dispatch<React.SetStateAction<CreatePlanPayload>>;
+  isEdit: boolean;
+  onSave: () => void;
+  onClose: () => void;
+  isDark: boolean;
+}
+
+function PlanFormModal({ formData, setFormData, isEdit, onSave, onClose, isDark }: PlanFormModalProps) {
+  const { t } = useTranslation();
+  const [newFeature, setNewFeature] = useState('');
+
+  const inputClass = `w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
+    isDark
+      ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
+      : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
+  }`;
+
+  const labelClass = 'block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5';
+
+  const addFeature = () => {
+    const trimmed = newFeature.trim();
+    if (trimmed && !formData.features.includes(trimmed)) {
+      setFormData((prev) => ({ ...prev, features: [...prev.features, trimmed] }));
+      setNewFeature('');
+    }
+  };
+
+  const removeFeature = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      features: prev.features.filter((_, i) => i !== index),
+    }));
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm overflow-y-auto py-8">
+      <div
+        className={`w-full max-w-lg rounded-2xl p-6 shadow-xl ${
+          isDark ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-zinc-200'
+        }`}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+            {isEdit ? t('admin.plans.editPlan') : t('admin.plans.createPlan')}
+          </h3>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+          {/* Basic Info */}
+          <div>
+            <label className={labelClass}>{t('admin.plans.planName')}</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+              className={inputClass}
+              placeholder="e.g. Starter"
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>{t('admin.plans.description')}</label>
+            <input
+              type="text"
+              value={formData.description}
+              onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+              className={inputClass}
+              placeholder="e.g. Perfect for hobby projects"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className={labelClass}>{t('admin.plans.price')}</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.price}
+                onChange={(e) => setFormData((prev) => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>{t('admin.plans.currency')}</label>
+              <select
+                value={formData.currency}
+                onChange={(e) => setFormData((prev) => ({ ...prev, currency: e.target.value }))}
+                className={inputClass}
+              >
+                <option value="USD">USD</option>
+                <option value="BRL">BRL</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>{t('admin.plans.billingCycle')}</label>
+              <select
+                value={formData.billingCycle}
+                onChange={(e) => setFormData((prev) => ({ ...prev, billingCycle: e.target.value }))}
+                className={inputClass}
+              >
+                <option value="monthly">{t('admin.plans.monthly')}</option>
+                <option value="yearly">{t('admin.plans.yearly')}</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Limits */}
+          <div className={`border-t pt-4 ${isDark ? 'border-zinc-800' : 'border-zinc-200'}`}>
+            <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-3 font-medium">{t('admin.plans.limits')}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>{t('admin.plans.maxApps')}</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={formData.maxApps}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, maxApps: parseInt(e.target.value) || 1 }))}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>{t('admin.plans.maxCpuPerApp')}</label>
+                <input
+                  type="number"
+                  min="0.25"
+                  step="0.25"
+                  value={formData.maxCpuPerApp}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, maxCpuPerApp: parseFloat(e.target.value) || 0.25 }))}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>{t('admin.plans.maxMemoryPerApp')}</label>
+                <select
+                  value={formData.maxMemoryPerApp}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, maxMemoryPerApp: e.target.value }))}
+                  className={inputClass}
+                >
+                  {MEMORY_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{opt.toUpperCase()}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>{t('admin.plans.maxDiskPerApp')}</label>
+                <select
+                  value={formData.maxDiskPerApp}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, maxDiskPerApp: e.target.value }))}
+                  className={inputClass}
+                >
+                  {DISK_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{opt.toUpperCase()}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>{t('admin.plans.maxServicesPerApp')}</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.maxServicesPerApp}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, maxServicesPerApp: parseInt(e.target.value) || 0 }))}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>{t('admin.plans.sortOrder')}</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.sortOrder}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, sortOrder: parseInt(e.target.value) || 0 }))}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Feature Flags */}
+          <div className={`border-t pt-4 ${isDark ? 'border-zinc-800' : 'border-zinc-200'}`}>
+            <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-3 font-medium">{t('admin.plans.featureFlags')}</p>
+            <div className="space-y-2">
+              <ToggleField
+                label={t('admin.plans.autoDeployEnabled')}
+                value={formData.autoDeployEnabled}
+                onChange={(v) => setFormData((prev) => ({ ...prev, autoDeployEnabled: v }))}
+                isDark={isDark}
+              />
+              <ToggleField
+                label={t('admin.plans.customDomainEnabled')}
+                value={formData.customDomainEnabled}
+                onChange={(v) => setFormData((prev) => ({ ...prev, customDomainEnabled: v }))}
+                isDark={isDark}
+              />
+              <ToggleField
+                label={t('admin.plans.priorityBuilds')}
+                value={formData.priorityBuilds}
+                onChange={(v) => setFormData((prev) => ({ ...prev, priorityBuilds: v }))}
+                isDark={isDark}
+              />
+              <ToggleField
+                label={t('admin.plans.highlightPlan')}
+                value={formData.highlighted}
+                onChange={(v) => setFormData((prev) => ({ ...prev, highlighted: v }))}
+                isDark={isDark}
+              />
+            </div>
+          </div>
+
+          {/* Display Features */}
+          <div className={`border-t pt-4 ${isDark ? 'border-zinc-800' : 'border-zinc-200'}`}>
+            <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-3 font-medium">{t('admin.plans.displayFeatures')}</p>
+            <div className="space-y-2">
+              {formData.features.map((feat, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Check size={12} className="text-emerald-400 flex-shrink-0" />
+                  <span className={`flex-1 text-sm ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>{feat}</span>
+                  <button
+                    onClick={() => removeFeature(i)}
+                    className="p-1 text-zinc-500 hover:text-red-400 transition-colors"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newFeature}
+                  onChange={(e) => setNewFeature(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addFeature())}
+                  placeholder={t('admin.plans.featurePlaceholder')}
+                  className={inputClass}
+                />
+                <button
+                  onClick={addFeature}
+                  className="p-2 text-zinc-500 hover:text-amber-400 transition-colors rounded-lg hover:bg-amber-400/10 flex-shrink-0"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-6">
+          <PillButton variant="secondary" size="sm" className="flex-1" onClick={onClose}>
+            {t('common.cancel')}
+          </PillButton>
+          <PillButton variant="primary" size="sm" className="flex-1" onClick={onSave} disabled={!formData.name.trim()}>
+            <Check size={14} className="mr-1" />
+            {isEdit ? t('admin.plans.updatePlan') : t('admin.plans.createPlan')}
+          </PillButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ==================== TOGGLE FIELD ==================== */
+
+interface ToggleFieldProps {
+  label: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+  isDark: boolean;
+}
+
+function ToggleField({ label, value, onChange, isDark }: ToggleFieldProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      className={`flex items-center justify-between w-full px-3 py-2 rounded-lg transition-colors ${
+        isDark ? 'hover:bg-zinc-800/50' : 'hover:bg-zinc-50'
+      }`}
+    >
+      <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>{label}</span>
+      {value ? (
+        <ToggleRight size={20} className="text-amber-400" />
+      ) : (
+        <ToggleLeft size={20} className="text-zinc-600" />
+      )}
+    </button>
+  );
+}
+
+/* ==================== ASSIGN PLAN MODAL ==================== */
+
+interface AssignPlanModalProps {
+  user: AdminUser;
+  plans: Plan[];
+  onAssign: (planId: string) => void;
+  onClose: () => void;
+  isDark: boolean;
+}
+
+function AssignPlanModal({ user, plans, onAssign, onClose, isDark }: AssignPlanModalProps) {
+  const { t } = useTranslation();
+  const activePlans = plans.filter((p) => p.isActive);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div
+        className={`w-full max-w-sm rounded-2xl p-6 shadow-xl ${
+          isDark ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-zinc-200'
+        }`}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+            {t('admin.plans.assignPlan')}
+          </h3>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
+            <X size={16} />
+          </button>
+        </div>
+        <p className="text-xs text-zinc-500 mb-4">
+          {t('admin.plans.selectPlan', { username: user.username })}
+        </p>
+        <div className="space-y-2">
+          {activePlans.map((plan) => (
+            <button
+              key={plan.id}
+              onClick={() => onAssign(plan.id)}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
+                isDark
+                  ? 'border-zinc-800 hover:border-amber-500/30 hover:bg-amber-500/5'
+                  : 'border-zinc-200 hover:border-amber-500/30 hover:bg-amber-50'
+              }`}
+            >
+              <div className="text-left">
+                <p className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                  {plan.name}
+                </p>
+                <p className="text-[11px] text-zinc-500">
+                  {plan.price === 0 ? t('landing.pricing.free') : `${plan.currency === 'BRL' ? 'R$' : plan.currency === 'EUR' ? '\u20AC' : '$'}${plan.price}/${plan.billingCycle === 'monthly' ? t('landing.pricing.mo') : t('landing.pricing.yr')}`}
+                </p>
+              </div>
+              {plan.isDefault && (
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  {t('admin.plans.default')}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
