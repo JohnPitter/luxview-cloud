@@ -1,12 +1,16 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -215,6 +219,14 @@ func (p *Provisioner) Deprovision(ctx context.Context, svc *model.AppService) er
 		if err := p.deprovisionPostgres(ctx, svc.DBName); err != nil {
 			log.Warn().Err(err).Str("db", svc.DBName).Msg("failed to deprovision postgres")
 		}
+	case model.ServiceMongoDB:
+		if err := p.deprovisionMongoDB(ctx, svc.DBName); err != nil {
+			log.Warn().Err(err).Str("db", svc.DBName).Msg("failed to deprovision mongodb")
+		}
+	case model.ServiceRabbitMQ:
+		if err := p.deprovisionRabbitMQ(ctx, svc.DBName); err != nil {
+			log.Warn().Err(err).Str("vhost", svc.DBName).Msg("failed to deprovision rabbitmq")
+		}
 	case model.ServiceS3:
 		if err := p.deprovisionS3(ctx, svc.DBName); err != nil {
 			log.Warn().Err(err).Str("bucket", svc.DBName).Msg("failed to deprovision s3")
@@ -230,33 +242,139 @@ func (p *Provisioner) Deprovision(ctx context.Context, svc *model.AppService) er
 }
 
 // provisionMongoDB creates a dedicated user with readWrite access to a specific database.
+// Uses docker exec + mongosh since the Go mongo driver would add a heavy dependency.
 func (p *Provisioner) provisionMongoDB(ctx context.Context, dbName, userName, password string) error {
-	// Connect to MongoDB as admin and create a scoped user
-	// Uses mongosh via docker exec since the Go mongo driver would add a heavy dependency
-	// The user is created with readWrite role only on their specific database
-	adminURL := fmt.Sprintf("mongodb://%s:%s@%s:%d/admin",
-		p.cfg.SharedMongoUser, p.cfg.SharedMongoPassword, p.cfg.SharedMongoHost, p.cfg.SharedMongoPort)
+	log := logger.With("provisioner")
 
-	// We use the admin connection to create a user scoped to the app database
-	// This is done via the provisioner's HTTP call to mongo, but since we don't have
-	// a mongo driver, we'll store the admin creds and rely on the DB name for isolation.
-	// For now, create the user via a direct mongo command.
-	_ = adminURL // TODO: implement via mongo driver when added as dependency
-	// MongoDB provides database-level isolation by default — each app connects to its own
-	// database name, and data is isolated. The user is scoped to authSource=dbName.
-	// Full user provisioning requires the mongo Go driver which we'll add when needed.
+	// JavaScript command to create user scoped to the app database
+	// dropUser first to handle re-provisioning gracefully
+	jsCmd := fmt.Sprintf(`
+		db = db.getSiblingDB('%s');
+		try { db.dropUser('%s'); } catch(e) {}
+		db.createUser({
+			user: '%s',
+			pwd: '%s',
+			roles: [{ role: 'readWrite', db: '%s' }]
+		});
+	`, dbName, userName, userName, password, dbName)
+
+	execCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(execCtx, "docker", "exec", "luxview-mongo-shared",
+		"mongosh",
+		"--username", p.cfg.SharedMongoUser,
+		"--password", p.cfg.SharedMongoPassword,
+		"--authenticationDatabase", "admin",
+		"--quiet",
+		"--eval", jsCmd,
+	)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Warn().Err(err).Str("output", string(output)).Msg("mongosh user creation failed")
+		return fmt.Errorf("mongosh exec failed: %s — %w", string(output), err)
+	}
+
+	log.Info().Str("db", dbName).Str("user", userName).Msg("mongodb user created")
 	return nil
 }
 
 // provisionRabbitMQ creates a dedicated vhost and user with access only to that vhost.
+// Uses the RabbitMQ Management HTTP API (port 15672).
 func (p *Provisioner) provisionRabbitMQ(ctx context.Context, vhost, userName, password string) error {
-	// RabbitMQ Management HTTP API for user/vhost provisioning
-	// Uses the management plugin (port 15672) to create isolated vhost + user
-	rabbitMgmtURL := fmt.Sprintf("http://%s:15672", p.cfg.SharedRabbitHost)
-	_ = rabbitMgmtURL // TODO: implement via HTTP API calls
-	// RabbitMQ provides vhost-level isolation — each app gets its own vhost.
-	// Full user provisioning requires HTTP calls to the management API.
-	// For now, vhost name provides logical isolation.
+	log := logger.With("provisioner")
+	baseURL := fmt.Sprintf("http://%s:15672/api", p.cfg.SharedRabbitHost)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+
+	// 1. Create vhost
+	if err := p.rabbitAPIPut(ctx, client, baseURL, fmt.Sprintf("/vhosts/%s", vhost), "{}"); err != nil {
+		return fmt.Errorf("create vhost: %w", err)
+	}
+
+	// 2. Create user with password
+	userBody := fmt.Sprintf(`{"password":"%s","tags":""}`, password)
+	if err := p.rabbitAPIPut(ctx, client, baseURL, fmt.Sprintf("/users/%s", userName), userBody); err != nil {
+		return fmt.Errorf("create user: %w", err)
+	}
+
+	// 3. Grant permissions: user can configure, write, read everything in their vhost only
+	permBody := `{"configure":".*","write":".*","read":".*"}`
+	if err := p.rabbitAPIPut(ctx, client, baseURL, fmt.Sprintf("/permissions/%s/%s", vhost, userName), permBody); err != nil {
+		return fmt.Errorf("set permissions: %w", err)
+	}
+
+	log.Info().Str("vhost", vhost).Str("user", userName).Msg("rabbitmq vhost+user created")
+	return nil
+}
+
+// rabbitAPIPut sends a PUT request to the RabbitMQ Management API.
+func (p *Provisioner) rabbitAPIPut(ctx context.Context, client *http.Client, baseURL, path, body string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, baseURL+path, bytes.NewBufferString(body))
+	if err != nil {
+		return err
+	}
+	req.SetBasicAuth(p.cfg.SharedRabbitUser, p.cfg.SharedRabbitPassword)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("rabbitmq API %s returned %d", path, resp.StatusCode)
+	}
+	return nil
+}
+
+func (p *Provisioner) deprovisionMongoDB(ctx context.Context, dbName string) error {
+	userName := dbName + "_user"
+	jsCmd := fmt.Sprintf(`
+		db = db.getSiblingDB('%s');
+		try { db.dropUser('%s'); } catch(e) {}
+		db.dropDatabase();
+	`, dbName, userName)
+
+	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx2, "docker", "exec", "luxview-mongo-shared",
+		"mongosh",
+		"--username", p.cfg.SharedMongoUser,
+		"--password", p.cfg.SharedMongoPassword,
+		"--authenticationDatabase", "admin",
+		"--quiet",
+		"--eval", jsCmd,
+	)
+	_, _ = cmd.CombinedOutput()
+	return nil
+}
+
+func (p *Provisioner) deprovisionRabbitMQ(ctx context.Context, vhost string) error {
+	baseURL := fmt.Sprintf("http://%s:15672/api", p.cfg.SharedRabbitHost)
+	client := &http.Client{Timeout: 15 * time.Second}
+	userName := vhost + "_user"
+
+	// Delete user first, then vhost
+	_ = p.rabbitAPIDelete(ctx, client, baseURL, fmt.Sprintf("/users/%s", userName))
+	_ = p.rabbitAPIDelete(ctx, client, baseURL, fmt.Sprintf("/vhosts/%s", vhost))
+	return nil
+}
+
+func (p *Provisioner) rabbitAPIDelete(ctx context.Context, client *http.Client, baseURL, path string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, baseURL+path, nil)
+	if err != nil {
+		return err
+	}
+	req.SetBasicAuth(p.cfg.SharedRabbitUser, p.cfg.SharedRabbitPassword)
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 	return nil
 }
 
