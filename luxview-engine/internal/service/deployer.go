@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/luxview/engine/internal/buildpack"
 	"github.com/luxview/engine/internal/model"
 	"github.com/luxview/engine/internal/repository"
 	"github.com/luxview/engine/pkg/crypto"
@@ -121,6 +122,11 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	}
 	bp := result.Buildpack
 	buildDir = result.BuildDir
+
+	// If using a custom Dockerfile, detect the EXPOSE port
+	if dfp, ok := bp.(*buildpack.DockerfilePack); ok {
+		dfp.DetectPort(buildDir)
+	}
 
 	// Update app stack
 	app.Stack = bp.Name()
