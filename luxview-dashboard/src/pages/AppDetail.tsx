@@ -26,6 +26,7 @@ import { BuildLogViewer } from '../components/deploy/BuildLogViewer';
 import { MetricsChart } from '../components/monitoring/MetricsChart';
 import { UptimeBar } from '../components/monitoring/UptimeBar';
 import { AlertConfig } from '../components/monitoring/AlertConfig';
+import { RuntimeLogs } from '../components/monitoring/RuntimeLogs';
 import { ServiceCard } from '../components/services/ServiceCard';
 import { AddServiceDialog } from '../components/services/AddServiceDialog';
 import { useAppsStore } from '../stores/apps.store';
@@ -68,8 +69,6 @@ export function AppDetail() {
   const [selectedBuildLog, setSelectedBuildLog] = useState<string>('');
   const [actionPending, setActionPending] = useState(false);
   const [logType, setLogType] = useState<'runtime' | 'build'>('runtime');
-  const [containerLogs, setContainerLogs] = useState<string>('');
-  const [containerLogsLoading, setContainerLogsLoading] = useState(false);
 
   // Env vars state
   const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>([]);
@@ -482,41 +481,11 @@ export function AppDetail() {
               >
                 Build Logs
               </button>
-              {logType === 'runtime' && (
-                <button
-                  onClick={() => {
-                    if (appId) {
-                      setContainerLogsLoading(true);
-                      appsApi.containerLogs(appId, 500).then(setContainerLogs).catch(() => setContainerLogs('Failed to fetch logs')).finally(() => setContainerLogsLoading(false));
-                    }
-                  }}
-                  className="ml-auto px-3 py-1.5 text-xs text-zinc-500 hover:text-amber-400 transition-colors border border-zinc-800 rounded-lg"
-                >
-                  <RotateCcw size={12} className="inline mr-1" />
-                  Refresh
-                </button>
-              )}
             </div>
 
             {/* Runtime logs */}
-            {logType === 'runtime' && (
-              <div
-                className={`
-                  rounded-xl border p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap overflow-auto max-h-[600px]
-                  ${isDark ? 'bg-zinc-950 border-zinc-800 text-zinc-300' : 'bg-zinc-50 border-zinc-200 text-zinc-700'}
-                `}
-              >
-                {containerLogsLoading ? (
-                  <div className="flex items-center gap-2 text-zinc-500">
-                    <Loader2 size={14} className="animate-spin" />
-                    Loading logs...
-                  </div>
-                ) : containerLogs ? (
-                  containerLogs
-                ) : (
-                  <span className="text-zinc-500">No runtime logs available. The app may not be running.</span>
-                )}
-              </div>
+            {logType === 'runtime' && appId && (
+              <RuntimeLogs appId={appId} containerId={app?.containerId} />
             )}
 
             {/* Build logs */}

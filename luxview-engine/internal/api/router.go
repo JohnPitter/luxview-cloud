@@ -107,6 +107,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Post("/apps/{id}/restart", appHandler.Restart)
 			r.Post("/apps/{id}/stop", appHandler.Stop)
 			r.Get("/apps/{id}/logs", appHandler.ContainerLogs)
+			r.Get("/apps/{id}/logs/stream", appHandler.ContainerLogsStream)
 
 			// Deployments
 			r.Get("/apps/{id}/deployments", deployHandler.List)

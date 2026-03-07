@@ -92,4 +92,10 @@ export const appsApi = {
     });
     return data.logs ?? '';
   },
+
+  /** Returns the base URL for SSE log streaming */
+  logsStreamUrl(id: string, tail = 100): string {
+    const base = api.defaults.baseURL ?? '/api';
+    return `${base}/apps/${id}/logs/stream?tail=${tail}`;
+  },
 };

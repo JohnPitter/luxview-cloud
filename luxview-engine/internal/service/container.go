@@ -133,6 +133,14 @@ func (cm *ContainerManager) Logs(ctx context.Context, containerID string, tail s
 	return cm.docker.ContainerLogs(ctx, containerID, tail)
 }
 
+// LogsFollow returns a streaming reader that follows container logs in real time.
+func (cm *ContainerManager) LogsFollow(ctx context.Context, containerID string, tail string, since string) (io.ReadCloser, error) {
+	if containerID == "" {
+		return nil, fmt.Errorf("no container ID")
+	}
+	return cm.docker.ContainerLogsFollow(ctx, containerID, tail, since)
+}
+
 // IsRunning checks if a container is running.
 func (cm *ContainerManager) IsRunning(ctx context.Context, containerID string) (bool, error) {
 	if containerID == "" {

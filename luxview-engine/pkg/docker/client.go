@@ -101,6 +101,21 @@ func (c *Client) ContainerLogs(ctx context.Context, containerID string, tail str
 	})
 }
 
+// ContainerLogsFollow returns a streaming reader that follows container logs in real time.
+func (c *Client) ContainerLogsFollow(ctx context.Context, containerID string, tail string, since string) (io.ReadCloser, error) {
+	opts := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+		Timestamps: true,
+		Tail:       tail,
+	}
+	if since != "" {
+		opts.Since = since
+	}
+	return c.cli.ContainerLogs(ctx, containerID, opts)
+}
+
 // ContainerStats returns a single stats snapshot for a container.
 func (c *Client) ContainerStats(ctx context.Context, containerID string) (container.StatsResponseReader, error) {
 	return c.cli.ContainerStats(ctx, containerID, false)

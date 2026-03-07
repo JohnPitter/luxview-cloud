@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -538,6 +540,102 @@ func (h *AppHandler) ContainerLogs(w http.ResponseWriter, r *http.Request) {
 	cleaned := stripDockerLogHeaders(logBytes)
 
 	writeJSON(w, http.StatusOK, map[string]string{"logs": string(cleaned)})
+}
+
+// ContainerLogsStream streams runtime logs in real time via Server-Sent Events (SSE).
+func (h *AppHandler) ContainerLogsStream(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+	log := logger.With("logs-stream")
+
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app ID")
+		return
+	}
+
+	app, err := h.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	if app.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	if app.ContainerID == "" {
+		writeError(w, http.StatusBadRequest, "no container running")
+		return
+	}
+
+	tail := r.URL.Query().Get("tail")
+	if tail == "" {
+		tail = "100"
+	}
+	since := r.URL.Query().Get("since")
+
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // disable Nginx/Traefik buffering
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming not supported")
+		return
+	}
+
+	reader, err := h.container.LogsFollow(ctx, app.ContainerID, tail, since)
+	if err != nil {
+		fmt.Fprintf(w, "data: {\"error\":\"container not available\"}\n\n")
+		flusher.Flush()
+		return
+	}
+	defer reader.Close()
+
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 64*1024), 64*1024)
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		line := scanner.Bytes()
+		// Strip Docker multiplexed stream header if present (8-byte prefix)
+		cleaned := stripDockerLogHeaderLine(line)
+		if len(cleaned) == 0 {
+			continue
+		}
+
+		// Send as SSE data line
+		fmt.Fprintf(w, "data: %s\n\n", cleaned)
+		flusher.Flush()
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Debug().Err(err).Msg("log stream ended")
+	}
+}
+
+// stripDockerLogHeaderLine strips the 8-byte Docker multiplexed stream header from a single log line.
+func stripDockerLogHeaderLine(line []byte) []byte {
+	if len(line) >= 8 {
+		// Check if this looks like a Docker header: first byte is 0, 1, or 2 (stdout/stderr/stdin)
+		streamType := line[0]
+		if (streamType == 0 || streamType == 1 || streamType == 2) && line[1] == 0 && line[2] == 0 && line[3] == 0 {
+			size := int(line[4])<<24 | int(line[5])<<16 | int(line[6])<<8 | int(line[7])
+			rest := line[8:]
+			if size <= len(rest)+1 { // +1 tolerance for newline stripping
+				return rest
+			}
+		}
+	}
+	return line
 }
 
 // stripDockerLogHeaders removes the 8-byte Docker multiplexed stream header from each log frame.
