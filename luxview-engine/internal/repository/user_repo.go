@@ -94,3 +94,11 @@ func (r *UserRepo) ListAll(ctx context.Context, limit, offset int) ([]model.User
 	}
 	return users, total, nil
 }
+
+func (r *UserRepo) UpdateRole(ctx context.Context, id uuid.UUID, role model.UserRole) error {
+	_, err := r.db.Pool.Exec(ctx, `UPDATE users SET role = $1 WHERE id = $2`, role, id)
+	if err != nil {
+		return fmt.Errorf("update user role: %w", err)
+	}
+	return nil
+}

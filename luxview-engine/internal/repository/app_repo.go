@@ -253,6 +253,15 @@ func (r *AppRepo) CountByStatus(ctx context.Context, status model.AppStatus) (in
 	return count, err
 }
 
+func (r *AppRepo) UpdateResourceLimits(ctx context.Context, id uuid.UUID, limits model.ResourceLimits) error {
+	limitsJSON, _ := json.Marshal(limits)
+	_, err := r.db.Pool.Exec(ctx, `UPDATE apps SET resource_limits = $1 WHERE id = $2`, limitsJSON, id)
+	if err != nil {
+		return fmt.Errorf("update resource limits: %w", err)
+	}
+	return nil
+}
+
 func mustJSON(v interface{}) json.RawMessage {
 	b, err := json.Marshal(v)
 	if err != nil {
