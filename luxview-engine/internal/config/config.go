@@ -39,6 +39,11 @@ type Config struct {
 	SharedRabbitUser     string
 	SharedRabbitPassword string
 
+	SharedMinioHost     string
+	SharedMinioPort     int
+	SharedMinioUser     string
+	SharedMinioPassword string
+
 	BuildConcurrency int
 	PortRangeStart   int
 	PortRangeEnd     int
@@ -85,6 +90,11 @@ func Load() (*Config, error) {
 		SharedRabbitPort:     envInt("SHARED_RABBIT_PORT", 5672),
 		SharedRabbitUser:     envStr("SHARED_RABBIT_USER", "luxview_admin"),
 		SharedRabbitPassword: envStr("SHARED_RABBIT_PASSWORD", ""),
+
+		SharedMinioHost:     envStr("SHARED_MINIO_HOST", "minio-shared"),
+		SharedMinioPort:     envInt("SHARED_MINIO_PORT", 9000),
+		SharedMinioUser:     envStr("SHARED_MINIO_USER", "luxview_admin"),
+		SharedMinioPassword: envStr("SHARED_MINIO_PASSWORD", ""),
 
 		BuildConcurrency: envInt("BUILD_CONCURRENCY", 3),
 		PortRangeStart:   envInt("PORT_RANGE_START", 10000),

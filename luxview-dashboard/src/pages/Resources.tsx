@@ -11,6 +11,9 @@ import {
   RefreshCw,
   HardDrive,
   Inbox,
+  HardDriveIcon,
+  Terminal,
+  FolderOpen,
 } from 'lucide-react';
 import { GlassCard } from '../components/common/GlassCard';
 import { useThemeStore } from '../stores/theme.store';
@@ -18,7 +21,7 @@ import { servicesApi, type AppServiceWithApp, type ServiceType } from '../api/se
 
 const serviceConfig: Record<
   ServiceType,
-  { label: string; icon: string; color: string; bgColor: string; borderColor: string }
+  { label: string; icon: string; color: string; bgColor: string; borderColor: string; explorable?: boolean }
 > = {
   postgres: {
     label: 'PostgreSQL',
@@ -26,6 +29,7 @@ const serviceConfig: Record<
     color: 'text-blue-400',
     bgColor: 'bg-blue-500/10',
     borderColor: 'border-blue-500/20',
+    explorable: true,
   },
   redis: {
     label: 'Redis',
@@ -48,6 +52,14 @@ const serviceConfig: Record<
     bgColor: 'bg-orange-500/10',
     borderColor: 'border-orange-500/20',
   },
+  s3: {
+    label: 'Object Storage',
+    icon: 'S3',
+    color: 'text-purple-400',
+    bgColor: 'bg-purple-500/10',
+    borderColor: 'border-purple-500/20',
+    explorable: true,
+  },
 };
 
 const categoryConfig = [
@@ -64,6 +76,13 @@ const categoryConfig = [
     description: 'Redis caches and RabbitMQ message brokers',
     icon: Server,
     types: ['redis', 'rabbitmq'] as ServiceType[],
+  },
+  {
+    key: 'storage',
+    label: 'Object Storage',
+    description: 'S3-compatible file storage buckets',
+    icon: HardDriveIcon,
+    types: ['s3'] as ServiceType[],
   },
 ];
 
@@ -137,7 +156,7 @@ export function Resources() {
       </div>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         {[
           { label: 'Total Resources', value: services.length, icon: HardDrive, color: 'text-amber-400' },
           {
@@ -152,6 +171,12 @@ export function Resources() {
             value: totalByType(['rabbitmq']),
             icon: Inbox,
             color: 'text-orange-400',
+          },
+          {
+            label: 'Storage',
+            value: totalByType(['s3']),
+            icon: HardDriveIcon,
+            color: 'text-purple-400',
           },
         ].map((stat) => (
           <GlassCard key={stat.label} className="!p-4">
@@ -332,14 +357,57 @@ export function Resources() {
                         </div>
                       )}
 
+                      {/* Explorer action */}
+                      {cfg.explorable && (
+                        <div className="mb-3">
+                          <button
+                            onClick={() => {
+                              if (svc.serviceType === 's3') {
+                                navigate(`/dashboard/resources/s3/${svc.id}`);
+                              } else {
+                                navigate(`/dashboard/resources/db/${svc.id}`);
+                              }
+                            }}
+                            className={`
+                              w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-medium
+                              transition-all duration-200
+                              ${
+                                isDark
+                                  ? 'bg-amber-400/10 text-amber-400 hover:bg-amber-400/20 border border-amber-400/20'
+                                  : 'bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-300'
+                              }
+                            `}
+                          >
+                            {svc.serviceType === 's3' ? (
+                              <>
+                                <FolderOpen size={14} />
+                                Browse Files
+                              </>
+                            ) : (
+                              <>
+                                <Terminal size={14} />
+                                Open Explorer
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+
                       {/* Credentials Grid */}
                       <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { label: 'Host', value: creds?.host },
-                          { label: 'Port', value: creds?.port },
-                          { label: 'User', value: creds?.username },
-                          { label: 'Database', value: creds?.database },
-                        ]
+                        {(svc.serviceType === 's3'
+                          ? [
+                              { label: 'Endpoint', value: creds?.endpoint },
+                              { label: 'Bucket', value: creds?.bucket },
+                              { label: 'Access Key', value: creds?.accessKey },
+                            ]
+                          : [
+                              { label: 'Host', value: creds?.host },
+                              { label: 'Port', value: creds?.port },
+                              { label: 'User', value: creds?.username },
+                              { label: 'Database', value: creds?.database },
+                            ]
+                        )
                           .filter((c) => c.value)
                           .map((cred) => (
                             <div key={cred.label}>
@@ -369,11 +437,14 @@ export function Resources() {
                               </div>
                             </div>
                           ))}
-                        {/* Password */}
-                        {creds?.password && (
+                        {/* Password / Secret Key */}
+                        {(creds?.password || creds?.secretKey) && (() => {
+                          const secretValue = creds?.password || creds?.secretKey || '';
+                          const secretLabel = svc.serviceType === 's3' ? 'Secret Key' : 'Password';
+                          return (
                           <div>
                             <label className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">
-                              Password
+                              {secretLabel}
                             </label>
                             <div className="flex items-center gap-1">
                               <span
@@ -381,7 +452,7 @@ export function Resources() {
                                   isDark ? 'text-zinc-300' : 'text-zinc-700'
                                 }`}
                               >
-                                {showPasswords[pwKey] ? creds.password : '••••••••'}
+                                {showPasswords[pwKey] ? secretValue : '••••••••'}
                               </span>
                               <button
                                 onClick={() => togglePassword(pwKey)}
@@ -394,7 +465,7 @@ export function Resources() {
                                 )}
                               </button>
                               <button
-                                onClick={() => copyToClipboard(creds.password, pwKey)}
+                                onClick={() => copyToClipboard(secretValue, pwKey)}
                                 className="text-zinc-500 hover:text-amber-400 transition-colors flex-shrink-0"
                               >
                                 {copied === pwKey ? (
@@ -405,7 +476,8 @@ export function Resources() {
                               </button>
                             </div>
                           </div>
-                        )}
+                          );
+                        })()}
                       </div>
                     </GlassCard>
                   );

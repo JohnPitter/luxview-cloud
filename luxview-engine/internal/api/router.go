@@ -65,6 +65,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	metricHandler := handlers.NewMetricHandler(deps.MetricRepo, deps.AppRepo)
 	alertHandler := handlers.NewAlertHandler(deps.AlertRepo, deps.AppRepo)
 	adminHandler := handlers.NewAdminHandler(deps.UserRepo, deps.AppRepo, deps.DeployRepo, deps.Container)
+	explorerHandler := handlers.NewExplorerHandler(deps.ServiceRepo, deps.AppRepo, deps.EncryptKey)
 	traefikHandler := handlers.NewTraefikHandler(deps.Router)
 	webhookHandler := handlers.NewWebhookHandler(deps.WebhookSvc, deps.Config.InternalToken)
 
@@ -117,6 +118,15 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Post("/apps/{id}/services", serviceHandler.Create)
 			r.Get("/apps/{id}/services", serviceHandler.List)
 			r.Delete("/services/{id}", serviceHandler.Delete)
+
+			// Explorer (DB + S3)
+			r.Get("/services/{id}/tables", explorerHandler.ListTables)
+			r.Get("/services/{id}/tables/{table}", explorerHandler.GetTableSchema)
+			r.Post("/services/{id}/query", explorerHandler.ExecuteQuery)
+			r.Get("/services/{id}/files", explorerHandler.ListFiles)
+			r.Post("/services/{id}/files/upload", explorerHandler.UploadFile)
+			r.Get("/services/{id}/files/download", explorerHandler.DownloadFile)
+			r.Delete("/services/{id}/files", explorerHandler.DeleteFile)
 
 			// Metrics
 			r.Get("/apps/metrics/latest", metricHandler.LatestAll)

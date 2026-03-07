@@ -23,6 +23,7 @@ const services: Array<{
   { type: 'redis', label: 'Redis', description: 'In-memory cache & queue', icon: 'RD', color: 'border-red-500/30 hover:border-red-500/60' },
   { type: 'mongodb', label: 'MongoDB', description: 'Document database', icon: 'MG', color: 'border-emerald-500/30 hover:border-emerald-500/60' },
   { type: 'rabbitmq', label: 'RabbitMQ', description: 'Message broker', icon: 'RQ', color: 'border-orange-500/30 hover:border-orange-500/60' },
+  { type: 's3', label: 'Object Storage', description: 'S3-compatible file storage', icon: 'S3', color: 'border-purple-500/30 hover:border-purple-500/60' },
 ];
 
 export function AddServiceDialog({ open, onClose, onAdd, existingTypes, loading }: AddServiceDialogProps) {

@@ -677,7 +677,7 @@ export function AppDetail() {
                     service={svc}
                     onDelete={async (serviceId) => {
                       try {
-                        await servicesApi.delete(appId!, serviceId);
+                        await servicesApi.delete(serviceId);
                         setServices(services.filter((s) => s.id !== serviceId));
                         addNotification({ type: 'success', title: 'Service removed' });
                       } catch {
