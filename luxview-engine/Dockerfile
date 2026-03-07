@@ -12,7 +12,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /engine ./cmd/engine
 
 FROM alpine:3.20
 
-RUN apk --no-cache add ca-certificates git
+RUN apk --no-cache add ca-certificates git docker-cli
 
 WORKDIR /app
 COPY --from=builder /engine .
