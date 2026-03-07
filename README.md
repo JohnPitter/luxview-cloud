@@ -34,7 +34,9 @@ Think of it as your own **Heroku / Railway / Render** — but you own the infras
 | **One-Click Deploy** | Select a GitHub repo, pick a branch, deploy. That's it. |
 | **Auto Stack Detection** | Node.js, Python, Go, Rust, Java, static, Docker — all auto-detected |
 | **Wildcard SSL** | Every app gets `<app>.luxview.cloud` with automatic HTTPS via Let's Encrypt |
-| **Managed Databases** | Provision PostgreSQL, Redis, MongoDB, or RabbitMQ per app with one click |
+| **Managed Services** | Provision PostgreSQL, Redis, MongoDB, RabbitMQ, or S3 Object Storage per app |
+| **DB Explorer** | Browse tables, view schemas, and execute SQL queries directly in the dashboard |
+| **S3 File Browser** | Upload, download, and manage files in your S3-compatible storage buckets |
 | **Environment Variables** | Encrypted at rest (AES-256-GCM), injected at deploy time |
 | **Real-time Metrics** | CPU, RAM, and network usage per container — live in the dashboard |
 | **Build & Runtime Logs** | Full deploy build logs + live container output |
@@ -74,6 +76,7 @@ graph TB
             REDIS[("Redis")]
             MONGO[("MongoDB")]
             RABBIT[("RabbitMQ")]
+            MINIO[("MinIO<br/>S3 Storage")]
         end
     end
 
@@ -86,7 +89,7 @@ graph TB
     ENGINE --> Shared
     A1 -.-> PG_SHARED
     A2 -.-> REDIS
-    A3 -.-> MONGO
+    A3 -.-> MINIO
 
     style TRAEFIK fill:#24A1C1,color:#fff,stroke:none
     style ENGINE fill:#00ADD8,color:#fff,stroke:none
@@ -96,6 +99,7 @@ graph TB
     style REDIS fill:#DC382D,color:#fff,stroke:none
     style MONGO fill:#47A248,color:#fff,stroke:none
     style RABBIT fill:#FF6600,color:#fff,stroke:none
+    style MINIO fill:#C72E49,color:#fff,stroke:none
 ```
 
 ### How the pieces fit together
@@ -104,11 +108,12 @@ graph TB
 |---|---|---|
 | **Traefik** | Reverse proxy, SSL termination, wildcard routing | Traefik v3 |
 | **LuxView Engine** | REST API — builds, deploys, manages containers, provisions services | Go + Chi |
-| **Dashboard** | Web UI — deploy wizard, app management, metrics, logs | React + Vite + Tailwind |
+| **Dashboard** | Web UI — deploy wizard, app management, metrics, logs, DB explorer, file browser | React + Vite + Tailwind |
 | **Docker Engine** | Runs isolated user app containers | Docker API |
 | **PostgreSQL (platform)** | Stores users, apps, deployments, services, metrics, alerts | PostgreSQL 16 |
-| **PostgreSQL (shared)** | User app databases (one DB per app) | PostgreSQL 16 |
+| **PostgreSQL (shared)** | User app databases — one isolated DB + user per app | PostgreSQL 16 |
 | **Redis / MongoDB / RabbitMQ** | Optional services provisioned per app | Managed containers |
+| **MinIO** | S3-compatible object storage — one bucket per app | MinIO |
 
 ---
 
@@ -178,21 +183,22 @@ flowchart LR
 
 ## Service Provisioning
 
-When you add a database or cache to your app, LuxView automatically:
+When you add a service to your app, LuxView automatically:
 
-1. **Creates** an isolated database/user on the shared service
+1. **Creates** an isolated resource (database + user, S3 bucket, etc.)
 2. **Generates** a secure 24-char random password
 3. **Encrypts** credentials at rest (AES-256-GCM)
 4. **Injects** connection env vars into your container on every deploy
+5. **Isolates** access — each app user can only see their own data
 
 ```mermaid
 flowchart LR
-    A[User clicks<br/>'Add PostgreSQL'] --> B[Engine creates<br/>DB + user]
+    A[User clicks<br/>'Add Service'] --> B[Engine creates<br/>isolated resource]
     B --> C[Encrypt credentials<br/>AES-256-GCM]
     C --> D[Store in platform DB]
     D --> E[On deploy: decrypt<br/>& inject env vars]
 
-    E --> F["DATABASE_URL<br/>PGHOST / PGPORT<br/>SPRING_DATASOURCE_URL<br/>..."]
+    E --> F["DATABASE_URL<br/>S3_ENDPOINT / S3_BUCKET<br/>REDIS_URL / MONGO_URL<br/>..."]
 
     style A fill:#F59E0B,color:#fff,stroke:none
     style F fill:#10B981,color:#fff,stroke:none
@@ -206,6 +212,14 @@ flowchart LR
 | Redis | `REDIS_URL`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` |
 | MongoDB | `MONGODB_URL`, `MONGO_URL` |
 | RabbitMQ | `RABBITMQ_URL`, `AMQP_URL` |
+| S3 (MinIO) | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `AWS_ENDPOINT_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` |
+
+### DB Explorer & S3 File Browser
+
+The dashboard includes built-in tools to interact with your provisioned services:
+
+- **DB Explorer** — Browse tables, view column schemas (type, nullable, default), and execute arbitrary SQL queries with a built-in editor (Ctrl+Enter to run). Results are displayed in a paginated grid with copy-to-clipboard support. Limited to 1,000 rows per query for safety.
+- **S3 File Browser** — Navigate folder structures, upload files (multi-file, up to 50MB), download, and delete objects. Includes breadcrumb navigation, search filtering, and file size/date metadata.
 
 ---
 
@@ -266,9 +280,10 @@ make prod && make migrate
 | Layer | Technology |
 |:---:|:---:|
 | **Proxy** | Traefik v3 (SSL, routing, middleware) |
-| **Backend** | Go 1.23, Chi router, pgx, Docker SDK |
+| **Backend** | Go 1.23, Chi router, pgx, Docker SDK, MinIO SDK |
 | **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, Zustand |
 | **Database** | PostgreSQL 16 |
+| **Storage** | MinIO (S3-compatible) |
 | **Containers** | Docker Engine API |
 | **Auth** | GitHub OAuth + JWT |
 | **Encryption** | AES-256-GCM (credentials at rest) |
@@ -290,6 +305,8 @@ luxview-cloud/
     cmd/engine/main.go          # Entry point + worker orchestration
     internal/
       api/                      # HTTP handlers + middleware + router
+        handlers/
+          db_explorer.go        # DB Explorer + S3 file browser endpoints
       buildpack/                # Stack detection (node, python, go, rust, java, docker, static)
       config/                   # Environment config loader
       model/                    # Domain models (App, Deployment, Service, Alert, Metric)
@@ -305,7 +322,10 @@ luxview-cloud/
       components/               # UI components (apps, deploy, monitoring, services, layout, common)
       hooks/                    # Custom React hooks
       lib/                      # Utility functions
-      pages/                    # Route pages (Dashboard, AppDetail, Resources, NewApp, Admin)
+      pages/
+        DbExplorer.tsx          # SQL editor + table browser + schema viewer
+        S3Explorer.tsx          # S3 file browser (upload, download, delete)
+        Resources.tsx           # Resource overview (all services across apps)
       stores/                   # Zustand state management
 
   traefik/                      # Traefik configuration
@@ -329,6 +349,7 @@ luxview-cloud/
 | `SHARED_REDIS_PASSWORD` | Shared Redis password | Yes |
 | `SHARED_MONGO_PASSWORD` | Shared MongoDB password | Yes |
 | `SHARED_RABBITMQ_PASSWORD` | Shared RabbitMQ password | Yes |
+| `SHARED_MINIO_PASSWORD` | Shared MinIO password | Yes |
 | `ACME_EMAIL` | Let's Encrypt email | Production |
 | `BUILD_CONCURRENCY` | Max concurrent builds (default: `3`) | No |
 | `LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` | No |
