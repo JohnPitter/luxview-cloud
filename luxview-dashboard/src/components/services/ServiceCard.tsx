@@ -14,6 +14,7 @@ const serviceConfig: Record<ServiceType, { label: string; color: string; icon: s
   redis: { label: 'Redis', color: 'text-red-400', icon: 'RD' },
   mongodb: { label: 'MongoDB', color: 'text-emerald-400', icon: 'MG' },
   rabbitmq: { label: 'RabbitMQ', color: 'text-orange-400', icon: 'RQ' },
+  s3: { label: 'Object Storage', color: 'text-purple-400', icon: 'S3' },
 };
 
 export function ServiceCard({ service, onDelete }: ServiceCardProps) {
