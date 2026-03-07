@@ -221,6 +221,18 @@ The dashboard includes built-in tools to interact with your provisioned services
 - **DB Explorer** — Browse tables, view column schemas (type, nullable, default), and execute arbitrary SQL queries with a built-in editor (Ctrl+Enter to run). Results are displayed in a paginated grid with copy-to-clipboard support. Limited to 1,000 rows per query for safety.
 - **S3 File Browser** — Navigate folder structures, upload files (multi-file, up to 50MB), download, and delete objects. Includes breadcrumb navigation, search filtering, and file size/date metadata.
 
+### Service Isolation
+
+Every provisioned service enforces strict per-app isolation:
+
+| Service | Isolation Strategy |
+|---|---|
+| PostgreSQL | Dedicated database + user with `OWNER`, `REVOKE ALL ON SCHEMA public FROM PUBLIC` |
+| Redis | Unique DB number (0–15) per app |
+| MongoDB | Dedicated user with `readWrite` role scoped to app database |
+| RabbitMQ | Dedicated vhost + user with vhost-scoped permissions |
+| S3 (MinIO) | Isolated bucket per app |
+
 ---
 
 ## Getting Started
