@@ -83,6 +83,6 @@ export const appsApi = {
   },
 
   async updateEnvVars(id: string, envVars: Record<string, string>): Promise<void> {
-    await api.put(`/apps/${id}/env`, { envVars });
+    await api.patch(`/apps/${id}`, { envVars });
   },
 };

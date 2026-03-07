@@ -50,6 +50,7 @@ type Config struct {
 
 	BuildTimeout int // seconds
 
+	AppNetwork    string // Docker network for user app containers
 	InternalToken string
 }
 
@@ -96,6 +97,7 @@ func Load() (*Config, error) {
 
 		BuildTimeout: envInt("BUILD_TIMEOUT", 300),
 
+		AppNetwork:    envStr("APP_NETWORK", "luxview-net"),
 		InternalToken: envStr("INTERNAL_TOKEN", ""),
 	}
 

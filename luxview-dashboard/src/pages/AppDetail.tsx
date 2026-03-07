@@ -22,7 +22,6 @@ import { AppStatusBadge } from '../components/apps/AppStatusBadge';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { DeployHistory } from '../components/deploy/DeployHistory';
 import { BuildLogViewer } from '../components/deploy/BuildLogViewer';
-import { LogViewer } from '../components/monitoring/LogViewer';
 import { MetricsChart } from '../components/monitoring/MetricsChart';
 import { UptimeBar } from '../components/monitoring/UptimeBar';
 import { AlertConfig } from '../components/monitoring/AlertConfig';
@@ -31,7 +30,6 @@ import { AddServiceDialog } from '../components/services/AddServiceDialog';
 import { useAppsStore } from '../stores/apps.store';
 import { useThemeStore } from '../stores/theme.store';
 import { useNotificationsStore } from '../stores/notifications.store';
-import { useDeployLogs } from '../hooks/useDeployLogs';
 import { useMetricsLive } from '../hooks/useMetricsLive';
 import { formatBytes, formatPercent, formatRelativeTime } from '../lib/format';
 import { deploymentsApi, type Deployment } from '../api/deployments';
@@ -66,6 +64,7 @@ export function AppDetail() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showServiceDialog, setShowServiceDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [selectedBuildLog, setSelectedBuildLog] = useState<string>('');
 
   // Env vars state
   const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>([]);
@@ -77,7 +76,6 @@ export function AppDetail() {
   const [settingsBranch, setSettingsBranch] = useState('');
   const [settingsAutoDeploy, setSettingsAutoDeploy] = useState(true);
 
-  const { logs, clear: clearLogs } = useDeployLogs(appId || '');
   const { metrics } = useMetricsLive(appId || '');
 
   useEffect(() => {
@@ -85,6 +83,17 @@ export function AppDetail() {
       fetchApp(appId);
     }
   }, [appId, fetchApp]);
+
+  // Poll app status every 5s when in a transitional state (building/deploying)
+  useEffect(() => {
+    if (!appId || !app) return;
+    const transitional = ['building', 'deploying'];
+    if (!transitional.includes(app.status)) return;
+    const interval = setInterval(() => {
+      fetchApp(appId);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [appId, app?.status, fetchApp]);
 
   useEffect(() => {
     if (app) {
@@ -98,8 +107,16 @@ export function AppDetail() {
   }, [app]);
 
   useEffect(() => {
-    if (appId && activeTab === 'deployments') {
-      deploymentsApi.list(appId).then(setDeployments).catch(() => {});
+    if (appId && (activeTab === 'deployments' || activeTab === 'logs')) {
+      deploymentsApi.list(appId).then((deps) => {
+        setDeployments(deps);
+        // Auto-load build log from latest deployment for Logs tab
+        if (activeTab === 'logs' && deps.length > 0 && !selectedBuildLog) {
+          deploymentsApi.getLogs(deps[0].id).then((res) => {
+            setSelectedBuildLog(res.buildLog || '');
+          }).catch(() => {});
+        }
+      }).catch(() => {});
     }
     if (appId && activeTab === 'services') {
       servicesApi.list(appId).then(setServices).catch(() => {});
@@ -155,6 +172,10 @@ export function AppDetail() {
       addNotification({ type: 'error', title: 'Failed to save settings' });
     }
   };
+
+  const latestMetric = metrics.length > 0 ? metrics[metrics.length - 1] : null;
+  const currentCpu = latestMetric?.cpuPercent ?? 0;
+  const currentMemory = latestMetric?.memoryBytes ?? 0;
 
   const metricsData = metrics.map((m) => ({
     time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -327,13 +348,13 @@ export function AppDetail() {
                   <div className="flex justify-between text-xs mb-2">
                     <span className="text-zinc-500">CPU</span>
                     <span className={isDark ? 'text-zinc-300' : 'text-zinc-700'}>
-                      {formatPercent(app.cpuPercent ?? 0)}
+                      {formatPercent(currentCpu)}
                     </span>
                   </div>
                   <div className={`h-2 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
                     <div
                       className="h-full rounded-full bg-amber-400 transition-all duration-500"
-                      style={{ width: `${Math.min(app.cpuPercent ?? 0, 100)}%` }}
+                      style={{ width: `${Math.min(currentCpu, 100)}%` }}
                     />
                   </div>
                 </div>
@@ -342,7 +363,7 @@ export function AppDetail() {
                   <div className="flex justify-between text-xs mb-2">
                     <span className="text-zinc-500">Memory</span>
                     <span className={isDark ? 'text-zinc-300' : 'text-zinc-700'}>
-                      {formatBytes(app.memoryBytes ?? 0)}
+                      {formatBytes(currentMemory)}
                     </span>
                   </div>
                   <div className={`h-2 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
@@ -350,7 +371,7 @@ export function AppDetail() {
                       className="h-full rounded-full bg-blue-400 transition-all duration-500"
                       style={{
                         width: `${Math.min(
-                          ((app.memoryBytes ?? 0) / (parseInt(app.resourceLimits?.memory || '512') * 1024 * 1024)) * 100,
+                          (currentMemory / (parseInt(app.resourceLimits?.memory || '512') * 1024 * 1024)) * 100,
                           100,
                         )}%`,
                       }}
@@ -365,11 +386,11 @@ export function AppDetail() {
                   </div>
                   <div className="flex justify-between text-[11px]">
                     <span className="text-zinc-500">Memory Limit</span>
-                    <span className="text-zinc-400">{app.resourceLimits?.memory || '512'}MB</span>
+                    <span className="text-zinc-400">{(app.resourceLimits?.memory || '512m').replace(/[mg]/i, '')} MB</span>
                   </div>
                   <div className="flex justify-between text-[11px]">
                     <span className="text-zinc-500">Disk Limit</span>
-                    <span className="text-zinc-400">{app.resourceLimits?.disk || '1'}GB</span>
+                    <span className="text-zinc-400">{(app.resourceLimits?.disk || '1g').replace(/[mg]/i, '')} GB</span>
                   </div>
                 </div>
               </div>
@@ -397,21 +418,54 @@ export function AppDetail() {
               }
             }}
             onViewLog={(deployId) => {
-              const deploy = deployments.find((d) => d.id === deployId);
-              if (deploy?.buildLog) {
-                // could open a modal, for now just switch to logs tab
+              deploymentsApi.getLogs(deployId).then((res) => {
+                setSelectedBuildLog(res.buildLog || '');
                 setActiveTab('logs');
-              }
+              }).catch(() => {
+                setActiveTab('logs');
+              });
             }}
           />
         )}
 
         {/* ==================== LOGS ==================== */}
         {activeTab === 'logs' && (
-          <LogViewer
-            logs={logs.map((l) => ({ message: l.message, level: l.level, timestamp: l.timestamp }))}
-            onClear={clearLogs}
-          />
+          <div className="space-y-4">
+            {/* Deployment selector */}
+            {deployments.length > 0 && (
+              <div className="flex items-center gap-3">
+                <label className="text-xs text-zinc-500">Deployment:</label>
+                <select
+                  value={deployments.find((d) => selectedBuildLog && d.buildLog === selectedBuildLog)?.id || deployments[0]?.id || ''}
+                  onChange={(e) => {
+                    const deployId = e.target.value;
+                    if (deployId) {
+                      deploymentsApi.getLogs(deployId).then((res) => {
+                        setSelectedBuildLog(res.buildLog || '');
+                      }).catch(() => {});
+                    }
+                  }}
+                  className={`
+                    px-3 py-1.5 text-xs font-mono rounded-lg border transition-all
+                    focus:outline-none focus:ring-2 focus:ring-amber-400/30
+                    ${isDark ? 'bg-zinc-900/50 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-700'}
+                  `}
+                >
+                  {deployments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.commitSha.slice(0, 7)} — {d.status} — {d.commitMessage?.slice(0, 40) || 'no message'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <BuildLogViewer log={selectedBuildLog} />
+            {!selectedBuildLog && deployments.length === 0 && (
+              <div className="text-center py-12 text-zinc-500 text-sm">
+                No build logs available. Deploy your app to see logs here.
+              </div>
+            )}
+          </div>
         )}
 
         {/* ==================== ENVIRONMENT ==================== */}

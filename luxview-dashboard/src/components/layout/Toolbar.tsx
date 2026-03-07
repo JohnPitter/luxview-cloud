@@ -11,7 +11,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { icon: Signal, path: '/dashboard/admin', label: 'Monitoring' },
   { icon: Layers, path: '/dashboard', label: 'Apps' },
-  { icon: FileText, path: '/dashboard', label: 'Logs' },
+  { icon: FileText, path: '/dashboard/logs', label: 'Logs' },
 ];
 
 export function Toolbar() {

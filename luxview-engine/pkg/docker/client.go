@@ -1,7 +1,9 @@
 package docker
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -118,6 +120,41 @@ func (c *Client) ListContainers(ctx context.Context) ([]types.Container, error) 
 // ConnectNetwork connects a container to a network.
 func (c *Client) ConnectNetwork(ctx context.Context, networkID, containerID string) error {
 	return c.cli.NetworkConnect(ctx, networkID, containerID, nil)
+}
+
+// ContainerExec runs a command inside a running container and returns the output.
+func (c *Client) ContainerExec(ctx context.Context, containerID string, cmd []string) (string, error) {
+	execConfig := container.ExecOptions{
+		Cmd:          cmd,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	execResp, err := c.cli.ContainerExecCreate(ctx, containerID, execConfig)
+	if err != nil {
+		return "", err
+	}
+
+	attachResp, err := c.cli.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return "", err
+	}
+	defer attachResp.Close()
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, attachResp.Reader)
+
+	// Check exit code
+	inspectResp, err := c.cli.ContainerExecInspect(ctx, execResp.ID)
+	if err != nil {
+		return buf.String(), err
+	}
+
+	if inspectResp.ExitCode != 0 {
+		return buf.String(), fmt.Errorf("exec exited with code %d", inspectResp.ExitCode)
+	}
+
+	return buf.String(), nil
 }
 
 func intPtr(i int) *int {

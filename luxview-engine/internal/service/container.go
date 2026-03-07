@@ -16,11 +16,12 @@ import (
 
 // ContainerManager manages Docker containers for user apps.
 type ContainerManager struct {
-	docker *dockerclient.Client
+	docker     *dockerclient.Client
+	appNetwork string
 }
 
-func NewContainerManager(docker *dockerclient.Client) *ContainerManager {
-	return &ContainerManager{docker: docker}
+func NewContainerManager(docker *dockerclient.Client, appNetwork string) *ContainerManager {
+	return &ContainerManager{docker: docker, appNetwork: appNetwork}
 }
 
 // Start creates and starts a container for the given app.
@@ -79,6 +80,13 @@ func (cm *ContainerManager) Start(ctx context.Context, app *model.App, imageTag 
 	if err := cm.docker.StartContainer(ctx, containerID); err != nil {
 		_ = cm.docker.RemoveContainer(ctx, containerID, true)
 		return "", fmt.Errorf("start container: %w", err)
+	}
+
+	// Connect to app network so containers can reach shared services (pg, redis, etc.)
+	if cm.appNetwork != "" {
+		if err := cm.docker.ConnectNetwork(ctx, cm.appNetwork, containerID); err != nil {
+			log.Warn().Err(err).Str("network", cm.appNetwork).Msg("failed to connect container to app network")
+		}
 	}
 
 	log.Info().Str("container", containerID[:12]).Str("app", app.Subdomain).Msg("container started")

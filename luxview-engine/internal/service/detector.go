@@ -15,11 +15,19 @@ func NewDetector() *Detector {
 	return &Detector{}
 }
 
-// Detect scans the source directory and returns the matching buildpack.
-func (d *Detector) Detect(sourceDir string) buildpack.Buildpack {
+// DetectResult holds the detected buildpack and the directory to build from.
+type DetectResult struct {
+	Buildpack buildpack.Buildpack
+	BuildDir  string
+}
+
+// Detect scans the source directory and returns the matching buildpack and build directory.
+// If no buildpack is found at root level, it searches one level deep for a
+// buildable subdirectory (e.g., monorepos with a single service in a subfolder).
+func (d *Detector) Detect(sourceDir string) *DetectResult {
 	log := logger.With("detector")
 
-	files, err := listRootFiles(sourceDir)
+	files, err := listRootEntries(sourceDir)
 	if err != nil {
 		log.Error().Err(err).Str("dir", sourceDir).Msg("failed to list source directory")
 		return nil
@@ -28,17 +36,35 @@ func (d *Detector) Detect(sourceDir string) buildpack.Buildpack {
 	log.Debug().Strs("files", files).Msg("scanned source directory")
 
 	bp := buildpack.DetectStack(files)
-	if bp == nil {
-		log.Warn().Str("dir", sourceDir).Msg("no buildpack detected")
-		return nil
+	if bp != nil {
+		log.Info().Str("stack", bp.Name()).Str("dir", sourceDir).Msg("stack detected")
+		return &DetectResult{Buildpack: bp, BuildDir: sourceDir}
 	}
 
-	log.Info().Str("stack", bp.Name()).Str("dir", sourceDir).Msg("stack detected")
-	return bp
+	// No match at root — check subdirectories for a buildable project
+	entries, _ := os.ReadDir(sourceDir)
+	for _, e := range entries {
+		if !e.IsDir() || e.Name() == ".git" || e.Name() == "node_modules" || e.Name() == ".github" {
+			continue
+		}
+		subDir := filepath.Join(sourceDir, e.Name())
+		subFiles, err := listRootEntries(subDir)
+		if err != nil {
+			continue
+		}
+		subBp := buildpack.DetectStack(subFiles)
+		if subBp != nil {
+			log.Info().Str("stack", subBp.Name()).Str("subdir", e.Name()).Msg("stack detected in subdirectory")
+			return &DetectResult{Buildpack: subBp, BuildDir: subDir}
+		}
+	}
+
+	log.Warn().Str("dir", sourceDir).Msg("no buildpack detected")
+	return nil
 }
 
-// listRootFiles returns the filenames (not full paths) in the root of the directory.
-func listRootFiles(dir string) ([]string, error) {
+// listRootEntries returns filenames (not dirs) in the root of the directory.
+func listRootEntries(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err

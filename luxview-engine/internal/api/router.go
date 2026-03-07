@@ -117,6 +117,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Delete("/services/{id}", serviceHandler.Delete)
 
 			// Metrics
+			r.Get("/apps/metrics/latest", metricHandler.LatestAll)
 			r.Get("/apps/{id}/metrics", metricHandler.Get)
 
 			// Alerts

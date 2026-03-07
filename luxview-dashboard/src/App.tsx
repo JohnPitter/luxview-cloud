@@ -8,6 +8,9 @@ import { Dashboard } from './pages/Dashboard';
 import { NewApp } from './pages/NewApp';
 import { AppDetail } from './pages/AppDetail';
 import { Admin } from './pages/Admin';
+import { Logs } from './pages/Logs';
+import { Settings } from './pages/Settings';
+import { Profile } from './pages/Profile';
 import { MainLayout } from './components/layout/MainLayout';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -41,6 +44,9 @@ export function App() {
         <Route path="new" element={<NewApp />} />
         <Route path="apps/:appId" element={<AppDetail />} />
         <Route path="admin" element={<Admin />} />
+        <Route path="logs" element={<Logs />} />
+        <Route path="settings" element={<Settings />} />
+        <Route path="profile" element={<Profile />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

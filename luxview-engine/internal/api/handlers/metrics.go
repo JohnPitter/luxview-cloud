@@ -67,6 +67,45 @@ func (h *MetricHandler) Get(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// LatestAll returns the latest metric snapshot for all apps of the current user.
+func (h *MetricHandler) LatestAll(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+
+	apps, _, err := h.appRepo.ListByUserID(ctx, userID, 100, 0)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list apps")
+		return
+	}
+
+	appIDs := make([]uuid.UUID, len(apps))
+	for i, a := range apps {
+		appIDs[i] = a.ID
+	}
+
+	latest, err := h.metricRepo.GetLatestForApps(ctx, appIDs)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get latest metrics")
+		return
+	}
+
+	// Build response keyed by app ID string
+	result := make(map[string]interface{}, len(latest))
+	for appID, m := range latest {
+		result[appID.String()] = map[string]interface{}{
+			"cpu_percent":  m.CPUPercent,
+			"memory_bytes": m.MemoryBytes,
+			"network_rx":   m.NetworkRx,
+			"network_tx":   m.NetworkTx,
+			"timestamp":    m.Timestamp,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"metrics": result,
+	})
+}
+
 func parseTime(s string, fallback time.Time) time.Time {
 	if s == "" {
 		return fallback

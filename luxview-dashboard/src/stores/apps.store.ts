@@ -63,16 +63,45 @@ export const useAppsStore = create<AppsState>((set, get) => ({
 
   deployApp: async (id) => {
     await appsApi.deploy(id);
-    get().updateAppInList({ ...get().apps.find((a) => a.id === id)!, status: 'building' });
+    const existing = get().apps.find((a) => a.id === id);
+    if (existing) {
+      get().updateAppInList({ ...existing, status: 'building' });
+    }
   },
 
   stopApp: async (id) => {
     await appsApi.stop(id);
-    get().updateAppInList({ ...get().apps.find((a) => a.id === id)!, status: 'stopped' });
+    // Re-fetch to get the confirmed status
+    try {
+      const app = await appsApi.get(id);
+      get().updateAppInList(app);
+      if (get().selectedApp?.id === id) {
+        set({ selectedApp: app });
+      }
+    } catch {
+      const existing = get().apps.find((a) => a.id === id);
+      if (existing) {
+        get().updateAppInList({ ...existing, status: 'stopped' });
+      }
+    }
   },
 
   restartApp: async (id) => {
     await appsApi.restart(id);
+    // Re-fetch to get updated status from backend
+    try {
+      const app = await appsApi.get(id);
+      get().updateAppInList(app);
+      if (get().selectedApp?.id === id) {
+        set({ selectedApp: app });
+      }
+    } catch {
+      // If re-fetch fails, at least show running optimistically
+      const existing = get().apps.find((a) => a.id === id);
+      if (existing) {
+        get().updateAppInList({ ...existing, status: 'running' });
+      }
+    }
   },
 
   setSelectedApp: (app) => set({ selectedApp: app }),

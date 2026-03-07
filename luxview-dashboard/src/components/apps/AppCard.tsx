@@ -6,9 +6,11 @@ import { AppStatusBadge } from './AppStatusBadge';
 import { useThemeStore } from '../../stores/theme.store';
 import { formatRelativeTime, formatPercent, formatBytes } from '../../lib/format';
 import type { App } from '../../api/apps';
+import type { LatestMetric } from '../../api/metrics';
 
 interface AppCardProps {
   app: App;
+  metrics?: LatestMetric;
 }
 
 const stackIcons: Record<string, string> = {
@@ -29,11 +31,11 @@ const stackColors: Record<string, string> = {
   docker: 'bg-sky-500/10 text-sky-400 border-sky-500/20',
 };
 
-export function AppCard({ app }: AppCardProps) {
+export function AppCard({ app, metrics }: AppCardProps) {
   const navigate = useNavigate();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
-  const cpuPercent = app.cpuPercent ?? 0;
-  const memoryMB = app.memoryBytes ? app.memoryBytes / (1024 * 1024) : 0;
+  const cpuPercent = metrics?.cpuPercent ?? 0;
+  const memoryMB = metrics?.memoryBytes ? metrics.memoryBytes / (1024 * 1024) : 0;
   const memoryLimit = parseInt(app.resourceLimits?.memory || '512') || 512;
   const memoryPercent = (memoryMB / memoryLimit) * 100;
 
@@ -75,7 +77,7 @@ export function AppCard({ app }: AppCardProps) {
             ${stackColors[app.stack] || 'bg-zinc-800 text-zinc-400 border-zinc-700'}
           `}
         >
-          {stackIcons[app.stack] || app.stack.toUpperCase()}
+          {stackIcons[app.stack] || (app.stack || 'docker').toUpperCase()}
         </span>
       </div>
 
@@ -106,7 +108,7 @@ export function AppCard({ app }: AppCardProps) {
           <div className="flex items-center justify-between text-[11px] mb-1">
             <span className="text-zinc-500">RAM</span>
             <span className={isDark ? 'text-zinc-400' : 'text-zinc-600'}>
-              {formatBytes(app.memoryBytes ?? 0)}
+              {formatBytes(metrics?.memoryBytes ?? 0)}
             </span>
           </div>
           <div className={`h-1.5 rounded-full overflow-hidden ${isDark ? 'bg-zinc-800' : 'bg-zinc-200'}`}>

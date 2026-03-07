@@ -1,10 +1,12 @@
 import axios from 'axios';
 
 function snakeToCamel(str: string): string {
+  if (typeof str !== 'string') return str;
   return str.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 }
 
 function camelToSnake(str: string): string {
+  if (typeof str !== 'string') return str;
   return str.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 }
 

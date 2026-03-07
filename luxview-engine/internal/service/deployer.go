@@ -48,8 +48,9 @@ func NewDeployer(
 	portManager *PortManager,
 	encryptionKey []byte,
 	buildTimeout time.Duration,
+	appNetwork string,
 ) *Deployer {
-	container := NewContainerManager(docker)
+	container := NewContainerManager(docker, appNetwork)
 	return &Deployer{
 		appRepo:       appRepo,
 		deployRepo:    deployRepo,
@@ -102,11 +103,13 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	}
 
 	// Detect stack
-	bp := d.detector.Detect(buildDir)
-	if bp == nil {
+	result := d.detector.Detect(buildDir)
+	if result == nil {
 		d.failDeploy(ctx, deployment, app, "no supported stack detected", start)
 		return fmt.Errorf("no buildpack detected for app %s", app.Subdomain)
 	}
+	bp := result.Buildpack
+	buildDir = result.BuildDir
 
 	// Update app stack
 	app.Stack = bp.Name()
@@ -145,9 +148,15 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	// Decrypt env vars
 	envVars := make(map[string]string)
 	if len(app.EnvVars) > 0 {
-		decrypted, err := crypto.Decrypt(string(app.EnvVars), d.encryptionKey)
-		if err == nil {
-			_ = json.Unmarshal([]byte(decrypted), &envVars)
+		// EnvVars is stored as JSON-encoded string (e.g., "\"encrypted_data\"")
+		var encrypted string
+		if err := json.Unmarshal(app.EnvVars, &encrypted); err == nil {
+			decrypted, err := crypto.Decrypt(encrypted, d.encryptionKey)
+			if err == nil {
+				_ = json.Unmarshal([]byte(decrypted), &envVars)
+			} else {
+				log.Warn().Err(err).Msg("failed to decrypt env vars")
+			}
 		}
 	}
 
@@ -187,6 +196,9 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		_ = d.container.Remove(ctx, oldContainerID)
 	}
 
+	// Run post-deploy hooks (e.g., Prisma migrations)
+	d.runPostDeployHooks(ctx, containerID, bp.Name())
+
 	// Finalize
 	duration := int(time.Since(start).Milliseconds())
 	app.ContainerID = containerID
@@ -206,6 +218,28 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		Msg("deploy completed")
 
 	return nil
+}
+
+// runPostDeployHooks executes post-deploy commands inside the container.
+// For example, runs Prisma migrations if the app uses Prisma.
+func (d *Deployer) runPostDeployHooks(ctx context.Context, containerID string, stack string) {
+	log := logger.With("deployer")
+
+	// Check if container has prisma by attempting to run prisma db push
+	execCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	// Try prisma db push (works for both migration-based and push-based projects)
+	output, err := d.docker.ContainerExec(execCtx, containerID, []string{"npx", "prisma", "db", "push", "--skip-generate"})
+	if err != nil {
+		// Not a Prisma project or prisma not installed — that's fine, skip silently
+		log.Debug().Err(err).Msg("prisma db push skipped (not a prisma project or failed)")
+		return
+	}
+
+	if output != "" {
+		log.Info().Str("output", output).Msg("prisma db push completed")
+	}
 }
 
 func (d *Deployer) cloneRepo(ctx context.Context, app *model.App, destDir string) error {

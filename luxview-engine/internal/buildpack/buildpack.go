@@ -22,6 +22,7 @@ func All() []Buildpack {
 		&NodePack{},
 		&PythonPack{},
 		&GolangPack{},
+		&JavaPack{},
 		&RustPack{},
 		&StaticPack{},
 	}

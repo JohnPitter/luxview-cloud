@@ -29,7 +29,14 @@ export const deploymentsApi = {
     return data;
   },
 
-  async rollback(appId: string, deployId: string): Promise<void> {
-    await api.post(`/apps/${appId}/deployments/${deployId}/rollback`);
+  async getLogs(deployId: string): Promise<{ id: string; status: string; buildLog: string }> {
+    const { data } = await api.get<{ id: string; status: string; buildLog: string }>(
+      `/deployments/${deployId}/logs`,
+    );
+    return data;
+  },
+
+  async rollback(_appId: string, deployId: string): Promise<void> {
+    await api.post(`/deployments/${deployId}/rollback`);
   },
 };

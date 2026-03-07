@@ -87,6 +87,34 @@ func (r *MetricRepo) GetLatest(ctx context.Context, appID uuid.UUID) (*model.Met
 	return &m, nil
 }
 
+// GetLatestForApps returns the most recent metric for each of the given app IDs.
+func (r *MetricRepo) GetLatestForApps(ctx context.Context, appIDs []uuid.UUID) (map[uuid.UUID]*model.Metric, error) {
+	if len(appIDs) == 0 {
+		return map[uuid.UUID]*model.Metric{}, nil
+	}
+
+	rows, err := r.db.Pool.Query(ctx,
+		`SELECT DISTINCT ON (app_id) app_id, cpu_percent, memory_bytes, network_rx, network_tx, timestamp
+		 FROM metrics
+		 WHERE app_id = ANY($1)
+		 ORDER BY app_id, timestamp DESC`, appIDs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get latest for apps: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[uuid.UUID]*model.Metric, len(appIDs))
+	for rows.Next() {
+		var m model.Metric
+		if err := rows.Scan(&m.AppID, &m.CPUPercent, &m.MemoryBytes, &m.NetworkRx, &m.NetworkTx, &m.Timestamp); err != nil {
+			return nil, err
+		}
+		result[m.AppID] = &m
+	}
+	return result, nil
+}
+
 func (r *MetricRepo) DeleteOlderThan(ctx context.Context, before time.Time) (int64, error) {
 	tag, err := r.db.Pool.Exec(ctx, `DELETE FROM metrics WHERE timestamp < $1`, before)
 	if err != nil {

@@ -127,6 +127,32 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Auto-deploy: queue a deploy immediately after creation
+	if autoDeploy {
+		user := middleware.GetUser(ctx)
+		token := user.GitHubToken
+		if decrypted, err := crypto.Decrypt(token, h.encryptionKey); err == nil {
+			token = decrypted
+		}
+		owner, repo := parseRepoURL(app.RepoURL)
+		commitSHA, commitMsg, err := h.github.GetLatestCommit(ctx, token, owner, repo, app.RepoBranch)
+		if err != nil {
+			commitSHA = "initial"
+			commitMsg = "initial deploy"
+		}
+		select {
+		case h.buildQueue <- service.DeployRequest{
+			AppID:     app.ID,
+			UserID:    userID,
+			CommitSHA: commitSHA,
+			CommitMsg: commitMsg,
+		}:
+			log.Info().Str("app", app.Subdomain).Msg("auto-deploy queued on creation")
+		default:
+			log.Warn().Str("app", app.Subdomain).Msg("build queue full, auto-deploy skipped")
+		}
+	}
+
 	app.EnvVarsPlain = req.EnvVars
 	log.Info().Str("app", app.Subdomain).Str("user", userID.String()).Msg("app created")
 	writeJSON(w, http.StatusCreated, app)
@@ -363,10 +389,12 @@ func (h *AppHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.container.Restart(ctx, app.ContainerID); err != nil {
+		_ = h.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusError, app.ContainerID)
 		writeError(w, http.StatusInternalServerError, "failed to restart container")
 		return
 	}
 
+	_ = h.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusRunning, app.ContainerID)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "app restarted"})
 }
 

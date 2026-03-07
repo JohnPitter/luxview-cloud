@@ -18,7 +18,7 @@ interface SidebarItem {
 const items: SidebarItem[] = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Plus, label: 'New App', path: '/dashboard/new' },
-  { icon: Settings, label: 'Settings', path: '/dashboard' },
+  { icon: Settings, label: 'Settings', path: '/dashboard/settings' },
   { icon: Shield, label: 'Admin', path: '/dashboard/admin', adminOnly: true },
 ];
 

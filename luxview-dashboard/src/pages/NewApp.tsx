@@ -11,6 +11,7 @@ import { githubApi, type GithubRepo, type GithubBranch } from '../api/github';
 export function NewApp() {
   const navigate = useNavigate();
   const createApp = useAppsStore((s) => s.createApp);
+  const deployApp = useAppsStore((s) => s.deployApp);
   const addNotification = useNotificationsStore((s) => s.add);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
@@ -51,6 +52,8 @@ export function NewApp() {
         repoBranch: config.branch,
         envVars: config.envVars,
       });
+      // Trigger deploy immediately after creation
+      await deployApp(app.id);
       addNotification({
         type: 'success',
         title: 'Deployment started',

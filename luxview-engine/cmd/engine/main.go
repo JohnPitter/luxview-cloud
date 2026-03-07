@@ -61,10 +61,10 @@ func main() {
 
 	// Services
 	portManager := service.NewPortManager(appRepo, cfg.PortRangeStart, cfg.PortRangeEnd)
-	containerMgr := service.NewContainerManager(docker)
+	containerMgr := service.NewContainerManager(docker, cfg.AppNetwork)
 	provisioner := service.NewProvisioner(serviceRepo, cfg, encryptionKey)
 	routerSvc := service.NewRouterService(appRepo, cfg.Domain)
-	deployer := service.NewDeployer(appRepo, deployRepo, userRepo, docker, portManager, encryptionKey, time.Duration(cfg.BuildTimeout)*time.Second)
+	deployer := service.NewDeployer(appRepo, deployRepo, userRepo, docker, portManager, encryptionKey, time.Duration(cfg.BuildTimeout)*time.Second, cfg.AppNetwork)
 	metricsCollector := service.NewMetricsCollector(appRepo, metricRepo, docker)
 	healthChecker := service.NewHealthChecker(appRepo, containerMgr)
 	alerter := service.NewAlerter(alertRepo, metricRepo, appRepo)
