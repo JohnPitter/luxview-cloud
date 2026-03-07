@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { DeployWizard, type DeployConfig } from '../components/deploy/DeployWizard';
@@ -6,11 +6,13 @@ import { PillButton } from '../components/common/PillButton';
 import { useAppsStore } from '../stores/apps.store';
 import { useNotificationsStore } from '../stores/notifications.store';
 import { useThemeStore } from '../stores/theme.store';
-import { githubApi, type GithubRepo, type GithubBranch } from '../api/github';
+import { githubApi, type GithubRepo } from '../api/github';
 
 export function NewApp() {
   const navigate = useNavigate();
   const createApp = useAppsStore((s) => s.createApp);
+  const apps = useAppsStore((s) => s.apps);
+  const fetchApps = useAppsStore((s) => s.fetchApps);
   const addNotification = useNotificationsStore((s) => s.add);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
@@ -20,6 +22,7 @@ export function NewApp() {
   const [deploying, setDeploying] = useState(false);
 
   useEffect(() => {
+    fetchApps();
     githubApi
       .listRepos()
       .then(setRepos)
@@ -27,7 +30,17 @@ export function NewApp() {
         addNotification({ type: 'error', title: 'Failed to load repositories' });
       })
       .finally(() => setLoadingRepos(false));
-  }, [addNotification]);
+  }, [addNotification, fetchApps]);
+
+  const deployedRepoUrls = useMemo(
+    () => new Set(apps.map((a) => a.repoUrl.replace(/\.git$/, ''))),
+    [apps],
+  );
+
+  const availableRepos = useMemo(
+    () => repos.filter((r) => !deployedRepoUrls.has(r.htmlUrl.replace(/\.git$/, ''))),
+    [repos, deployedRepoUrls],
+  );
 
   const handleRepoSelect = useCallback(
     async (repo: GithubRepo) => {
@@ -92,7 +105,7 @@ export function NewApp() {
       </div>
 
       <DeployWizard
-        repos={repos}
+        repos={availableRepos}
         loadingRepos={loadingRepos}
         branches={branches}
         onRepoSelect={handleRepoSelect}
