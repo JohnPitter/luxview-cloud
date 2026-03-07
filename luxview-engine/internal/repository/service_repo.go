@@ -65,6 +65,29 @@ func (r *ServiceRepo) ListByAppID(ctx context.Context, appID uuid.UUID) ([]model
 	return services, nil
 }
 
+func (r *ServiceRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]model.AppService, error) {
+	rows, err := r.db.Pool.Query(ctx,
+		`SELECT s.id, s.app_id, s.service_type, s.db_name, s.credentials, s.created_at
+		 FROM app_services s
+		 JOIN apps a ON a.id = s.app_id
+		 WHERE a.user_id = $1
+		 ORDER BY s.created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var services []model.AppService
+	for rows.Next() {
+		var s model.AppService
+		if err := rows.Scan(&s.ID, &s.AppID, &s.ServiceType, &s.DBName, &s.Credentials, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		services = append(services, s)
+	}
+	return services, nil
+}
+
 func (r *ServiceRepo) FindByAppAndType(ctx context.Context, appID uuid.UUID, serviceType model.ServiceType) (*model.AppService, error) {
 	var s model.AppService
 	err := r.db.Pool.QueryRow(ctx,

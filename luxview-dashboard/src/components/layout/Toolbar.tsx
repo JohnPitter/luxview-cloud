@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Signal, Layers, FileText, Sun, Moon } from 'lucide-react';
+import { Signal, Layers, FileText, Database, Sun, Moon } from 'lucide-react';
 import { useThemeStore } from '../../stores/theme.store';
 
 interface NavItem {
@@ -11,6 +11,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { icon: Signal, path: '/dashboard/admin', label: 'Monitoring' },
   { icon: Layers, path: '/dashboard', label: 'Apps' },
+  { icon: Database, path: '/dashboard/resources', label: 'Resources' },
   { icon: FileText, path: '/dashboard/logs', label: 'Logs' },
 ];
 

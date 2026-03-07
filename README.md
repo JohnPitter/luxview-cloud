@@ -1,94 +1,325 @@
+<div align="center">
+
+<img src="luxview-dashboard/public/logo.svg" alt="LuxView Cloud" width="80" height="80" />
+
 # LuxView Cloud
 
-LuxView Cloud is a self-hosted PaaS (Platform as a Service) running on `luxview.cloud`. Users connect their GitHub account, select a repository, and deploy with one click. The platform auto-detects the tech stack (Node.js, Python, Go, Rust, static, or Dockerfile), builds a Docker image, starts an isolated container, and provisions a subdomain with automatic SSL -- all on a single VPS.
+**Your own Platform as a Service — deploy from GitHub in one click.**
+
+[![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev)
+[![Docker](https://img.shields.io/badge/Docker-Powered-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
+[![Traefik](https://img.shields.io/badge/Traefik-Proxy-24A1C1?style=flat-square&logo=traefikproxy&logoColor=white)](https://traefik.io)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://typescriptlang.org)
+[![License](https://img.shields.io/badge/License-Private-red?style=flat-square)](#)
+
+[Features](#-features) · [Architecture](#-architecture) · [Deploy Flow](#-deploy-flow) · [Getting Started](#-getting-started) · [Tech Stack](#-tech-stack)
+
+</div>
+
+---
+
+## What is LuxView Cloud?
+
+LuxView Cloud is a **self-hosted PaaS** that turns a single VPS into a full deployment platform. Connect your GitHub account, pick a repository, and deploy with one click. The platform **auto-detects your stack** (Node.js, Python, Go, Rust, Java, static sites, or any Dockerfile), builds a Docker image, starts an isolated container, provisions a subdomain with automatic SSL, and keeps everything running.
+
+Think of it as your own **Heroku / Railway / Render** — but you own the infrastructure.
+
+---
+
+## Features
+
+| Category | What you get |
+|---|---|
+| **One-Click Deploy** | Select a GitHub repo, pick a branch, deploy. That's it. |
+| **Auto Stack Detection** | Node.js, Python, Go, Rust, Java, static, Docker — all auto-detected |
+| **Wildcard SSL** | Every app gets `<app>.luxview.cloud` with automatic HTTPS via Let's Encrypt |
+| **Managed Databases** | Provision PostgreSQL, Redis, MongoDB, or RabbitMQ per app with one click |
+| **Environment Variables** | Encrypted at rest (AES-256-GCM), injected at deploy time |
+| **Real-time Metrics** | CPU, RAM, and network usage per container — live in the dashboard |
+| **Build & Runtime Logs** | Full deploy build logs + live container output |
+| **Auto Deploy** | Push to your branch, GitHub webhook triggers a new deploy automatically |
+| **Rollback** | One-click rollback to any previous successful deployment |
+| **Alerts** | Configure CPU/memory thresholds and get notified |
+| **Resource Limits** | CPU and memory limits per app (cgroups-enforced) |
+| **GitHub OAuth** | Secure login via GitHub — no passwords to manage |
+
+---
 
 ## Architecture
 
-```
-                        Internet
-                           |
-                    +------+------+
-                    |   Traefik   |  :80 / :443
-                    |  (SSL+Route)|  *.luxview.cloud
-                    +------+------+
-                           |
-              +------------+------------+
-              |                         |
-     luxview.cloud/api/*       luxview.cloud
-     +--------+--------+      +--------+--------+
-     |  LuxView Engine |      |    Dashboard    |
-     |      (Go)       |      |   (React SPA)   |
-     |    :8080         |      |   Nginx / Vite  |
-     +--------+--------+      +-----------------+
-              |
-     +--------+--------+
-     |  Docker Engine   |   User app containers
-     |  [A1] [A2] [A3]  |   <app>.luxview.cloud
-     +--------+--------+
-              |
-     +--------+--------+--------+--------+
-     |  pg-platform  |  pg-shared  | redis |
-     |  (platform DB)|  (user DBs) | mongo |
-     |               |             | rabbit|
-     +--------------+--------------+------+
+```mermaid
+graph TB
+    subgraph Internet
+        USER[User Browser]
+    end
+
+    subgraph VPS["Single VPS — luxview.cloud"]
+        TRAEFIK["Traefik Proxy<br/>:80 / :443<br/>SSL + Wildcard Routing"]
+
+        subgraph Platform["Platform Services"]
+            ENGINE["LuxView Engine<br/>(Go API — :8080)"]
+            DASHBOARD["Dashboard<br/>(React SPA — Nginx)"]
+            PG_PLATFORM[("PostgreSQL<br/>Platform DB")]
+        end
+
+        subgraph Apps["User App Containers"]
+            A1["app-1.luxview.cloud"]
+            A2["app-2.luxview.cloud"]
+            A3["app-n.luxview.cloud"]
+        end
+
+        subgraph Shared["Shared Services"]
+            PG_SHARED[("PostgreSQL<br/>User DBs")]
+            REDIS[("Redis")]
+            MONGO[("MongoDB")]
+            RABBIT[("RabbitMQ")]
+        end
+    end
+
+    USER -->|HTTPS| TRAEFIK
+    TRAEFIK -->|"/api/*"| ENGINE
+    TRAEFIK -->|"/"| DASHBOARD
+    TRAEFIK -->|"*.luxview.cloud"| Apps
+    ENGINE --> PG_PLATFORM
+    ENGINE -->|"Docker API"| Apps
+    ENGINE --> Shared
+    A1 -.-> PG_SHARED
+    A2 -.-> REDIS
+    A3 -.-> MONGO
+
+    style TRAEFIK fill:#24A1C1,color:#fff,stroke:none
+    style ENGINE fill:#00ADD8,color:#fff,stroke:none
+    style DASHBOARD fill:#F59E0B,color:#fff,stroke:none
+    style PG_PLATFORM fill:#336791,color:#fff,stroke:none
+    style PG_SHARED fill:#336791,color:#fff,stroke:none
+    style REDIS fill:#DC382D,color:#fff,stroke:none
+    style MONGO fill:#47A248,color:#fff,stroke:none
+    style RABBIT fill:#FF6600,color:#fff,stroke:none
 ```
 
-## Quick Start (Development)
+### How the pieces fit together
+
+| Component | Role | Tech |
+|---|---|---|
+| **Traefik** | Reverse proxy, SSL termination, wildcard routing | Traefik v3 |
+| **LuxView Engine** | REST API — builds, deploys, manages containers, provisions services | Go + Chi |
+| **Dashboard** | Web UI — deploy wizard, app management, metrics, logs | React + Vite + Tailwind |
+| **Docker Engine** | Runs isolated user app containers | Docker API |
+| **PostgreSQL (platform)** | Stores users, apps, deployments, services, metrics, alerts | PostgreSQL 16 |
+| **PostgreSQL (shared)** | User app databases (one DB per app) | PostgreSQL 16 |
+| **Redis / MongoDB / RabbitMQ** | Optional services provisioned per app | Managed containers |
+
+---
+
+## Deploy Flow
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Dashboard
+    participant Engine as LuxView Engine
+    participant Docker
+    participant Traefik
+
+    User->>Dashboard: Select repo + branch
+    Dashboard->>Engine: POST /api/apps
+    Engine->>Engine: Assign port + subdomain
+
+    User->>Dashboard: Click "Deploy"
+    Dashboard->>Engine: POST /api/apps/{id}/deploy
+    Engine->>Engine: Clone repo from GitHub
+    Engine->>Engine: Detect stack (buildpack)
+    Engine->>Docker: Build image
+    Docker-->>Engine: Image ready
+
+    Engine->>Engine: Decrypt env vars + inject service credentials
+    Engine->>Docker: Create & start container
+    Docker-->>Engine: Container running
+
+    Engine->>Engine: Health check (poll until healthy)
+    Engine->>Traefik: Update routing config
+    Traefik-->>User: app.luxview.cloud is live!
+
+    Note over Engine,Docker: On failure: stop container,<br/>mark deploy as failed,<br/>capture container logs
+```
+
+### Build Pipeline Detail
+
+```mermaid
+flowchart LR
+    A[Git Clone] --> B{Detect Stack}
+    B -->|package.json| C[Node Buildpack]
+    B -->|requirements.txt| D[Python Buildpack]
+    B -->|go.mod| E[Go Buildpack]
+    B -->|Cargo.toml| F[Rust Buildpack]
+    B -->|pom.xml| G[Java Buildpack]
+    B -->|Dockerfile| H[Dockerfile Pack]
+    B -->|index.html| I[Static Buildpack]
+
+    C --> J[Docker Build]
+    D --> J
+    E --> J
+    F --> J
+    G --> J
+    H --> J
+    I --> J
+
+    J --> K[Start Container]
+    K --> L{Health Check}
+    L -->|Healthy| M[Deploy Success]
+    L -->|Timeout| N[Rollback + Capture Logs]
+
+    style M fill:#10B981,color:#fff,stroke:none
+    style N fill:#EF4444,color:#fff,stroke:none
+```
+
+---
+
+## Service Provisioning
+
+When you add a database or cache to your app, LuxView automatically:
+
+1. **Creates** an isolated database/user on the shared service
+2. **Generates** a secure 24-char random password
+3. **Encrypts** credentials at rest (AES-256-GCM)
+4. **Injects** connection env vars into your container on every deploy
+
+```mermaid
+flowchart LR
+    A[User clicks<br/>'Add PostgreSQL'] --> B[Engine creates<br/>DB + user]
+    B --> C[Encrypt credentials<br/>AES-256-GCM]
+    C --> D[Store in platform DB]
+    D --> E[On deploy: decrypt<br/>& inject env vars]
+
+    E --> F["DATABASE_URL<br/>PGHOST / PGPORT<br/>SPRING_DATASOURCE_URL<br/>..."]
+
+    style A fill:#F59E0B,color:#fff,stroke:none
+    style F fill:#10B981,color:#fff,stroke:none
+```
+
+**Supported services and injected env vars:**
+
+| Service | Env Vars Injected |
+|---|---|
+| PostgreSQL | `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`, `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD` |
+| Redis | `REDIS_URL`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` |
+| MongoDB | `MONGODB_URL`, `MONGO_URL` |
+| RabbitMQ | `RABBITMQ_URL`, `AMQP_URL` |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Docker & Docker Compose
+- A domain with wildcard DNS (`*.yourdomain.com`)
+- GitHub OAuth App credentials
+
+### Development
 
 ```bash
-# 1. Clone the repository
-git clone <repo-url> luxview-cloud && cd luxview-cloud
+# Clone
+git clone https://github.com/JohnPitter/luxview-cloud.git
+cd luxview-cloud
 
-# 2. Set up environment
+# Configure
 cp .env.example .env
-# Edit .env with your GitHub OAuth credentials (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET)
+# Edit .env with your GitHub OAuth credentials
 
-# 3. Start all services
+# Start all services
 make dev
 
-# 4. Run database migrations (in another terminal, after services are up)
+# Run migrations
 make migrate-dev
 
-# 5. Access
-#    Dashboard:       http://localhost
-#    Traefik panel:   http://localhost:8080
-#    Engine API:      http://localhost/api/health
-#    PostgreSQL:      localhost:5432 (platform) / :5433 (shared)
-#    Redis:           localhost:6379
-#    MongoDB:         localhost:27017
-#    RabbitMQ UI:     localhost:15672
+# Access
+#   Dashboard:     http://localhost
+#   Engine API:    http://localhost/api/health
+#   Traefik:       http://localhost:8080
 ```
 
-## Production Deployment
+### Production
 
 ```bash
-# 1. Set up the VPS (Ubuntu 22.04, run as root)
+# On your VPS (Ubuntu 22.04+)
 bash scripts/setup-vps.sh
 
-# 2. Clone to /opt/luxview-cloud
-git clone <repo-url> /opt/luxview-cloud && cd /opt/luxview-cloud
+# Clone & configure
+git clone https://github.com/JohnPitter/luxview-cloud.git /opt/luxview-cloud
+cd /opt/luxview-cloud
+cp .env.example .env && vim .env
 
-# 3. Configure environment
-cp .env.example .env
-vim .env  # Fill ALL values with strong secrets
+# DNS: Point yourdomain.com + *.yourdomain.com to VPS IP
 
-# 4. DNS: Point luxview.cloud + *.luxview.cloud to VPS IP
-
-# 5. Start
-make prod
-
-# 6. Run migrations
-make migrate
-
-# 7. Deploy updates (zero downtime)
-bash scripts/deploy.sh main
+# Deploy
+make prod && make migrate
 ```
+
+---
+
+## Tech Stack
+
+<div align="center">
+
+| Layer | Technology |
+|:---:|:---:|
+| **Proxy** | Traefik v3 (SSL, routing, middleware) |
+| **Backend** | Go 1.23, Chi router, pgx, Docker SDK |
+| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, Zustand |
+| **Database** | PostgreSQL 16 |
+| **Containers** | Docker Engine API |
+| **Auth** | GitHub OAuth + JWT |
+| **Encryption** | AES-256-GCM (credentials at rest) |
+| **Observability** | Structured logging (zerolog), real-time metrics |
+
+</div>
+
+---
+
+## Project Structure
+
+```
+luxview-cloud/
+  docker-compose.yml            # Production compose
+  docker-compose.dev.yml        # Development override
+  Makefile                      # Common commands
+
+  luxview-engine/               # Go API backend
+    cmd/engine/main.go          # Entry point + worker orchestration
+    internal/
+      api/                      # HTTP handlers + middleware + router
+      buildpack/                # Stack detection (node, python, go, rust, java, docker, static)
+      config/                   # Environment config loader
+      model/                    # Domain models (App, Deployment, Service, Alert, Metric)
+      repository/               # PostgreSQL data access layer
+      service/                  # Business logic (deployer, container, provisioner, health, metrics)
+      worker/                   # Background workers (build, metrics, health, alerts, cleanup)
+    pkg/                        # Shared packages (crypto, docker client, logger)
+    migrations/                 # SQL migration files
+
+  luxview-dashboard/            # React SPA frontend
+    src/
+      api/                      # API client layer (apps, services, deployments, metrics)
+      components/               # UI components (apps, deploy, monitoring, services, layout, common)
+      hooks/                    # Custom React hooks
+      lib/                      # Utility functions
+      pages/                    # Route pages (Dashboard, AppDetail, Resources, NewApp, Admin)
+      stores/                   # Zustand state management
+
+  traefik/                      # Traefik configuration
+  scripts/                      # VPS setup, deploy, backup scripts
+  docs/plans/                   # Design documents
+```
+
+---
 
 ## Environment Variables
 
 | Variable | Description | Required |
 |---|---|---|
-| `DOMAIN` | Platform domain (default: `luxview.cloud`) | Yes |
+| `DOMAIN` | Platform domain (e.g. `luxview.cloud`) | Yes |
 | `DB_PASSWORD` | Platform PostgreSQL password | Yes |
 | `ENCRYPTION_KEY` | AES-256-GCM key (min 32 chars) | Yes |
 | `JWT_SECRET` | JWT signing secret | Yes |
@@ -97,52 +328,32 @@ bash scripts/deploy.sh main
 | `SHARED_PG_PASSWORD` | Shared PostgreSQL password | Yes |
 | `SHARED_REDIS_PASSWORD` | Shared Redis password | Yes |
 | `SHARED_MONGO_PASSWORD` | Shared MongoDB password | Yes |
-| `SHARED_RABBITMQ_USER` | RabbitMQ admin user (default: `luxview_admin`) | No |
 | `SHARED_RABBITMQ_PASSWORD` | Shared RabbitMQ password | Yes |
-| `ACME_EMAIL` | Let's Encrypt notification email | Prod |
-| `ENGINE_PORT` | Engine listen port (default: `8080`) | No |
+| `ACME_EMAIL` | Let's Encrypt email | Production |
 | `BUILD_CONCURRENCY` | Max concurrent builds (default: `3`) | No |
-| `LOG_LEVEL` | Log level: debug, info, warn, error | No |
+| `LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` | No |
 
-## Directory Structure
-
-```
-luxview-cloud/
-  docker-compose.yml          # Production compose
-  docker-compose.dev.yml      # Development override
-  .env.example                # Environment template
-  Makefile                    # Common commands
-  traefik/
-    traefik.yml               # Production Traefik config
-    traefik.dev.yml           # Development Traefik config
-    dynamic/                  # Dynamic middleware config
-  luxview-engine/             # Go API (the brain)
-    cmd/engine/main.go
-    internal/                 # Handlers, services, repos, workers
-    pkg/                      # Shared packages (crypto, docker, logger)
-    migrations/               # SQL migration files
-  luxview-dashboard/          # React SPA
-    src/
-    nginx.conf                # Production Nginx config
-  scripts/
-    setup-vps.sh              # Initial VPS provisioning
-    deploy.sh                 # Zero-downtime deploy
-    backup.sh                 # Database backup (cron)
-  docs/
-    plans/                    # Design documents
-```
+---
 
 ## Make Commands
 
 | Command | Description |
 |---|---|
-| `make dev` | Start dev environment (hot reload, exposed ports) |
+| `make dev` | Start dev environment with hot reload |
 | `make prod` | Start production (detached) |
 | `make build` | Build all Docker images |
 | `make logs` | Follow all service logs |
 | `make migrate` | Run SQL migrations |
 | `make status` | Show running containers |
 | `make backup` | Backup all databases |
-| `make clean` | Stop and remove everything (volumes included) |
+| `make clean` | Stop & remove everything |
 | `make psql` | Connect to platform database |
 | `make shell SVC=engine` | Shell into a container |
+
+---
+
+<div align="center">
+
+**Built with Go and React by [@JohnPitter](https://github.com/JohnPitter)**
+
+</div>

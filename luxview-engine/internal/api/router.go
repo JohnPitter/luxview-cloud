@@ -113,6 +113,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Post("/deployments/{id}/rollback", deployHandler.Rollback)
 
 			// Services
+			r.Get("/services", serviceHandler.ListAll)
 			r.Post("/apps/{id}/services", serviceHandler.Create)
 			r.Get("/apps/{id}/services", serviceHandler.List)
 			r.Delete("/services/{id}", serviceHandler.Delete)

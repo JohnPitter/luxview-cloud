@@ -18,7 +18,17 @@ export interface AppService {
   createdAt: string;
 }
 
+export interface AppServiceWithApp extends AppService {
+  appName: string;
+  appSubdomain: string;
+}
+
 export const servicesApi = {
+  async listAll(): Promise<AppServiceWithApp[]> {
+    const { data } = await api.get<AppServiceWithApp[]>('/services');
+    return data ?? [];
+  },
+
   async list(appId: string): Promise<AppService[]> {
     const { data } = await api.get<AppService[]>(`/apps/${appId}/services`);
     return data ?? [];

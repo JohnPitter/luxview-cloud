@@ -8,6 +8,7 @@ import { Dashboard } from './pages/Dashboard';
 import { NewApp } from './pages/NewApp';
 import { AppDetail } from './pages/AppDetail';
 import { Admin } from './pages/Admin';
+import { Resources } from './pages/Resources';
 import { Logs } from './pages/Logs';
 import { Settings } from './pages/Settings';
 import { Profile } from './pages/Profile';
@@ -44,6 +45,7 @@ export function App() {
         <Route path="new" element={<NewApp />} />
         <Route path="apps/:appId" element={<AppDetail />} />
         <Route path="admin" element={<Admin />} />
+        <Route path="resources" element={<Resources />} />
         <Route path="logs" element={<Logs />} />
         <Route path="settings" element={<Settings />} />
         <Route path="profile" element={<Profile />} />
