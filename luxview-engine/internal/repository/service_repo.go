@@ -103,6 +103,14 @@ func (r *ServiceRepo) FindByAppAndType(ctx context.Context, appID uuid.UUID, ser
 	return &s, nil
 }
 
+func (r *ServiceRepo) CountByType(ctx context.Context, serviceType model.ServiceType) (int, error) {
+	var count int
+	err := r.db.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM app_services WHERE service_type = $1`, serviceType,
+	).Scan(&count)
+	return count, err
+}
+
 func (r *ServiceRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := r.db.Pool.Exec(ctx, `DELETE FROM app_services WHERE id = $1`, id)
 	return err
