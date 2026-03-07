@@ -244,12 +244,12 @@ export function Admin() {
                         <span className={`text-xl font-bold tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
                           {vpsInfo.cpuCores}
                         </span>
-                        <span className="text-xs text-zinc-500">cores available</span>
+                        <span className="text-xs text-zinc-500">cores total</span>
                       </div>
                       <ResourceBar
-                        used={parseFloat(vpsInfo.allocatedCpu || '0')}
+                        used={parseFloat(vpsInfo.allocatedCpu || '0') + vpsInfo.platformReservedCpu}
                         total={vpsInfo.cpuCores}
-                        label={`${vpsInfo.allocatedCpu || '0'} / ${vpsInfo.cpuCores} cores allocated`}
+                        label={`Platform: ${vpsInfo.platformReservedCpu} · Apps: ${vpsInfo.allocatedCpu || '0'} · Free: ${vpsInfo.freeCpu || '0'} cores`}
                         color="blue"
                         isDark={isDark}
                       />
@@ -268,9 +268,9 @@ export function Admin() {
                         <span className="text-xs text-zinc-500">total</span>
                       </div>
                       <ResourceBar
-                        used={vpsInfo.allocatedMemory}
+                        used={vpsInfo.allocatedMemory + vpsInfo.platformReservedMem}
                         total={vpsInfo.totalMemory}
-                        label={`${formatBytes(vpsInfo.allocatedMemory)} / ${formatBytes(vpsInfo.totalMemory)} allocated`}
+                        label={`Platform: ${formatBytes(vpsInfo.platformReservedMem)} · Apps: ${formatBytes(vpsInfo.allocatedMemory)} · Free: ${formatBytes(Math.max(0, vpsInfo.freeMemory))}`}
                         color="emerald"
                         isDark={isDark}
                       />
@@ -292,7 +292,7 @@ export function Admin() {
                         <ResourceBar
                           used={vpsInfo.disk.used}
                           total={vpsInfo.disk.total}
-                          label={`${formatBytes(vpsInfo.disk.used)} / ${formatBytes(vpsInfo.disk.total)} used (${vpsInfo.disk.percent})`}
+                          label={`${formatBytes(vpsInfo.disk.used)} used · ${formatBytes(vpsInfo.disk.available)} free (${vpsInfo.disk.percent})`}
                           color="amber"
                           isDark={isDark}
                         />
@@ -300,10 +300,13 @@ export function Admin() {
                     )}
                   </div>
 
-                  <p className="text-[11px] text-zinc-500 mt-4">
-                    Resource allocation across {vpsInfo.totalAppsCounted} app{vpsInfo.totalAppsCounted !== 1 ? 's' : ''}.
-                    Apps without explicit limits default to 0.5 CPU / 512MB RAM.
-                  </p>
+                  <div className={`mt-4 flex items-center gap-4 text-[11px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                    <span>{vpsInfo.totalAppsCounted} app{vpsInfo.totalAppsCounted !== 1 ? 's' : ''} deployed</span>
+                    <span className="text-zinc-700">·</span>
+                    <span>Platform reserved: {vpsInfo.platformReservedCpu} CPU, {formatBytes(vpsInfo.platformReservedMem)} RAM</span>
+                    <span className="text-zinc-700">·</span>
+                    <span>Default per app: 0.5 CPU, 512MB RAM</span>
+                  </div>
                 </GlassCard>
               )}
 
@@ -614,102 +617,16 @@ export function Admin() {
 
       {/* ==================== LIMITS MODAL ==================== */}
       {limitsApp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div
-            className={`w-full max-w-md rounded-2xl p-6 shadow-xl ${
-              isDark ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-zinc-200'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
-                Resource Limits — {limitsApp.name}
-              </h3>
-              <button onClick={() => setLimitsApp(null)} className="text-zinc-500 hover:text-zinc-300">
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
-                  CPU Cores
-                </label>
-                <div className="flex gap-1.5 flex-wrap">
-                  {CPU_OPTIONS.map((opt) => (
-                    <button
-                      key={opt}
-                      onClick={() => setEditLimits((p) => ({ ...p, cpu: opt }))}
-                      className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
-                        editLimits.cpu === opt
-                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                          : isDark
-                            ? 'text-zinc-400 border-zinc-800 hover:border-zinc-600'
-                            : 'text-zinc-600 border-zinc-200 hover:border-zinc-400'
-                      }`}
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
-                  Memory
-                </label>
-                <div className="flex gap-1.5 flex-wrap">
-                  {MEMORY_OPTIONS.map((opt) => (
-                    <button
-                      key={opt}
-                      onClick={() => setEditLimits((p) => ({ ...p, memory: opt }))}
-                      className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
-                        editLimits.memory === opt
-                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                          : isDark
-                            ? 'text-zinc-400 border-zinc-800 hover:border-zinc-600'
-                            : 'text-zinc-600 border-zinc-200 hover:border-zinc-400'
-                      }`}
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
-                  Disk
-                </label>
-                <div className="flex gap-1.5 flex-wrap">
-                  {DISK_OPTIONS.map((opt) => (
-                    <button
-                      key={opt}
-                      onClick={() => setEditLimits((p) => ({ ...p, disk: opt }))}
-                      className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
-                        editLimits.disk === opt
-                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                          : isDark
-                            ? 'text-zinc-400 border-zinc-800 hover:border-zinc-600'
-                            : 'text-zinc-600 border-zinc-200 hover:border-zinc-400'
-                      }`}
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-2 mt-6">
-              <PillButton variant="secondary" size="sm" className="flex-1" onClick={() => setLimitsApp(null)}>
-                Cancel
-              </PillButton>
-              <PillButton variant="primary" size="sm" className="flex-1" onClick={handleUpdateLimits}>
-                <Check size={14} className="mr-1" /> Save Limits
-              </PillButton>
-            </div>
-          </div>
-        </div>
+        <LimitsModal
+          app={limitsApp}
+          allApps={apps}
+          vpsInfo={vpsInfo}
+          editLimits={editLimits}
+          setEditLimits={setEditLimits}
+          onSave={handleUpdateLimits}
+          onClose={() => setLimitsApp(null)}
+          isDark={isDark}
+        />
       )}
 
       {/* ==================== DELETE CONFIRM ==================== */}
@@ -722,6 +639,190 @@ export function Admin() {
         onConfirm={handleForceDelete}
         onCancel={() => setDeleteApp(null)}
       />
+    </div>
+  );
+}
+
+function parseMemStr(s: string): number {
+  s = s.trim().toLowerCase();
+  if (!s) return 0;
+  const suffix = s[s.length - 1];
+  const num = parseFloat(s.slice(0, -1));
+  if (isNaN(num)) return 0;
+  if (suffix === 'g') return num * 1024 * 1024 * 1024;
+  if (suffix === 'm') return num * 1024 * 1024;
+  if (suffix === 'k') return num * 1024;
+  return parseInt(s, 10) || 0;
+}
+
+interface LimitsModalProps {
+  app: AdminApp;
+  allApps: AdminApp[];
+  vpsInfo: VPSInfo | null;
+  editLimits: { cpu: string; memory: string; disk: string };
+  setEditLimits: React.Dispatch<React.SetStateAction<{ cpu: string; memory: string; disk: string }>>;
+  onSave: () => void;
+  onClose: () => void;
+  isDark: boolean;
+}
+
+function LimitsModal({ app, allApps, vpsInfo, editLimits, setEditLimits, onSave, onClose, isDark }: LimitsModalProps) {
+  // Calculate budget: what other apps use (excluding current app)
+  let otherCpu = 0;
+  let otherMem = 0;
+  for (const a of allApps) {
+    if (a.id === app.id) continue;
+    otherCpu += a.resourceLimits?.cpu ? parseFloat(a.resourceLimits.cpu) : 0.5;
+    otherMem += a.resourceLimits?.memory ? parseMemStr(a.resourceLimits.memory) : 512 * 1024 * 1024;
+  }
+
+  const maxCpuForApp = vpsInfo ? vpsInfo.availableCpu - otherCpu : Infinity;
+  const maxMemForApp = vpsInfo ? vpsInfo.availableMemory - otherMem : Infinity;
+
+  const isCpuExceeded = (opt: string) => parseFloat(opt) > maxCpuForApp;
+  const isMemExceeded = (opt: string) => parseMemStr(opt) > maxMemForApp;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div
+        className={`w-full max-w-md rounded-2xl p-6 shadow-xl ${
+          isDark ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-zinc-200'
+        }`}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+            Resource Limits — {app.name}
+          </h3>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Budget info */}
+        {vpsInfo && (
+          <div className={`rounded-lg p-3 mb-4 text-[11px] space-y-1 ${
+            isDark ? 'bg-zinc-800/50 text-zinc-400' : 'bg-zinc-100 text-zinc-500'
+          }`}>
+            <div className="flex justify-between">
+              <span>Available for apps (CPU)</span>
+              <span className="font-mono">{vpsInfo.availableCpu} cores</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Used by other apps</span>
+              <span className="font-mono">{otherCpu.toFixed(1)} cores</span>
+            </div>
+            <div className={`flex justify-between font-medium ${maxCpuForApp < 0.25 ? 'text-red-400' : 'text-emerald-400'}`}>
+              <span>Budget for this app</span>
+              <span className="font-mono">{Math.max(0, maxCpuForApp).toFixed(1)} cores</span>
+            </div>
+            <div className="border-t border-zinc-700/30 my-1.5" />
+            <div className="flex justify-between">
+              <span>Available for apps (RAM)</span>
+              <span className="font-mono">{formatBytes(vpsInfo.availableMemory)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Used by other apps</span>
+              <span className="font-mono">{formatBytes(otherMem)}</span>
+            </div>
+            <div className={`flex justify-between font-medium ${maxMemForApp < 256 * 1024 * 1024 ? 'text-red-400' : 'text-emerald-400'}`}>
+              <span>Budget for this app</span>
+              <span className="font-mono">{formatBytes(Math.max(0, maxMemForApp))}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
+              CPU Cores
+            </label>
+            <div className="flex gap-1.5 flex-wrap">
+              {CPU_OPTIONS.map((opt) => {
+                const exceeded = isCpuExceeded(opt);
+                return (
+                  <button
+                    key={opt}
+                    onClick={() => !exceeded && setEditLimits((p) => ({ ...p, cpu: opt }))}
+                    disabled={exceeded}
+                    className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                      exceeded
+                        ? 'opacity-30 cursor-not-allowed border-zinc-800 text-zinc-600 line-through'
+                        : editLimits.cpu === opt
+                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                          : isDark
+                            ? 'text-zinc-400 border-zinc-800 hover:border-zinc-600'
+                            : 'text-zinc-600 border-zinc-200 hover:border-zinc-400'
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
+              Memory
+            </label>
+            <div className="flex gap-1.5 flex-wrap">
+              {MEMORY_OPTIONS.map((opt) => {
+                const exceeded = isMemExceeded(opt);
+                return (
+                  <button
+                    key={opt}
+                    onClick={() => !exceeded && setEditLimits((p) => ({ ...p, memory: opt }))}
+                    disabled={exceeded}
+                    className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                      exceeded
+                        ? 'opacity-30 cursor-not-allowed border-zinc-800 text-zinc-600 line-through'
+                        : editLimits.memory === opt
+                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                          : isDark
+                            ? 'text-zinc-400 border-zinc-800 hover:border-zinc-600'
+                            : 'text-zinc-600 border-zinc-200 hover:border-zinc-400'
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
+              Disk
+            </label>
+            <div className="flex gap-1.5 flex-wrap">
+              {DISK_OPTIONS.map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => setEditLimits((p) => ({ ...p, disk: opt }))}
+                  className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                    editLimits.disk === opt
+                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                      : isDark
+                        ? 'text-zinc-400 border-zinc-800 hover:border-zinc-600'
+                        : 'text-zinc-600 border-zinc-200 hover:border-zinc-400'
+                  }`}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-6">
+          <PillButton variant="secondary" size="sm" className="flex-1" onClick={onClose}>
+            Cancel
+          </PillButton>
+          <PillButton variant="primary" size="sm" className="flex-1" onClick={onSave}>
+            <Check size={14} className="mr-1" /> Save Limits
+          </PillButton>
+        </div>
+      </div>
     </div>
   );
 }

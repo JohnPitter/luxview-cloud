@@ -43,9 +43,15 @@ export interface VPSInfo {
   hostname: string;
   totalMemory: number;
   disk: { total: number; used: number; available: number; percent: string } | null;
+  platformReservedCpu: number;
+  platformReservedMem: number;
+  availableCpu: number;
+  availableMemory: number;
   allocatedCpu: string;
   allocatedMemory: number;
   totalAppsCounted: number;
+  freeCpu: string;
+  freeMemory: number;
 }
 
 export const adminApi = {

@@ -153,7 +153,14 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "role updated"})
 }
 
+// Platform services reserve: ~1 CPU core, 2GB RAM for postgres, redis, mongo, rabbitmq, minio, traefik, engine, dashboard.
+const (
+	platformReservedCPU    = 1.0
+	platformReservedMemory = 2 * 1024 * 1024 * 1024 // 2GB
+)
+
 // UpdateAppLimits changes an app's resource limits (admin only).
+// Validates that the new limits don't exceed VPS capacity.
 func (h *AdminHandler) UpdateAppLimits(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -177,6 +184,58 @@ func (h *AdminHandler) UpdateAppLimits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// --- Validate against VPS capacity ---
+	hostCPU, hostMem := readHostResources()
+	availableCPU := float64(hostCPU) - platformReservedCPU
+	availableMem := hostMem - platformReservedMemory
+
+	// Sum resources allocated by OTHER apps (exclude current app)
+	allApps, _, _ := h.appRepo.ListAll(ctx, 1000, 0)
+	var otherCPU float64
+	var otherMem int64
+	for _, a := range allApps {
+		if a.ID == appID {
+			continue
+		}
+		if a.ResourceLimits.CPU != "" {
+			if c, err := strconv.ParseFloat(a.ResourceLimits.CPU, 64); err == nil {
+				otherCPU += c
+			}
+		} else {
+			otherCPU += 0.5
+		}
+		if a.ResourceLimits.Memory != "" {
+			otherMem += parseMemoryString(a.ResourceLimits.Memory)
+		} else {
+			otherMem += 512 * 1024 * 1024
+		}
+	}
+
+	// Parse requested limits
+	var reqCPU float64 = 0.5
+	if body.ResourceLimits.CPU != "" {
+		if c, err := strconv.ParseFloat(body.ResourceLimits.CPU, 64); err == nil {
+			reqCPU = c
+		}
+	}
+	var reqMem int64 = 512 * 1024 * 1024
+	if body.ResourceLimits.Memory != "" {
+		reqMem = parseMemoryString(body.ResourceLimits.Memory)
+	}
+
+	if otherCPU+reqCPU > availableCPU {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf(
+			"CPU limit exceeds VPS capacity. Available for apps: %.1f cores, already allocated: %.1f, requested: %.1f",
+			availableCPU, otherCPU, reqCPU))
+		return
+	}
+	if otherMem+reqMem > availableMem {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf(
+			"Memory limit exceeds VPS capacity. Available for apps: %s, already allocated: %s, requested: %s",
+			formatBytesGo(availableMem), formatBytesGo(otherMem), formatBytesGo(reqMem)))
+		return
+	}
+
 	if err := h.appRepo.UpdateResourceLimits(ctx, appID, body.ResourceLimits); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update limits")
 		return
@@ -185,6 +244,15 @@ func (h *AdminHandler) UpdateAppLimits(w http.ResponseWriter, r *http.Request) {
 	log := logger.With("admin")
 	log.Info().Str("app", app.Subdomain).Msg("app resource limits updated")
 	writeJSON(w, http.StatusOK, map[string]string{"message": "limits updated"})
+}
+
+func formatBytesGo(b int64) string {
+	const gb = 1024 * 1024 * 1024
+	const mb = 1024 * 1024
+	if b >= gb {
+		return fmt.Sprintf("%.1fGB", float64(b)/float64(gb))
+	}
+	return fmt.Sprintf("%dMB", b/mb)
 }
 
 // ListAllApps returns all apps across all users (admin only).
@@ -215,14 +283,21 @@ func (h *AdminHandler) VPSInfo(w http.ResponseWriter, r *http.Request) {
 
 	hostCPU, hostMem := readHostResources()
 
+	availableCPU := float64(hostCPU) - platformReservedCPU
+	availableMem := hostMem - platformReservedMemory
+
 	info := map[string]interface{}{
-		"cpu_cores":    hostCPU,
-		"go_version":   runtime.Version(),
-		"os":           runtime.GOOS,
-		"arch":         runtime.GOARCH,
-		"hostname":     readHostHostname(),
-		"total_memory": hostMem,
-		"disk":         readDiskUsage(),
+		"cpu_cores":             hostCPU,
+		"go_version":            runtime.Version(),
+		"os":                    runtime.GOOS,
+		"arch":                  runtime.GOARCH,
+		"hostname":              readHostHostname(),
+		"total_memory":          hostMem,
+		"disk":                  readDiskUsage(),
+		"platform_reserved_cpu": platformReservedCPU,
+		"platform_reserved_mem": platformReservedMemory,
+		"available_cpu":         availableCPU,
+		"available_memory":      availableMem,
 	}
 
 	// Calculate total allocated resources across all apps
@@ -247,6 +322,8 @@ func (h *AdminHandler) VPSInfo(w http.ResponseWriter, r *http.Request) {
 		info["allocated_cpu"] = fmt.Sprintf("%.1f", totalCPU)
 		info["allocated_memory"] = totalMemory
 		info["total_apps_counted"] = len(apps)
+		info["free_cpu"] = fmt.Sprintf("%.1f", availableCPU-totalCPU)
+		info["free_memory"] = availableMem - totalMemory
 	}
 
 	writeJSON(w, http.StatusOK, info)
