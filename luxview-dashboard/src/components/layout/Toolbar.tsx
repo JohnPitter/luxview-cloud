@@ -35,16 +35,15 @@ export function Toolbar() {
         onClick={() => navigate('/dashboard')}
         className={`
           flex items-center justify-center w-8 h-8 rounded-xl
-          font-semibold text-sm tracking-tighter
           transition-all duration-200
           ring-1 ring-amber-400/40
           hover:ring-amber-400 hover:shadow-[0_0_15px_rgba(251,191,36,0.3)]
           active:scale-95
-          ${isDark ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-900'}
+          ${isDark ? 'bg-zinc-900' : 'bg-zinc-100'}
         `}
         title="LuxView Cloud"
       >
-        LV
+        <img src="/logo.svg" alt="LuxView Cloud" className="w-5 h-5" />
       </button>
 
       {/* Divider */}
