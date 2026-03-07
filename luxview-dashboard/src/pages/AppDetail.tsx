@@ -14,6 +14,7 @@ import {
   Copy,
   Check,
   Rocket,
+  Loader2,
 } from 'lucide-react';
 import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
@@ -265,6 +266,7 @@ export function AppDetail() {
             <PillButton
               variant="secondary"
               size="sm"
+              disabled={actionPending}
               onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); deployApp(appId!); }}
               icon={<Play size={14} />}
             >
@@ -276,6 +278,7 @@ export function AppDetail() {
               <PillButton
                 variant="secondary"
                 size="sm"
+                disabled={actionPending || ['building', 'deploying'].includes(app.status)}
                 onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); restartApp(appId!); }}
                 icon={<RotateCcw size={14} />}
               >
@@ -284,6 +287,7 @@ export function AppDetail() {
               <PillButton
                 variant="ghost"
                 size="sm"
+                disabled={actionPending || ['building', 'deploying'].includes(app.status)}
                 onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); stopApp(appId!); }}
                 icon={<Square size={14} />}
               >
@@ -294,10 +298,13 @@ export function AppDetail() {
           <PillButton
             variant="primary"
             size="sm"
+            disabled={actionPending || ['building', 'deploying'].includes(app.status)}
             onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); deployApp(appId!); }}
-            icon={<Rocket size={14} />}
+            icon={['building', 'deploying'].includes(app.status) || actionPending
+              ? <Loader2 size={14} className="animate-spin" />
+              : <Rocket size={14} />}
           >
-            Deploy
+            {['building', 'deploying'].includes(app.status) ? 'Deploying...' : 'Deploy'}
           </PillButton>
         </div>
       </div>
