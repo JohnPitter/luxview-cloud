@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Shield,
   Users,
@@ -30,19 +31,20 @@ import { formatRelativeTime } from '../lib/format';
 
 type Tab = 'overview' | 'users' | 'apps';
 
-const tabs: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
-  { id: 'overview', label: 'Overview', icon: <Activity size={14} /> },
-  { id: 'users', label: 'Users', icon: <Users size={14} /> },
-  { id: 'apps', label: 'Applications', icon: <Server size={14} /> },
-];
-
 const CPU_OPTIONS = ['0.25', '0.5', '1.0', '2.0', '4.0'];
 const MEMORY_OPTIONS = ['256m', '512m', '1g', '2g', '4g', '8g'];
 const DISK_OPTIONS = ['1g', '5g', '10g', '20g', '50g'];
 
 export function Admin() {
+  const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const addNotification = useNotificationsStore((s) => s.add);
+
+  const tabs: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
+    { id: 'overview', label: t('admin.tabs.overview'), icon: <Activity size={14} /> },
+    { id: 'users', label: t('admin.tabs.users'), icon: <Users size={14} /> },
+    { id: 'apps', label: t('admin.tabs.applications'), icon: <Server size={14} /> },
+  ];
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -73,11 +75,11 @@ export function Admin() {
       setUsers(usersData.users ?? []);
       setApps(appsData.apps ?? []);
     } catch {
-      addNotification({ type: 'error', title: 'Failed to load admin data' });
+      addNotification({ type: 'error', title: t('admin.failedToLoad') });
     } finally {
       setLoading(false);
     }
-  }, [addNotification]);
+  }, [addNotification, t]);
 
   useEffect(() => {
     fetchData();
@@ -87,9 +89,9 @@ export function Admin() {
     try {
       await adminApi.updateUserRole(user.id, newRole);
       setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, role: newRole } : u)));
-      addNotification({ type: 'success', title: `${user.username} is now ${newRole}` });
+      addNotification({ type: 'success', title: t('admin.roleModal.roleChanged', { username: user.username, role: newRole }) });
     } catch {
-      addNotification({ type: 'error', title: 'Failed to update role' });
+      addNotification({ type: 'error', title: t('admin.roleModal.failedToUpdate') });
     }
     setRoleChangeUser(null);
   };
@@ -101,9 +103,9 @@ export function Admin() {
       setApps((prev) =>
         prev.map((a) => (a.id === limitsApp.id ? { ...a, resourceLimits: editLimits } : a)),
       );
-      addNotification({ type: 'success', title: `Limits updated for ${limitsApp.name}` });
+      addNotification({ type: 'success', title: t('admin.limitsModal.limitsUpdated', { name: limitsApp.name }) });
     } catch {
-      addNotification({ type: 'error', title: 'Failed to update limits' });
+      addNotification({ type: 'error', title: t('admin.limitsModal.failedToUpdate') });
     }
     setLimitsApp(null);
   };
@@ -113,9 +115,9 @@ export function Admin() {
     try {
       await adminApi.forceDeleteApp(deleteApp.id);
       setApps((prev) => prev.filter((a) => a.id !== deleteApp.id));
-      addNotification({ type: 'success', title: `${deleteApp.name} deleted` });
+      addNotification({ type: 'success', title: t('admin.deleteDialog.deleted', { name: deleteApp.name }) });
     } catch {
-      addNotification({ type: 'error', title: 'Failed to delete app' });
+      addNotification({ type: 'error', title: t('admin.deleteDialog.failedToDelete') });
     }
     setDeleteApp(null);
   };
@@ -148,9 +150,9 @@ export function Admin() {
                 isDark ? 'text-zinc-100' : 'text-zinc-900'
               }`}
             >
-              Admin Panel
+              {t('admin.title')}
             </h1>
-            <p className="text-sm text-zinc-500">Platform management and user access control</p>
+            <p className="text-sm text-zinc-500">{t('admin.subtitle')}</p>
           </div>
         </div>
         <PillButton
@@ -159,7 +161,7 @@ export function Admin() {
           onClick={fetchData}
           icon={<RefreshCw size={14} />}
         >
-          Refresh
+          {t('common.refresh')}
         </PillButton>
       </div>
 
@@ -184,7 +186,7 @@ export function Admin() {
       </div>
 
       {loading ? (
-        <div className="text-center py-16 text-sm text-zinc-500">Loading admin data...</div>
+        <div className="text-center py-16 text-sm text-zinc-500">{t('admin.loadingData')}</div>
       ) : (
         <>
           {/* ==================== OVERVIEW ==================== */}
@@ -193,29 +195,29 @@ export function Admin() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
                   icon={<Users size={20} className="text-blue-400" />}
-                  label="Total Users"
+                  label={t('admin.stats.totalUsers')}
                   value={stats.totalUsers}
                   color="bg-blue-500/10"
                 />
                 <StatCard
                   icon={<Server size={20} className="text-emerald-400" />}
-                  label="Total Apps"
+                  label={t('admin.stats.totalApps')}
                   value={stats.totalApps}
-                  sub={`${stats.runningApps} running`}
+                  sub={t('admin.stats.runningApps', { count: stats.runningApps })}
                   color="bg-emerald-500/10"
                 />
                 <StatCard
                   icon={<Rocket size={20} className="text-amber-400" />}
-                  label="Deployments"
+                  label={t('admin.stats.deployments')}
                   value={stats.totalDeployments}
-                  sub="All time"
+                  sub={t('admin.stats.allTime')}
                   color="bg-amber-500/10"
                 />
                 <StatCard
                   icon={<Activity size={20} className="text-violet-400" />}
-                  label="Running"
+                  label={t('admin.stats.running')}
                   value={stats.runningApps}
-                  sub={`of ${stats.totalApps} apps`}
+                  sub={t('admin.stats.ofApps', { total: stats.totalApps })}
                   color="bg-violet-500/10"
                 />
               </div>
@@ -226,7 +228,7 @@ export function Admin() {
                   <div className="flex items-center gap-2 mb-5">
                     <Monitor size={18} className="text-amber-400" />
                     <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-                      VPS Resources — {vpsInfo.hostname}
+                      {t('admin.vps.title')} — {vpsInfo.hostname}
                     </h3>
                     <span className="text-[10px] text-zinc-500 font-mono ml-auto">
                       {vpsInfo.os}/{vpsInfo.arch} • {vpsInfo.goVersion}
@@ -238,18 +240,18 @@ export function Admin() {
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <Cpu size={14} className="text-blue-400" />
-                        <span className="text-xs text-zinc-400 uppercase tracking-wider">CPU</span>
+                        <span className="text-xs text-zinc-400 uppercase tracking-wider">{t('admin.vps.cpu')}</span>
                       </div>
                       <div className="flex items-baseline gap-2">
                         <span className={`text-xl font-bold tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
                           {vpsInfo.cpuCores}
                         </span>
-                        <span className="text-xs text-zinc-500">cores total</span>
+                        <span className="text-xs text-zinc-500">{t('common.units.coresTotal')}</span>
                       </div>
                       <ResourceBar
                         used={parseFloat(vpsInfo.allocatedCpu || '0') + vpsInfo.platformReservedCpu}
                         total={vpsInfo.cpuCores}
-                        label={`Platform: ${vpsInfo.platformReservedCpu} · Apps: ${vpsInfo.allocatedCpu || '0'} · Free: ${vpsInfo.freeCpu || '0'} cores`}
+                        label={`${t('admin.vps.platformLabel')}: ${vpsInfo.platformReservedCpu} · ${t('admin.vps.appsLabel')}: ${vpsInfo.allocatedCpu || '0'} · ${t('admin.vps.freeLabel')}: ${vpsInfo.freeCpu || '0'} ${t('common.units.cores')}`}
                         color="blue"
                         isDark={isDark}
                       />
@@ -259,18 +261,18 @@ export function Admin() {
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <MemoryStick size={14} className="text-emerald-400" />
-                        <span className="text-xs text-zinc-400 uppercase tracking-wider">Memory</span>
+                        <span className="text-xs text-zinc-400 uppercase tracking-wider">{t('admin.vps.memory')}</span>
                       </div>
                       <div className="flex items-baseline gap-2">
                         <span className={`text-xl font-bold tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
                           {formatBytes(vpsInfo.totalMemory)}
                         </span>
-                        <span className="text-xs text-zinc-500">total</span>
+                        <span className="text-xs text-zinc-500">{t('common.units.total')}</span>
                       </div>
                       <ResourceBar
                         used={vpsInfo.allocatedMemory + vpsInfo.platformReservedMem}
                         total={vpsInfo.totalMemory}
-                        label={`Platform: ${formatBytes(vpsInfo.platformReservedMem)} · Apps: ${formatBytes(vpsInfo.allocatedMemory)} · Free: ${formatBytes(Math.max(0, vpsInfo.freeMemory))}`}
+                        label={`${t('admin.vps.platformLabel')}: ${formatBytes(vpsInfo.platformReservedMem)} · ${t('admin.vps.appsLabel')}: ${formatBytes(vpsInfo.allocatedMemory)} · ${t('admin.vps.freeLabel')}: ${formatBytes(Math.max(0, vpsInfo.freeMemory))}`}
                         color="emerald"
                         isDark={isDark}
                       />
@@ -281,13 +283,13 @@ export function Admin() {
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <HardDrive size={14} className="text-amber-400" />
-                          <span className="text-xs text-zinc-400 uppercase tracking-wider">Disk</span>
+                          <span className="text-xs text-zinc-400 uppercase tracking-wider">{t('admin.vps.disk')}</span>
                         </div>
                         <div className="flex items-baseline gap-2">
                           <span className={`text-xl font-bold tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
                             {formatBytes(vpsInfo.disk.total)}
                           </span>
-                          <span className="text-xs text-zinc-500">total</span>
+                          <span className="text-xs text-zinc-500">{t('common.units.total')}</span>
                         </div>
                         <ResourceBar
                           used={vpsInfo.disk.used}
@@ -301,11 +303,11 @@ export function Admin() {
                   </div>
 
                   <div className={`mt-4 flex items-center gap-4 text-[11px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                    <span>{vpsInfo.totalAppsCounted} app{vpsInfo.totalAppsCounted !== 1 ? 's' : ''} deployed</span>
+                    <span>{t('admin.vps.appsDeployed', { count: vpsInfo.totalAppsCounted })}</span>
                     <span className="text-zinc-700">·</span>
-                    <span>Platform reserved: {vpsInfo.platformReservedCpu} CPU, {formatBytes(vpsInfo.platformReservedMem)} RAM</span>
+                    <span>{t('admin.vps.platformReserved', { cpu: vpsInfo.platformReservedCpu, ram: formatBytes(vpsInfo.platformReservedMem) })}</span>
                     <span className="text-zinc-700">·</span>
-                    <span>Default per app: 0.5 CPU, 512MB RAM</span>
+                    <span>{t('admin.vps.defaultPerApp')}</span>
                   </div>
                 </GlassCard>
               )}
@@ -316,7 +318,7 @@ export function Admin() {
                 <GlassCard padding="none">
                   <div className="px-6 py-4 border-b border-zinc-800/50">
                     <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-                      Recent Users
+                      {t('admin.recentUsers')}
                     </h3>
                   </div>
                   <div className="divide-y divide-zinc-800/30">
@@ -347,13 +349,13 @@ export function Admin() {
                 <GlassCard padding="none">
                   <div className="px-6 py-4 border-b border-zinc-800/50">
                     <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-                      Apps with Issues
+                      {t('admin.appsWithIssues')}
                     </h3>
                   </div>
                   <div className="divide-y divide-zinc-800/30">
                     {apps.filter((a) => a.status === 'error' || a.status === 'stopped').length === 0 ? (
                       <div className="px-6 py-8 text-center text-sm text-zinc-500">
-                        All apps healthy
+                        {t('admin.allAppsHealthy')}
                       </div>
                     ) : (
                       apps
@@ -389,7 +391,7 @@ export function Admin() {
                 <Search size={16} className="text-zinc-500" />
                 <input
                   type="text"
-                  placeholder="Search users..."
+                  placeholder={t('admin.users.searchPlaceholder')}
                   value={userSearch}
                   onChange={(e) => setUserSearch(e.target.value)}
                   className={`flex-1 bg-transparent text-sm outline-none ${
@@ -403,18 +405,18 @@ export function Admin() {
                   <table className="w-full">
                     <thead>
                       <tr className={isDark ? 'text-zinc-500' : 'text-zinc-400'}>
-                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">User</th>
-                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">Email</th>
-                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">Role</th>
-                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">Joined</th>
-                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">Actions</th>
+                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.users.tableHeaders.user')}</th>
+                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.users.tableHeaders.email')}</th>
+                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.users.tableHeaders.role')}</th>
+                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.users.tableHeaders.joined')}</th>
+                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.users.tableHeaders.actions')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredUsers.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="text-center py-12 text-sm text-zinc-500">
-                            No users found
+                            {t('admin.users.noUsersFound')}
                           </td>
                         </tr>
                       ) : (
@@ -455,7 +457,7 @@ export function Admin() {
                                 size="sm"
                                 onClick={() => setRoleChangeUser(u)}
                               >
-                                Change Role
+                                {t('admin.users.changeRole')}
                               </PillButton>
                             </td>
                           </tr>
@@ -479,7 +481,7 @@ export function Admin() {
                 <Search size={16} className="text-zinc-500" />
                 <input
                   type="text"
-                  placeholder="Search apps..."
+                  placeholder={t('admin.apps.searchPlaceholder')}
                   value={appSearch}
                   onChange={(e) => setAppSearch(e.target.value)}
                   className={`flex-1 bg-transparent text-sm outline-none ${
@@ -493,20 +495,20 @@ export function Admin() {
                   <table className="w-full">
                     <thead>
                       <tr className={isDark ? 'text-zinc-500' : 'text-zinc-400'}>
-                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">App</th>
-                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">Owner</th>
-                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">Status</th>
-                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">Stack</th>
-                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">Limits</th>
-                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">Created</th>
-                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">Actions</th>
+                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.apps.tableHeaders.app')}</th>
+                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.apps.tableHeaders.owner')}</th>
+                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.apps.tableHeaders.status')}</th>
+                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.apps.tableHeaders.stack')}</th>
+                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.apps.tableHeaders.limits')}</th>
+                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.apps.tableHeaders.created')}</th>
+                        <th className="text-left text-[11px] font-medium uppercase tracking-wider px-6 py-3">{t('admin.apps.tableHeaders.actions')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredApps.length === 0 ? (
                         <tr>
                           <td colSpan={7} className="text-center py-12 text-sm text-zinc-500">
-                            No applications found
+                            {t('admin.apps.noAppsFound')}
                           </td>
                         </tr>
                       ) : (
@@ -526,7 +528,7 @@ export function Admin() {
                               </div>
                             </td>
                             <td className="px-6 py-3 text-xs text-zinc-400">
-                              {ownerMap.get(app.userId) || 'Unknown'}
+                              {ownerMap.get(app.userId) || t('admin.apps.unknown')}
                             </td>
                             <td className="px-6 py-3">
                               <AppStatusBadge status={app.status} />
@@ -549,14 +551,14 @@ export function Admin() {
                                     setEditLimits(app.resourceLimits || { cpu: '1.0', memory: '512m', disk: '5g' });
                                   }}
                                   className="p-1.5 text-zinc-500 hover:text-amber-400 transition-colors rounded-lg hover:bg-amber-400/10"
-                                  title="Edit Limits"
+                                  title={t('admin.apps.editLimits')}
                                 >
                                   <SlidersHorizontal size={14} />
                                 </button>
                                 <button
                                   onClick={() => setDeleteApp(app)}
                                   className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors rounded-lg hover:bg-red-400/10"
-                                  title="Force Delete"
+                                  title={t('admin.apps.forceDelete')}
                                 >
                                   <Trash2 size={14} />
                                 </button>
@@ -584,14 +586,14 @@ export function Admin() {
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
-                Change Role — {roleChangeUser.username}
+                {t('admin.roleModal.title', { username: roleChangeUser.username })}
               </h3>
               <button onClick={() => setRoleChangeUser(null)} className="text-zinc-500 hover:text-zinc-300">
                 <X size={16} />
               </button>
             </div>
             <p className="text-xs text-zinc-500 mb-4">
-              Current role: <span className="font-mono text-amber-400">{roleChangeUser.role}</span>
+              {t('admin.roleModal.currentRole')} <span className="font-mono text-amber-400">{roleChangeUser.role}</span>
             </p>
             <div className="flex gap-2">
               <PillButton
@@ -600,7 +602,7 @@ export function Admin() {
                 className="flex-1"
                 onClick={() => handleRoleChange(roleChangeUser, 'user')}
               >
-                <UserCheck size={14} className="mr-1" /> User
+                <UserCheck size={14} className="mr-1" /> {t('admin.roleModal.user')}
               </PillButton>
               <PillButton
                 variant={roleChangeUser.role === 'admin' ? 'primary' : 'secondary'}
@@ -608,7 +610,7 @@ export function Admin() {
                 className="flex-1"
                 onClick={() => handleRoleChange(roleChangeUser, 'admin')}
               >
-                <Crown size={14} className="mr-1" /> Admin
+                <Crown size={14} className="mr-1" /> {t('admin.roleModal.admin')}
               </PillButton>
             </div>
           </div>
@@ -632,9 +634,9 @@ export function Admin() {
       {/* ==================== DELETE CONFIRM ==================== */}
       <ConfirmDialog
         open={!!deleteApp}
-        title="Force Delete App"
-        message={`This will permanently delete "${deleteApp?.name}" and stop its container. This action cannot be undone.`}
-        confirmLabel="Delete"
+        title={t('admin.deleteDialog.title')}
+        message={t('admin.deleteDialog.message', { name: deleteApp?.name })}
+        confirmLabel={t('admin.deleteDialog.confirm')}
         variant="danger"
         onConfirm={handleForceDelete}
         onCancel={() => setDeleteApp(null)}
@@ -667,6 +669,8 @@ interface LimitsModalProps {
 }
 
 function LimitsModal({ app, allApps, vpsInfo, editLimits, setEditLimits, onSave, onClose, isDark }: LimitsModalProps) {
+  const { t } = useTranslation();
+
   // Calculate budget: what other apps use (excluding current app)
   let otherCpu = 0;
   let otherMem = 0;
@@ -691,7 +695,7 @@ function LimitsModal({ app, allApps, vpsInfo, editLimits, setEditLimits, onSave,
       >
         <div className="flex items-center justify-between mb-4">
           <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
-            Resource Limits — {app.name}
+            {t('admin.limitsModal.title', { name: app.name })}
           </h3>
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
             <X size={16} />
@@ -704,28 +708,28 @@ function LimitsModal({ app, allApps, vpsInfo, editLimits, setEditLimits, onSave,
             isDark ? 'bg-zinc-800/50 text-zinc-400' : 'bg-zinc-100 text-zinc-500'
           }`}>
             <div className="flex justify-between">
-              <span>Available for apps (CPU)</span>
-              <span className="font-mono">{vpsInfo.availableCpu} cores</span>
+              <span>{t('admin.limitsModal.availableForAppsCpu')}</span>
+              <span className="font-mono">{vpsInfo.availableCpu} {t('common.units.cores')}</span>
             </div>
             <div className="flex justify-between">
-              <span>Used by other apps</span>
-              <span className="font-mono">{otherCpu.toFixed(1)} cores</span>
+              <span>{t('admin.limitsModal.usedByOtherApps')}</span>
+              <span className="font-mono">{otherCpu.toFixed(1)} {t('common.units.cores')}</span>
             </div>
             <div className={`flex justify-between font-medium ${maxCpuForApp < 0.25 ? 'text-red-400' : 'text-emerald-400'}`}>
-              <span>Budget for this app</span>
-              <span className="font-mono">{Math.max(0, maxCpuForApp).toFixed(1)} cores</span>
+              <span>{t('admin.limitsModal.budgetForThisApp')}</span>
+              <span className="font-mono">{Math.max(0, maxCpuForApp).toFixed(1)} {t('common.units.cores')}</span>
             </div>
             <div className="border-t border-zinc-700/30 my-1.5" />
             <div className="flex justify-between">
-              <span>Available for apps (RAM)</span>
+              <span>{t('admin.limitsModal.availableForAppsRam')}</span>
               <span className="font-mono">{formatBytes(vpsInfo.availableMemory)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Used by other apps</span>
+              <span>{t('admin.limitsModal.usedByOtherApps')}</span>
               <span className="font-mono">{formatBytes(otherMem)}</span>
             </div>
             <div className={`flex justify-between font-medium ${maxMemForApp < 256 * 1024 * 1024 ? 'text-red-400' : 'text-emerald-400'}`}>
-              <span>Budget for this app</span>
+              <span>{t('admin.limitsModal.budgetForThisApp')}</span>
               <span className="font-mono">{formatBytes(Math.max(0, maxMemForApp))}</span>
             </div>
           </div>
@@ -734,7 +738,7 @@ function LimitsModal({ app, allApps, vpsInfo, editLimits, setEditLimits, onSave,
         <div className="space-y-4">
           <div>
             <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
-              CPU Cores
+              {t('admin.limitsModal.cpuCores')}
             </label>
             <div className="flex gap-1.5 flex-wrap">
               {CPU_OPTIONS.map((opt) => {
@@ -763,7 +767,7 @@ function LimitsModal({ app, allApps, vpsInfo, editLimits, setEditLimits, onSave,
 
           <div>
             <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
-              Memory
+              {t('admin.limitsModal.memory')}
             </label>
             <div className="flex gap-1.5 flex-wrap">
               {MEMORY_OPTIONS.map((opt) => {
@@ -792,7 +796,7 @@ function LimitsModal({ app, allApps, vpsInfo, editLimits, setEditLimits, onSave,
 
           <div>
             <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
-              Disk
+              {t('admin.limitsModal.disk')}
             </label>
             <div className="flex gap-1.5 flex-wrap">
               {DISK_OPTIONS.map((opt) => (
@@ -816,10 +820,10 @@ function LimitsModal({ app, allApps, vpsInfo, editLimits, setEditLimits, onSave,
 
         <div className="flex gap-2 mt-6">
           <PillButton variant="secondary" size="sm" className="flex-1" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </PillButton>
           <PillButton variant="primary" size="sm" className="flex-1" onClick={onSave}>
-            <Check size={14} className="mr-1" /> Save Limits
+            <Check size={14} className="mr-1" /> {t('admin.limitsModal.saveLimits')}
           </PillButton>
         </div>
       </div>

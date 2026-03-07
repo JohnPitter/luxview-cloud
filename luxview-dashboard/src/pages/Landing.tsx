@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Github,
   Zap,
@@ -21,99 +22,6 @@ import {
   Box,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
-
-const features = [
-  {
-    icon: Zap,
-    title: 'Auto-detect Stack',
-    description: 'Node.js, Python, Go, Rust, Java, Docker, or static — detected automatically from your repo.',
-    color: 'text-amber-400',
-    bg: 'from-amber-500/20 to-amber-500/5',
-    border: 'border-amber-500/10',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Free SSL Certificates',
-    description: "Every app gets HTTPS via Let's Encrypt. Auto-renewed, zero configuration needed.",
-    color: 'text-emerald-400',
-    bg: 'from-emerald-500/20 to-emerald-500/5',
-    border: 'border-emerald-500/10',
-  },
-  {
-    icon: Globe,
-    title: 'Instant Subdomains',
-    description: 'yourapp.luxview.cloud is live the moment your build finishes. Custom domains coming soon.',
-    color: 'text-blue-400',
-    bg: 'from-blue-500/20 to-blue-500/5',
-    border: 'border-blue-500/10',
-  },
-  {
-    icon: Database,
-    title: 'Managed Databases',
-    description: 'PostgreSQL, Redis, MongoDB, RabbitMQ — provisioned in one click, credentials auto-injected.',
-    color: 'text-violet-400',
-    bg: 'from-violet-500/20 to-violet-500/5',
-    border: 'border-violet-500/10',
-  },
-  {
-    icon: BarChart3,
-    title: 'Real-time Monitoring',
-    description: 'CPU, memory, runtime logs, and custom alerts — all live in the dashboard.',
-    color: 'text-rose-400',
-    bg: 'from-rose-500/20 to-rose-500/5',
-    border: 'border-rose-500/10',
-  },
-  {
-    icon: RefreshCcw,
-    title: 'Auto-deploy & Rollback',
-    description: 'Push to main triggers a deploy. Roll back to any previous version in one click.',
-    color: 'text-cyan-400',
-    bg: 'from-cyan-500/20 to-cyan-500/5',
-    border: 'border-cyan-500/10',
-  },
-];
-
-const stacks = [
-  { name: 'Node.js', color: '#339933' },
-  { name: 'Python', color: '#3776AB' },
-  { name: 'Go', color: '#00ADD8' },
-  { name: 'Rust', color: '#DEA584' },
-  { name: 'Java', color: '#ED8B00' },
-  { name: 'Docker', color: '#2496ED' },
-  { name: 'Static', color: '#A855F7' },
-];
-
-const steps = [
-  {
-    icon: Github,
-    title: 'Connect GitHub',
-    description: 'Sign in with your GitHub account and authorize LuxView to access your repositories.',
-    visual: 'github',
-  },
-  {
-    icon: Box,
-    title: 'Pick & Configure',
-    description: 'Select a repo, choose a branch, set environment variables, and pick a subdomain.',
-    visual: 'configure',
-  },
-  {
-    icon: Rocket,
-    title: 'Ship It',
-    description: 'Hit deploy. We build, provision SSL, start your container, and route traffic — all automatically.',
-    visual: 'deploy',
-  },
-];
-
-const pricingFeatures = [
-  'Unlimited apps',
-  'Up to 1GB RAM per app',
-  'Free SSL certificates',
-  'Custom subdomains',
-  'PostgreSQL, Redis, MongoDB, RabbitMQ',
-  'Auto-deploy from GitHub',
-  'Real-time logs & monitoring',
-  'Rollback to any deploy',
-];
 
 // Animated terminal lines
 const terminalLines = [
@@ -215,6 +123,106 @@ function AnimatedTerminal() {
 export function Landing() {
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const { t } = useTranslation();
+
+  const features = [
+    {
+      icon: Zap,
+      title: t('landing.features.autoDetect.title'),
+      description: t('landing.features.autoDetect.description'),
+      color: 'text-amber-400',
+      bg: 'from-amber-500/20 to-amber-500/5',
+      border: 'border-amber-500/10',
+    },
+    {
+      icon: ShieldCheck,
+      title: t('landing.features.ssl.title'),
+      description: t('landing.features.ssl.description'),
+      color: 'text-emerald-400',
+      bg: 'from-emerald-500/20 to-emerald-500/5',
+      border: 'border-emerald-500/10',
+    },
+    {
+      icon: Globe,
+      title: t('landing.features.subdomains.title'),
+      description: t('landing.features.subdomains.description'),
+      color: 'text-blue-400',
+      bg: 'from-blue-500/20 to-blue-500/5',
+      border: 'border-blue-500/10',
+    },
+    {
+      icon: Database,
+      title: t('landing.features.databases.title'),
+      description: t('landing.features.databases.description'),
+      color: 'text-violet-400',
+      bg: 'from-violet-500/20 to-violet-500/5',
+      border: 'border-violet-500/10',
+    },
+    {
+      icon: BarChart3,
+      title: t('landing.features.monitoring.title'),
+      description: t('landing.features.monitoring.description'),
+      color: 'text-rose-400',
+      bg: 'from-rose-500/20 to-rose-500/5',
+      border: 'border-rose-500/10',
+    },
+    {
+      icon: RefreshCcw,
+      title: t('landing.features.autoDeploy.title'),
+      description: t('landing.features.autoDeploy.description'),
+      color: 'text-cyan-400',
+      bg: 'from-cyan-500/20 to-cyan-500/5',
+      border: 'border-cyan-500/10',
+    },
+  ];
+
+  const stacks = [
+    { name: 'Node.js', color: '#339933' },
+    { name: 'Python', color: '#3776AB' },
+    { name: 'Go', color: '#00ADD8' },
+    { name: 'Rust', color: '#DEA584' },
+    { name: 'Java', color: '#ED8B00' },
+    { name: 'Docker', color: '#2496ED' },
+    { name: 'Static', color: '#A855F7' },
+  ];
+
+  const steps = [
+    {
+      icon: Github,
+      title: t('landing.howItWorks.connectGithub.title'),
+      description: t('landing.howItWorks.connectGithub.description'),
+      visual: 'github',
+    },
+    {
+      icon: Box,
+      title: t('landing.howItWorks.pickConfigure.title'),
+      description: t('landing.howItWorks.pickConfigure.description'),
+      visual: 'configure',
+    },
+    {
+      icon: Rocket,
+      title: t('landing.howItWorks.shipIt.title'),
+      description: t('landing.howItWorks.shipIt.description'),
+      visual: 'deploy',
+    },
+  ];
+
+  const pricingFeatures = [
+    t('landing.pricing.features.unlimitedApps'),
+    t('landing.pricing.features.ram'),
+    t('landing.pricing.features.ssl'),
+    t('landing.pricing.features.subdomains'),
+    t('landing.pricing.features.databases'),
+    t('landing.pricing.features.autoDeploy'),
+    t('landing.pricing.features.logs'),
+    t('landing.pricing.features.rollback'),
+  ];
+
+  const navItems = [
+    { label: t('landing.nav.features'), id: 'features' },
+    { label: t('landing.nav.howItWorks'), id: 'how-it-works' },
+    { label: t('landing.nav.pricing'), id: 'pricing' },
+  ];
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -275,13 +283,13 @@ export function Landing() {
           </div>
 
           <div className="hidden md:flex items-center gap-8">
-            {['Features', 'How it Works', 'Pricing'].map((item) => (
+            {navItems.map((item) => (
               <button
-                key={item}
-                onClick={() => scrollTo(item.toLowerCase().replace(/\s+/g, '-'))}
+                key={item.id}
+                onClick={() => scrollTo(item.id)}
                 className="text-sm text-[#8b949e] hover:text-[#e6edf3] transition-colors"
               >
-                {item}
+                {item.label}
               </button>
             ))}
           </div>
@@ -291,7 +299,7 @@ export function Landing() {
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#238636] hover:bg-[#2ea043] text-white text-sm font-medium transition-all duration-200 hover:shadow-lg hover:shadow-[#238636]/20"
           >
             <Github size={16} />
-            Sign in
+            {t('landing.nav.signIn')}
           </button>
         </div>
       </nav>
@@ -309,17 +317,17 @@ export function Landing() {
         >
           <span className="inline-flex items-center gap-1.5 text-[#58a6ff]">
             <Rocket size={12} />
-            Now with managed databases
+            {t('landing.hero.announcement')}
           </span>
           <span className="text-[#484f58]">|</span>
           <span className="group-hover:text-[#e6edf3] transition-colors">
-            Read more <ChevronRight size={12} className="inline" />
+            {t('landing.hero.readMore')} <ChevronRight size={12} className="inline" />
           </span>
         </a>
 
         {/* Headline */}
         <h1 className="text-5xl sm:text-7xl lg:text-[80px] font-extrabold tracking-tight leading-[1.05] mb-6 max-w-4xl">
-          <span className="text-[#e6edf3]">Build and deploy</span>
+          <span className="text-[#e6edf3]">{t('landing.hero.title1')}</span>
           <br />
           <span
             className="bg-clip-text text-transparent"
@@ -327,13 +335,12 @@ export function Landing() {
               backgroundImage: 'linear-gradient(135deg, #79c0ff 0%, #d2a8ff 50%, #ffa657 100%)',
             }}
           >
-            from your repo.
+            {t('landing.hero.title2')}
           </span>
         </h1>
 
         <p className="text-lg sm:text-xl text-[#8b949e] max-w-2xl mb-10 leading-relaxed">
-          LuxView Cloud auto-detects your stack, builds a container, provisions SSL,
-          and gives you a live URL — all from a single <code className="text-[#e6edf3] bg-[#161b22] px-1.5 py-0.5 rounded text-base">git push</code>.
+          {t('landing.hero.subtitle')} <code className="text-[#e6edf3] bg-[#161b22] px-1.5 py-0.5 rounded text-base">{t('landing.hero.subtitleCode')}</code>.
         </p>
 
         {/* CTA buttons */}
@@ -343,23 +350,23 @@ export function Landing() {
             className="flex items-center gap-2.5 px-8 py-3.5 rounded-xl bg-[#238636] hover:bg-[#2ea043] text-white text-base font-semibold transition-all duration-200 shadow-lg shadow-[#238636]/25 hover:shadow-[#238636]/40 hover:scale-[1.02] active:scale-[0.98]"
           >
             <Github size={20} />
-            Start deploying — free
+            {t('landing.hero.ctaPrimary')}
           </button>
           <button
             onClick={() => scrollTo('how-it-works')}
             className="flex items-center gap-2 px-6 py-3.5 rounded-xl border border-[#30363d] text-[#e6edf3] text-base font-medium hover:bg-[#161b22] hover:border-[#8b949e]/50 transition-all duration-200"
           >
-            See how it works
+            {t('landing.hero.ctaSecondary')}
             <ArrowRight size={16} />
           </button>
         </div>
 
         <p className="text-xs text-[#484f58] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mb-16">
-          <span>No credit card</span>
+          <span>{t('landing.hero.noCreditCard')}</span>
           <span className="text-[#30363d]">·</span>
-          <span>Free SSL</span>
+          <span>{t('landing.hero.freeSSL')}</span>
           <span className="text-[#30363d]">·</span>
-          <span>Instant subdomains</span>
+          <span>{t('landing.hero.instantSubdomains')}</span>
         </p>
 
         {/* Terminal mockup */}
@@ -371,7 +378,7 @@ export function Landing() {
       {/* ==================== STACKS ==================== */}
       <section className="relative z-10 px-6 sm:px-8 py-20 max-w-[1280px] mx-auto">
         <p className="text-center text-xs uppercase tracking-[0.2em] text-[#484f58] font-medium mb-8">
-          Works with your stack
+          {t('landing.stacks.title')}
         </p>
         <div className="flex flex-wrap justify-center gap-4">
           {stacks.map((s) => (
@@ -391,10 +398,10 @@ export function Landing() {
         {/* Section header */}
         <div className="text-center mb-16">
           <h2 className="text-3xl sm:text-5xl font-bold tracking-tight mb-5 text-[#e6edf3]">
-            Everything you need to ship
+            {t('landing.features.title')}
           </h2>
           <p className="text-[#8b949e] max-w-xl mx-auto text-lg leading-relaxed">
-            A complete platform for deploying, managing, and monitoring your applications — on your own infrastructure.
+            {t('landing.features.subtitle')}
           </p>
         </div>
 
@@ -427,10 +434,10 @@ export function Landing() {
       <section id="how-it-works" className="relative z-10 px-6 sm:px-8 pb-32 max-w-[1280px] mx-auto">
         <div className="text-center mb-20">
           <h2 className="text-3xl sm:text-5xl font-bold tracking-tight mb-5 text-[#e6edf3]">
-            Three steps to production
+            {t('landing.howItWorks.title')}
           </h2>
           <p className="text-[#8b949e] max-w-xl mx-auto text-lg leading-relaxed">
-            From repository to live URL in under a minute.
+            {t('landing.howItWorks.subtitle')}
           </p>
         </div>
 
@@ -446,7 +453,7 @@ export function Landing() {
                 {/* Text */}
                 <div className="flex-1 text-center md:text-left">
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#161b22] border border-[#30363d] text-xs text-[#8b949e] mb-4">
-                    Step {i + 1}
+                    {t('landing.howItWorks.step', { number: i + 1 })}
                   </div>
                   <h3 className="text-2xl sm:text-3xl font-bold text-[#e6edf3] mb-3">
                     {step.title}
@@ -465,12 +472,16 @@ export function Landing() {
                           <Github size={20} className="text-[#3fb950]" />
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-[#e6edf3]">GitHub Authorization</p>
-                          <p className="text-xs text-[#484f58]">Authorize LuxView Cloud</p>
+                          <p className="text-sm font-semibold text-[#e6edf3]">{t('landing.howItWorks.github.authorization')}</p>
+                          <p className="text-xs text-[#484f58]">{t('landing.howItWorks.github.authorize')}</p>
                         </div>
                       </div>
                       <div className="space-y-2.5">
-                        {['Read repository contents', 'Access commit status', 'Receive webhooks'].map((perm) => (
+                        {[
+                          t('landing.howItWorks.github.readRepoContents'),
+                          t('landing.howItWorks.github.accessCommitStatus'),
+                          t('landing.howItWorks.github.receiveWebhooks'),
+                        ].map((perm) => (
                           <div key={perm} className="flex items-center gap-2.5 text-sm text-[#8b949e]">
                             <Check size={14} className="text-[#3fb950]" />
                             {perm}
@@ -478,7 +489,7 @@ export function Landing() {
                         ))}
                       </div>
                       <button className="mt-5 w-full py-2.5 rounded-lg bg-[#238636] text-white text-sm font-medium">
-                        Authorize LuxView
+                        {t('landing.howItWorks.github.authButton')}
                       </button>
                     </div>
                   )}
@@ -487,7 +498,7 @@ export function Landing() {
                     <div className="rounded-2xl bg-[#161b22] border border-[#30363d] p-6 shadow-xl shadow-black/20">
                       <div className="space-y-4">
                         <div>
-                          <label className="text-xs text-[#8b949e] font-medium mb-1.5 block">Repository</label>
+                          <label className="text-xs text-[#8b949e] font-medium mb-1.5 block">{t('landing.howItWorks.configure.repository')}</label>
                           <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#0d1117] border border-[#30363d] text-sm text-[#e6edf3]">
                             <Server size={14} className="text-[#8b949e]" />
                             JohnPitter/my-awesome-app
@@ -495,14 +506,14 @@ export function Landing() {
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="text-xs text-[#8b949e] font-medium mb-1.5 block">Branch</label>
+                            <label className="text-xs text-[#8b949e] font-medium mb-1.5 block">{t('landing.howItWorks.configure.branch')}</label>
                             <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#0d1117] border border-[#30363d] text-sm text-[#e6edf3]">
                               <GitBranch size={14} className="text-[#8b949e]" />
                               main
                             </div>
                           </div>
                           <div>
-                            <label className="text-xs text-[#8b949e] font-medium mb-1.5 block">Subdomain</label>
+                            <label className="text-xs text-[#8b949e] font-medium mb-1.5 block">{t('landing.howItWorks.configure.subdomain')}</label>
                             <div className="px-3 py-2.5 rounded-lg bg-[#0d1117] border border-[#30363d] text-sm text-[#e6edf3]">
                               my-app
                               <span className="text-[#484f58]">.luxview.cloud</span>
@@ -510,10 +521,10 @@ export function Landing() {
                           </div>
                         </div>
                         <div>
-                          <label className="text-xs text-[#8b949e] font-medium mb-1.5 block">Environment Variables</label>
+                          <label className="text-xs text-[#8b949e] font-medium mb-1.5 block">{t('landing.howItWorks.configure.envVars')}</label>
                           <div className="px-3 py-2.5 rounded-lg bg-[#0d1117] border border-[#30363d] text-sm font-mono text-[#8b949e]">
                             <Lock size={12} className="inline mr-1.5" />
-                            3 variables configured
+                            {t('landing.howItWorks.configure.variablesConfigured', { count: 3 })}
                           </div>
                         </div>
                       </div>
@@ -524,15 +535,15 @@ export function Landing() {
                     <div className="rounded-2xl bg-[#161b22] border border-[#30363d] p-6 shadow-xl shadow-black/20">
                       <div className="flex items-center gap-3 mb-5">
                         <div className="w-2.5 h-2.5 rounded-full bg-[#3fb950] animate-pulse" />
-                        <span className="text-sm font-medium text-[#3fb950]">Deploy successful</span>
+                        <span className="text-sm font-medium text-[#3fb950]">{t('landing.howItWorks.deploy.successful')}</span>
                         <span className="text-xs text-[#484f58] ml-auto">38s</span>
                       </div>
                       <div className="space-y-3">
                         {[
-                          { label: 'Build', status: 'Done', time: '32s' },
-                          { label: 'SSL', status: 'Provisioned', time: '2s' },
-                          { label: 'Container', status: 'Running', time: '3s' },
-                          { label: 'Health Check', status: 'Passed', time: '1s' },
+                          { label: t('landing.howItWorks.deploy.build'), status: t('landing.howItWorks.deploy.done'), time: '32s' },
+                          { label: t('landing.howItWorks.deploy.ssl'), status: t('landing.howItWorks.deploy.provisioned'), time: '2s' },
+                          { label: t('landing.howItWorks.deploy.container'), status: t('landing.howItWorks.deploy.running'), time: '3s' },
+                          { label: t('landing.howItWorks.deploy.healthCheck'), status: t('landing.howItWorks.deploy.passed'), time: '1s' },
                         ].map((item) => (
                           <div key={item.label} className="flex items-center justify-between">
                             <div className="flex items-center gap-2.5">
@@ -569,10 +580,10 @@ export function Landing() {
         <div className="max-w-[1280px] mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-5xl font-bold tracking-tight mb-5 text-[#e6edf3]">
-              Simple, transparent pricing
+              {t('landing.pricing.title')}
             </h2>
             <p className="text-[#8b949e] max-w-xl mx-auto text-lg leading-relaxed">
-              Free while in beta. Self-hosted — you own the infrastructure.
+              {t('landing.pricing.subtitle')}
             </p>
           </div>
 
@@ -585,11 +596,11 @@ export function Landing() {
 
               <div className="relative">
                 <div className="flex items-baseline gap-3 mb-2">
-                  <span className="text-5xl font-extrabold text-[#e6edf3] tracking-tight">$0</span>
-                  <span className="text-[#484f58] text-base">/month</span>
+                  <span className="text-5xl font-extrabold text-[#e6edf3] tracking-tight">{t('landing.pricing.price')}</span>
+                  <span className="text-[#484f58] text-base">{t('landing.pricing.perMonth')}</span>
                 </div>
                 <div className="inline-flex items-center px-3 py-1 rounded-full bg-[#238636]/15 text-[#3fb950] text-xs font-semibold border border-[#238636]/30 mb-8">
-                  Free During Beta
+                  {t('landing.pricing.badge')}
                 </div>
 
                 <ul className="space-y-3.5 mb-8">
@@ -606,11 +617,11 @@ export function Landing() {
                   className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl bg-[#238636] hover:bg-[#2ea043] text-white font-semibold transition-all duration-200 shadow-lg shadow-[#238636]/25 hover:shadow-[#238636]/40"
                 >
                   <Github size={18} />
-                  Get started free
+                  {t('landing.pricing.cta')}
                 </button>
 
                 <p className="text-xs text-[#484f58] text-center mt-4">
-                  Deploy on your own VPS. Full control, no vendor lock-in.
+                  {t('landing.pricing.footer')}
                 </p>
               </div>
             </div>
@@ -628,7 +639,7 @@ export function Landing() {
                 <span className="text-base font-semibold text-[#e6edf3]">LuxView Cloud</span>
               </div>
               <p className="text-xs text-[#484f58] max-w-xs leading-relaxed">
-                Self-hosted PaaS platform. Deploy any application from GitHub with automatic stack detection, SSL, and monitoring.
+                {t('landing.footer.description')}
               </p>
             </div>
 
@@ -640,31 +651,31 @@ export function Landing() {
                 className="text-sm text-[#8b949e] hover:text-[#e6edf3] transition-colors inline-flex items-center gap-1.5"
               >
                 <Github size={14} />
-                Source
+                {t('landing.footer.source')}
               </a>
               <a
                 href="#"
                 className="text-sm text-[#8b949e] hover:text-[#e6edf3] transition-colors inline-flex items-center gap-1.5"
               >
                 <ExternalLink size={14} />
-                Docs
+                {t('landing.footer.docs')}
               </a>
               <a
                 href="#"
                 className="text-sm text-[#8b949e] hover:text-[#e6edf3] transition-colors inline-flex items-center gap-1.5"
               >
                 <Activity size={14} />
-                Status
+                {t('landing.footer.status')}
               </a>
             </div>
           </div>
 
           <div className="mt-8 pt-8 border-t border-[#21262d] flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-xs text-[#484f58] font-mono">
-              Built with Go + React + Docker + Traefik
+              {t('landing.footer.builtWith')}
             </p>
             <p className="text-xs text-[#484f58]">
-              &copy; 2026 LuxView Cloud
+              &copy; {t('landing.footer.copyright')}
             </p>
           </div>
         </div>

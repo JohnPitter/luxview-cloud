@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { FileText, RefreshCw, Search, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
 import { useAppsStore } from '../stores/apps.store';
@@ -24,6 +25,7 @@ interface DeploymentWithApp extends Deployment {
 
 export function Logs() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const { apps, fetchApps } = useAppsStore();
   const [deployments, setDeployments] = useState<DeploymentWithApp[]>([]);
@@ -74,9 +76,9 @@ export function Logs() {
     if (!logContent[deployId]) {
       try {
         const data = await deploymentsApi.getLogs(deployId);
-        setLogContent((prev) => ({ ...prev, [deployId]: data.buildLog || 'No logs available.' }));
+        setLogContent((prev) => ({ ...prev, [deployId]: data.buildLog || t('logs.noLogsAvailable') }));
       } catch {
-        setLogContent((prev) => ({ ...prev, [deployId]: 'Failed to load logs.' }));
+        setLogContent((prev) => ({ ...prev, [deployId]: t('logs.failedToLoadLogs') }));
       }
     }
   };
@@ -100,9 +102,9 @@ export function Logs() {
                 isDark ? 'text-zinc-100' : 'text-zinc-900'
               }`}
             >
-              Deployment Logs
+              {t('logs.title')}
             </h1>
-            <p className="text-sm text-zinc-500">Build and deployment history across all apps</p>
+            <p className="text-sm text-zinc-500">{t('logs.subtitle')}</p>
           </div>
         </div>
         <PillButton
@@ -111,7 +113,7 @@ export function Logs() {
           onClick={fetchAllDeployments}
           icon={<RefreshCw size={14} />}
         >
-          Refresh
+          {t('common.refresh')}
         </PillButton>
       </div>
 
@@ -126,7 +128,7 @@ export function Logs() {
           <Search size={16} className="text-zinc-500" />
           <input
             type="text"
-            placeholder="Filter by app, commit, or status..."
+            placeholder={t('logs.searchPlaceholder')}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className={`
@@ -140,10 +142,10 @@ export function Logs() {
       {/* Deployments List */}
       <GlassCard padding="none">
         {loading ? (
-          <div className="py-16 text-center text-sm text-zinc-500">Loading deployments...</div>
+          <div className="py-16 text-center text-sm text-zinc-500">{t('logs.loadingDeployments')}</div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center text-sm text-zinc-500">
-            {filter ? 'No deployments match your filter.' : 'No deployments found.'}
+            {filter ? t('logs.noDeploymentsMatch') : t('logs.noDeploymentsFound')}
           </div>
         ) : (
           <div className="divide-y divide-zinc-800/30">
@@ -199,7 +201,7 @@ export function Logs() {
                         ${isDark ? 'bg-black/50 text-zinc-400' : 'bg-white text-zinc-600 border border-zinc-200'}
                       `}
                     >
-                      {logContent[dep.id] || 'Loading...'}
+                      {logContent[dep.id] || t('logs.loading')}
                     </pre>
                   </div>
                 )}

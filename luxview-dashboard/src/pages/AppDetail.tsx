@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
   ExternalLink,
@@ -19,6 +20,7 @@ import {
 import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
 import { StatusDot } from '../components/common/StatusDot';
+import { PageTour } from '../components/common/PageTour';
 import { AppStatusBadge } from '../components/apps/AppStatusBadge';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { DeployHistory } from '../components/deploy/DeployHistory';
@@ -29,6 +31,7 @@ import { AlertConfig } from '../components/monitoring/AlertConfig';
 import { RuntimeLogs } from '../components/monitoring/RuntimeLogs';
 import { ServiceCard } from '../components/services/ServiceCard';
 import { AddServiceDialog } from '../components/services/AddServiceDialog';
+import { appDetailTourSteps } from '../tours/appDetail';
 import { useAppsStore } from '../stores/apps.store';
 import { useThemeStore } from '../stores/theme.store';
 import { useNotificationsStore } from '../stores/notifications.store';
@@ -41,23 +44,24 @@ import { appsApi } from '../api/apps';
 
 type Tab = 'overview' | 'deployments' | 'logs' | 'env' | 'services' | 'metrics' | 'alerts' | 'settings';
 
-const tabs: Array<{ id: Tab; label: string }> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'deployments', label: 'Deployments' },
-  { id: 'logs', label: 'Logs' },
-  { id: 'env', label: 'Environment' },
-  { id: 'services', label: 'Services' },
-  { id: 'metrics', label: 'Metrics' },
-  { id: 'alerts', label: 'Alerts' },
-  { id: 'settings', label: 'Settings' },
-];
-
 export function AppDetail() {
+  const { t } = useTranslation();
   const { appId } = useParams<{ appId: string }>();
   const navigate = useNavigate();
   const { selectedApp: app, fetchApp, deployApp, stopApp, restartApp, deleteApp } = useAppsStore();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const addNotification = useNotificationsStore((s) => s.add);
+
+  const tabs: Array<{ id: Tab; label: string }> = [
+    { id: 'overview', label: t('app.tabs.overview') },
+    { id: 'deployments', label: t('app.tabs.deployments') },
+    { id: 'logs', label: t('app.tabs.logs') },
+    { id: 'env', label: t('app.tabs.environment') },
+    { id: 'services', label: t('app.tabs.services') },
+    { id: 'metrics', label: t('app.tabs.metrics') },
+    { id: 'alerts', label: t('app.tabs.alerts') },
+    { id: 'settings', label: t('app.tabs.settings') },
+  ];
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [deployments, setDeployments] = useState<Deployment[]>([]);
@@ -153,10 +157,10 @@ export function AppDetail() {
     setDeleting(true);
     try {
       await deleteApp(appId);
-      addNotification({ type: 'success', title: 'App deleted' });
+      addNotification({ type: 'success', title: t('app.notifications.appDeleted') });
       navigate('/dashboard');
     } catch {
-      addNotification({ type: 'error', title: 'Failed to delete app' });
+      addNotification({ type: 'error', title: t('app.notifications.appDeleteFailed') });
     } finally {
       setDeleting(false);
       setShowDeleteDialog(false);
@@ -172,9 +176,9 @@ export function AppDetail() {
         if (e.key.trim()) envRecord[e.key.trim()] = e.value;
       });
       await appsApi.updateEnvVars(appId, envRecord);
-      addNotification({ type: 'success', title: 'Environment variables saved' });
+      addNotification({ type: 'success', title: t('app.notifications.envSaved') });
     } catch {
-      addNotification({ type: 'error', title: 'Failed to save environment variables' });
+      addNotification({ type: 'error', title: t('app.notifications.envSaveFailed') });
     } finally {
       setSavingEnv(false);
     }
@@ -188,10 +192,10 @@ export function AppDetail() {
         repoBranch: settingsBranch,
         autoDeploy: settingsAutoDeploy,
       });
-      addNotification({ type: 'success', title: 'Settings saved' });
+      addNotification({ type: 'success', title: t('app.notifications.settingsSaved') });
       fetchApp(appId);
     } catch {
-      addNotification({ type: 'error', title: 'Failed to save settings' });
+      addNotification({ type: 'error', title: t('app.notifications.settingsSaveFailed') });
     }
   };
 
@@ -229,6 +233,7 @@ export function AppDetail() {
 
   return (
     <div className="animate-fade-in">
+      <PageTour tourId="appDetail" steps={appDetailTourSteps} autoStart />
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
@@ -238,7 +243,7 @@ export function AppDetail() {
             onClick={() => navigate('/dashboard')}
             icon={<ArrowLeft size={16} />}
           >
-            Back
+            {t('common.back')}
           </PillButton>
           <div className="flex items-center gap-3">
             <StatusDot status={app.status} size="lg" />
@@ -272,7 +277,7 @@ export function AppDetail() {
               onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); deployApp(appId!); }}
               icon={<Play size={14} />}
             >
-              Start
+              {t('app.actions.start')}
             </PillButton>
           )}
           {app.status === 'running' && (
@@ -284,7 +289,7 @@ export function AppDetail() {
                 onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); restartApp(appId!); }}
                 icon={<RotateCcw size={14} />}
               >
-                Restart
+                {t('app.actions.restart')}
               </PillButton>
               <PillButton
                 variant="ghost"
@@ -293,7 +298,7 @@ export function AppDetail() {
                 onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); stopApp(appId!); }}
                 icon={<Square size={14} />}
               >
-                Stop
+                {t('app.actions.stop')}
               </PillButton>
             </>
           )}
@@ -306,7 +311,7 @@ export function AppDetail() {
               ? <Loader2 size={14} className="animate-spin" />
               : <Rocket size={14} />}
           >
-            {['building', 'deploying'].includes(app.status) ? 'Deploying...' : 'Deploy'}
+            {['building', 'deploying'].includes(app.status) ? t('app.actions.deploying') : t('app.actions.deploy')}
           </PillButton>
         </div>
       </div>
@@ -338,20 +343,20 @@ export function AppDetail() {
       <div className="animate-fade-in">
         {/* ==================== OVERVIEW ==================== */}
         {activeTab === 'overview' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" data-tour="app-overview">
             {/* Status Card */}
             <GlassCard className="lg:col-span-2">
               <h3 className={`text-sm font-semibold mb-4 ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-                App Info
+                {t('app.info.title')}
               </h3>
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { label: 'Status', value: <AppStatusBadge status={app.status} size="md" /> },
-                  { label: 'Stack', value: app.stack },
-                  { label: 'Branch', value: app.repoBranch },
-                  { label: 'Auto-deploy', value: app.autoDeploy ? 'Enabled' : 'Disabled' },
-                  { label: 'Created', value: formatRelativeTime(app.createdAt) },
-                  { label: 'Last Updated', value: formatRelativeTime(app.updatedAt) },
+                  { label: t('app.info.status'), value: <AppStatusBadge status={app.status} size="md" /> },
+                  { label: t('app.info.stack'), value: app.stack },
+                  { label: t('app.info.branch'), value: app.repoBranch },
+                  { label: t('app.info.autoDeploy'), value: app.autoDeploy ? t('app.info.autoDeployEnabled') : t('app.info.autoDeployDisabled') },
+                  { label: t('app.info.created'), value: formatRelativeTime(app.createdAt) },
+                  { label: t('app.info.lastUpdated'), value: formatRelativeTime(app.updatedAt) },
                 ].map(({ label, value }) => (
                   <div key={label}>
                     <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">
@@ -368,13 +373,13 @@ export function AppDetail() {
             {/* Resource Usage */}
             <GlassCard>
               <h3 className={`text-sm font-semibold mb-4 ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-                Resources
+                {t('app.resources.title')}
               </h3>
               <div className="space-y-4">
                 {/* CPU Gauge */}
                 <div>
                   <div className="flex justify-between text-xs mb-2">
-                    <span className="text-zinc-500">CPU</span>
+                    <span className="text-zinc-500">{t('app.resources.cpu')}</span>
                     <span className={isDark ? 'text-zinc-300' : 'text-zinc-700'}>
                       {formatPercent(currentCpu)}
                     </span>
@@ -389,7 +394,7 @@ export function AppDetail() {
                 {/* RAM Gauge */}
                 <div>
                   <div className="flex justify-between text-xs mb-2">
-                    <span className="text-zinc-500">Memory</span>
+                    <span className="text-zinc-500">{t('app.resources.memory')}</span>
                     <span className={isDark ? 'text-zinc-300' : 'text-zinc-700'}>
                       {formatBytes(currentMemory)}
                     </span>
@@ -409,15 +414,15 @@ export function AppDetail() {
                 {/* Limits */}
                 <div className="pt-2 border-t border-zinc-800/50 space-y-1">
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-zinc-500">CPU Limit</span>
+                    <span className="text-zinc-500">{t('app.resources.cpuLimit')}</span>
                     <span className="text-zinc-400">{app.resourceLimits?.cpu || '0.5'} cores</span>
                   </div>
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-zinc-500">Memory Limit</span>
+                    <span className="text-zinc-500">{t('app.resources.memoryLimit')}</span>
                     <span className="text-zinc-400">{(app.resourceLimits?.memory || '512m').replace(/[mg]/i, '')} MB</span>
                   </div>
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-zinc-500">Disk Limit</span>
+                    <span className="text-zinc-500">{t('app.resources.diskLimit')}</span>
                     <span className="text-zinc-400">{(app.resourceLimits?.disk || '1g').replace(/[mg]/i, '')} GB</span>
                   </div>
                 </div>
@@ -433,32 +438,34 @@ export function AppDetail() {
 
         {/* ==================== DEPLOYMENTS ==================== */}
         {activeTab === 'deployments' && (
-          <DeployHistory
-            deployments={deployments}
-            onRollback={async (deployId) => {
-              try {
-                await deploymentsApi.rollback(appId!, deployId);
-                addNotification({ type: 'success', title: 'Rollback initiated' });
-                const updated = await deploymentsApi.list(appId!);
-                setDeployments(updated);
-              } catch {
-                addNotification({ type: 'error', title: 'Rollback failed' });
-              }
-            }}
-            onViewLog={(deployId) => {
-              deploymentsApi.getLogs(deployId).then((res) => {
-                setSelectedBuildLog(res.buildLog || '');
-                setActiveTab('logs');
-              }).catch(() => {
-                setActiveTab('logs');
-              });
-            }}
-          />
+          <div data-tour="app-deploys">
+            <DeployHistory
+              deployments={deployments}
+              onRollback={async (deployId) => {
+                try {
+                  await deploymentsApi.rollback(appId!, deployId);
+                  addNotification({ type: 'success', title: t('app.notifications.rollbackInitiated') });
+                  const updated = await deploymentsApi.list(appId!);
+                  setDeployments(updated);
+                } catch {
+                  addNotification({ type: 'error', title: t('app.notifications.rollbackFailed') });
+                }
+              }}
+              onViewLog={(deployId) => {
+                deploymentsApi.getLogs(deployId).then((res) => {
+                  setSelectedBuildLog(res.buildLog || '');
+                  setActiveTab('logs');
+                }).catch(() => {
+                  setActiveTab('logs');
+                });
+              }}
+            />
+          </div>
         )}
 
         {/* ==================== LOGS ==================== */}
         {activeTab === 'logs' && (
-          <div className="space-y-4">
+          <div className="space-y-4" data-tour="app-logs">
             {/* Log type toggle */}
             <div className="flex items-center gap-2">
               <button
@@ -469,7 +476,7 @@ export function AppDetail() {
                     : isDark ? 'text-zinc-400 hover:text-zinc-200 border border-zinc-800' : 'text-zinc-600 hover:text-zinc-900 border border-zinc-200'
                 }`}
               >
-                Runtime Logs
+                {t('app.logs.runtimeLogs')}
               </button>
               <button
                 onClick={() => setLogType('build')}
@@ -479,7 +486,7 @@ export function AppDetail() {
                     : isDark ? 'text-zinc-400 hover:text-zinc-200 border border-zinc-800' : 'text-zinc-600 hover:text-zinc-900 border border-zinc-200'
                 }`}
               >
-                Build Logs
+                {t('app.logs.buildLogs')}
               </button>
             </div>
 
@@ -493,7 +500,7 @@ export function AppDetail() {
               <>
                 {deployments.length > 0 && (
                   <div className="flex items-center gap-3">
-                    <label className="text-xs text-zinc-500">Deployment:</label>
+                    <label className="text-xs text-zinc-500">{t('app.logs.deployment')}:</label>
                     <select
                       value={deployments.find((d: Deployment) => selectedBuildLog && d.buildLog === selectedBuildLog)?.id || deployments[0]?.id || ''}
                       onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -512,7 +519,7 @@ export function AppDetail() {
                     >
                       {deployments.map((d: Deployment) => (
                         <option key={d.id} value={d.id}>
-                          {d.commitSha.slice(0, 7)} — {d.status} — {d.commitMessage?.slice(0, 40) || 'no message'}
+                          {d.commitSha.slice(0, 7)} — {d.status} — {d.commitMessage?.slice(0, 40) || t('app.logs.noMessage')}
                         </option>
                       ))}
                     </select>
@@ -521,7 +528,7 @@ export function AppDetail() {
                 <BuildLogViewer log={selectedBuildLog} />
                 {!selectedBuildLog && deployments.length === 0 && (
                   <div className="text-center py-12 text-zinc-500 text-sm">
-                    No build logs available. Deploy your app to see logs here.
+                    {t('app.logs.noBuildLogs')}
                   </div>
                 )}
               </>
@@ -536,7 +543,7 @@ export function AppDetail() {
               <h3
                 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}
               >
-                Environment Variables
+                {t('app.env.title')}
               </h3>
               <div className="flex items-center gap-2">
                 <PillButton
@@ -545,7 +552,7 @@ export function AppDetail() {
                   onClick={() => setShowValues(!showValues)}
                   icon={showValues ? <EyeOff size={14} /> : <Eye size={14} />}
                 >
-                  {showValues ? 'Hide' : 'Show'} Values
+                  {showValues ? t('app.env.hideValues') : t('app.env.showValues')}
                 </PillButton>
                 <PillButton
                   variant="ghost"
@@ -553,14 +560,14 @@ export function AppDetail() {
                   onClick={() => setEnvVars([...envVars, { key: '', value: '' }])}
                   icon={<Plus size={14} />}
                 >
-                  Add
+                  {t('app.env.addVariable')}
                 </PillButton>
               </div>
             </div>
 
             {envVars.length === 0 ? (
               <p className="text-sm text-zinc-500 text-center py-8">
-                No environment variables configured
+                {t('app.env.noVariables')}
               </p>
             ) : (
               <div className="space-y-2 mb-4">
@@ -574,7 +581,7 @@ export function AppDetail() {
                         updated[i] = { ...updated[i], key: e.target.value };
                         setEnvVars(updated);
                       }}
-                      placeholder="KEY"
+                      placeholder={t('app.env.keyPlaceholder')}
                       className={`${inputClass} flex-1 font-mono text-xs !py-2`}
                     />
                     <input
@@ -585,7 +592,7 @@ export function AppDetail() {
                         updated[i] = { ...updated[i], value: e.target.value };
                         setEnvVars(updated);
                       }}
-                      placeholder="value"
+                      placeholder={t('app.env.valuePlaceholder')}
                       className={`${inputClass} flex-1 font-mono text-xs !py-2`}
                     />
                     <button
@@ -607,7 +614,7 @@ export function AppDetail() {
                 disabled={savingEnv}
                 icon={<Save size={14} />}
               >
-                {savingEnv ? 'Saving...' : 'Save Changes'}
+                {savingEnv ? t('app.env.saving') : t('app.env.saveChanges')}
               </PillButton>
             </div>
           </GlassCard>
@@ -615,12 +622,12 @@ export function AppDetail() {
 
         {/* ==================== SERVICES ==================== */}
         {activeTab === 'services' && (
-          <div>
+          <div data-tour="app-services">
             <div className="flex items-center justify-between mb-4">
               <h3
                 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}
               >
-                Managed Services
+                {t('app.services.title')}
               </h3>
               <PillButton
                 variant="ghost"
@@ -628,14 +635,14 @@ export function AppDetail() {
                 onClick={() => setShowServiceDialog(true)}
                 icon={<Plus size={14} />}
               >
-                Add Service
+                {t('app.services.addService')}
               </PillButton>
             </div>
 
             {services.length === 0 ? (
               <GlassCard>
                 <p className="text-sm text-zinc-500 text-center py-8">
-                  No services provisioned. Add PostgreSQL, Redis, MongoDB, or RabbitMQ.
+                  {t('app.services.noServices')}
                 </p>
               </GlassCard>
             ) : (
@@ -648,9 +655,9 @@ export function AppDetail() {
                       try {
                         await servicesApi.delete(serviceId);
                         setServices(services.filter((s) => s.id !== serviceId));
-                        addNotification({ type: 'success', title: 'Service removed' });
+                        addNotification({ type: 'success', title: t('app.notifications.serviceRemoved') });
                       } catch {
-                        addNotification({ type: 'error', title: 'Failed to remove service' });
+                        addNotification({ type: 'error', title: t('app.notifications.serviceRemoveFailed') });
                       }
                     }}
                   />
@@ -667,9 +674,9 @@ export function AppDetail() {
                   const svc = await servicesApi.create(appId!, type);
                   setServices([...services, svc]);
                   setShowServiceDialog(false);
-                  addNotification({ type: 'success', title: 'Service added' });
+                  addNotification({ type: 'success', title: t('app.notifications.serviceAdded') });
                 } catch {
-                  addNotification({ type: 'error', title: 'Failed to add service' });
+                  addNotification({ type: 'error', title: t('app.notifications.serviceAddFailed') });
                 }
               }}
             />
@@ -678,32 +685,32 @@ export function AppDetail() {
 
         {/* ==================== METRICS ==================== */}
         {activeTab === 'metrics' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" data-tour="app-metrics">
             <MetricsChart
               data={metricsData}
               dataKey="cpu"
-              title="CPU Usage"
+              title={t('app.metrics.cpuUsage')}
               color="#fbbf24"
               unit="%"
             />
             <MetricsChart
               data={metricsData}
               dataKey="memory"
-              title="Memory Usage"
+              title={t('app.metrics.memoryUsage')}
               color="#60a5fa"
               formatter={(v) => `${v.toFixed(0)}MB`}
             />
             <MetricsChart
               data={metricsData}
               dataKey="networkRx"
-              title="Network In (KB/s)"
+              title={t('app.metrics.networkIn')}
               color="#34d399"
               unit=" KB/s"
             />
             <MetricsChart
               data={metricsData}
               dataKey="networkTx"
-              title="Network Out (KB/s)"
+              title={t('app.metrics.networkOut')}
               color="#a78bfa"
               unit=" KB/s"
             />
@@ -718,18 +725,18 @@ export function AppDetail() {
               try {
                 const alert = await alertsApi.create(appId!, payload);
                 setAlerts([...alerts, alert]);
-                addNotification({ type: 'success', title: 'Alert created' });
+                addNotification({ type: 'success', title: t('app.notifications.alertCreated') });
               } catch {
-                addNotification({ type: 'error', title: 'Failed to create alert' });
+                addNotification({ type: 'error', title: t('app.notifications.alertCreateFailed') });
               }
             }}
             onDeleteAlert={async (alertId) => {
               try {
                 await alertsApi.delete(appId!, alertId);
                 setAlerts(alerts.filter((a) => a.id !== alertId));
-                addNotification({ type: 'success', title: 'Alert deleted' });
+                addNotification({ type: 'success', title: t('app.notifications.alertDeleted') });
               } catch {
-                addNotification({ type: 'error', title: 'Failed to delete alert' });
+                addNotification({ type: 'error', title: t('app.notifications.alertDeleteFailed') });
               }
             }}
             onToggleAlert={async (alertId, enabled) => {
@@ -737,7 +744,7 @@ export function AppDetail() {
                 await alertsApi.update(appId!, alertId, { enabled });
                 setAlerts(alerts.map((a) => (a.id === alertId ? { ...a, enabled } : a)));
               } catch {
-                addNotification({ type: 'error', title: 'Failed to update alert' });
+                addNotification({ type: 'error', title: t('app.notifications.alertUpdateFailed') });
               }
             }}
           />
@@ -750,11 +757,11 @@ export function AppDetail() {
               <h3
                 className={`text-sm font-semibold mb-4 ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}
               >
-                General Settings
+                {t('app.settings.title')}
               </h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs text-zinc-500 mb-1.5">App Name</label>
+                  <label className="block text-xs text-zinc-500 mb-1.5">{t('app.settings.appName')}</label>
                   <input
                     type="text"
                     value={settingsName}
@@ -763,7 +770,7 @@ export function AppDetail() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-zinc-500 mb-1.5">Branch</label>
+                  <label className="block text-xs text-zinc-500 mb-1.5">{t('app.settings.branch')}</label>
                   <input
                     type="text"
                     value={settingsBranch}
@@ -774,10 +781,10 @@ export function AppDetail() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-                      Auto-deploy
+                      {t('app.settings.autoDeploy')}
                     </p>
                     <p className="text-[11px] text-zinc-500">
-                      Automatically deploy when you push to the configured branch
+                      {t('app.settings.autoDeployDescription')}
                     </p>
                   </div>
                   <button
@@ -798,21 +805,21 @@ export function AppDetail() {
               </div>
               <div className="flex justify-end mt-6">
                 <PillButton variant="primary" size="sm" onClick={handleSaveSettings} icon={<Save size={14} />}>
-                  Save Settings
+                  {t('app.settings.saveSettings')}
                 </PillButton>
               </div>
             </GlassCard>
 
             {/* Danger Zone */}
             <GlassCard className="!border-red-500/20">
-              <h3 className="text-sm font-semibold text-red-400 mb-4">Danger Zone</h3>
+              <h3 className="text-sm font-semibold text-red-400 mb-4">{t('app.settings.dangerZone')}</h3>
               <div className="flex items-center justify-between">
                 <div>
                   <p className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-                    Delete this app
+                    {t('app.settings.deleteApp')}
                   </p>
                   <p className="text-[11px] text-zinc-500">
-                    This will permanently destroy the container, data, and subdomain.
+                    {t('app.settings.deleteAppDescription')}
                   </p>
                 </div>
                 <PillButton
@@ -821,7 +828,7 @@ export function AppDetail() {
                   onClick={() => setShowDeleteDialog(true)}
                   icon={<Trash2 size={14} />}
                 >
-                  Delete App
+                  {t('app.settings.deleteAppButton')}
                 </PillButton>
               </div>
             </GlassCard>
@@ -832,9 +839,9 @@ export function AppDetail() {
       {/* Delete confirmation */}
       <ConfirmDialog
         open={showDeleteDialog}
-        title="Delete App"
-        message={`Are you sure you want to delete "${app.name}"? This action cannot be undone.`}
-        confirmLabel="Delete Forever"
+        title={t('app.deleteDialog.title')}
+        message={t('app.deleteDialog.message', { name: app.name })}
+        confirmLabel={t('app.deleteDialog.confirm')}
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteDialog(false)}
         loading={deleting}

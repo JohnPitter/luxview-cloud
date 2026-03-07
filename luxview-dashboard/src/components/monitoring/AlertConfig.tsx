@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Bell, Plus, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { PillButton } from '../common/PillButton';
@@ -12,11 +13,23 @@ interface AlertConfigProps {
   onToggleAlert: (alertId: string, enabled: boolean) => void;
 }
 
-const metrics = ['cpu_percent', 'memory_percent', 'response_time', 'error_rate'];
+const metricOptions = ['cpu_percent', 'memory_percent', 'response_time', 'error_rate'];
+const metricLabelKeys: Record<string, string> = {
+  cpu_percent: 'monitoring.alerts.metrics.cpuPercent',
+  memory_percent: 'monitoring.alerts.metrics.memoryPercent',
+  response_time: 'monitoring.alerts.metrics.responseTime',
+  error_rate: 'monitoring.alerts.metrics.errorRate',
+};
 const conditions = ['>', '<', '>=', '<=', '=='];
-const channels: AlertChannel[] = ['email', 'webhook', 'discord'];
+const channelOptions: AlertChannel[] = ['email', 'webhook', 'discord'];
+const channelLabelKeys: Record<string, string> = {
+  email: 'monitoring.alerts.channels.email',
+  webhook: 'monitoring.alerts.channels.webhook',
+  discord: 'monitoring.alerts.channels.discord',
+};
 
 export function AlertConfig({ alerts, onCreateAlert, onDeleteAlert, onToggleAlert }: AlertConfigProps) {
+  const { t } = useTranslation();
   const [showForm, setShowForm] = useState(false);
   const [metric, setMetric] = useState('cpu_percent');
   const [condition, setCondition] = useState('>');
@@ -49,7 +62,7 @@ export function AlertConfig({ alerts, onCreateAlert, onDeleteAlert, onToggleAler
         <h3
           className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}
         >
-          Alert Rules
+          {t('monitoring.alerts.title')}
         </h3>
         <PillButton
           variant="ghost"
@@ -57,7 +70,7 @@ export function AlertConfig({ alerts, onCreateAlert, onDeleteAlert, onToggleAler
           onClick={() => setShowForm(!showForm)}
           icon={<Plus size={14} />}
         >
-          New Alert
+          {t('monitoring.alerts.newAlert')}
         </PillButton>
       </div>
 
@@ -66,9 +79,9 @@ export function AlertConfig({ alerts, onCreateAlert, onDeleteAlert, onToggleAler
         <GlassCard className="animate-slide-up">
           <div className="grid grid-cols-2 gap-3">
             <select value={metric} onChange={(e) => setMetric(e.target.value)} className={inputClass}>
-              {metrics.map((m) => (
+              {metricOptions.map((m) => (
                 <option key={m} value={m}>
-                  {m.replace('_', ' ')}
+                  {t(metricLabelKeys[m])}
                 </option>
               ))}
             </select>
@@ -86,21 +99,21 @@ export function AlertConfig({ alerts, onCreateAlert, onDeleteAlert, onToggleAler
               />
             </div>
             <select value={channel} onChange={(e) => setChannel(e.target.value as AlertChannel)} className={inputClass}>
-              {channels.map((c) => (
-                <option key={c} value={c}>{c}</option>
+              {channelOptions.map((c) => (
+                <option key={c} value={c}>{t(channelLabelKeys[c])}</option>
               ))}
             </select>
             <input
               type="text"
               value={channelValue}
               onChange={(e) => setChannelValue(e.target.value)}
-              placeholder={channel === 'email' ? 'email@example.com' : 'https://...'}
+              placeholder={channel === 'email' ? t('monitoring.alerts.placeholders.email') : t('monitoring.alerts.placeholders.webhook')}
               className={inputClass}
             />
           </div>
           <div className="flex justify-end mt-3">
             <PillButton variant="primary" size="sm" onClick={handleCreate}>
-              Create Alert
+              {t('monitoring.alerts.createAlert')}
             </PillButton>
           </div>
         </GlassCard>
@@ -108,7 +121,7 @@ export function AlertConfig({ alerts, onCreateAlert, onDeleteAlert, onToggleAler
 
       {/* Alerts list */}
       {alerts.length === 0 ? (
-        <div className="text-center py-8 text-zinc-500 text-sm">No alert rules configured</div>
+        <div className="text-center py-8 text-zinc-500 text-sm">{t('monitoring.alerts.noAlerts')}</div>
       ) : (
         <div className="space-y-2">
           {alerts.map((alert) => (
@@ -118,11 +131,11 @@ export function AlertConfig({ alerts, onCreateAlert, onDeleteAlert, onToggleAler
                   <Bell size={16} className={alert.enabled ? 'text-amber-400' : 'text-zinc-600'} />
                   <div>
                     <p className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-                      {alert.metric.replace('_', ' ')} {alert.condition} {alert.threshold}
+                      {t(metricLabelKeys[alert.metric] || alert.metric)} {alert.condition} {alert.threshold}
                     </p>
                     <p className="text-[11px] text-zinc-500">
-                      via {alert.channel}
-                      {alert.lastTriggered && ` | Last: ${new Date(alert.lastTriggered).toLocaleDateString()}`}
+                      {t('monitoring.alerts.via', { channel: t(channelLabelKeys[alert.channel] || alert.channel) })}
+                      {alert.lastTriggered && ` | ${t('monitoring.alerts.lastTriggered', { date: new Date(alert.lastTriggered).toLocaleDateString() })}`}
                     </p>
                   </div>
                 </div>

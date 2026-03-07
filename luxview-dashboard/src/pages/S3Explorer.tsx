@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
   Upload,
@@ -26,22 +27,10 @@ function formatSize(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
 }
 
-function formatDate(dateStr: string): string {
-  if (!dateStr) return '-';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '-';
-  return d.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 export function S3Explorer() {
   const { serviceId } = useParams<{ serviceId: string }>();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -55,6 +44,19 @@ export function S3Explorer() {
   const [error, setError] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState('');
 
+  const formatDate = (dateStr: string): string => {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '-';
+    return d.toLocaleDateString(i18n.language, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   const fetchFiles = useCallback(async () => {
     if (!serviceId) return;
     setLoading(true);
@@ -63,11 +65,11 @@ export function S3Explorer() {
       const data = await servicesApi.listFiles(serviceId, prefix || undefined);
       setFiles(data);
     } catch {
-      setError('Failed to load files');
+      setError(t('resources.s3.failedToLoadFiles'));
     } finally {
       setLoading(false);
     }
-  }, [serviceId, prefix]);
+  }, [serviceId, prefix, t]);
 
   useEffect(() => {
     fetchFiles();
@@ -104,7 +106,7 @@ export function S3Explorer() {
       }
       await fetchFiles();
     } catch {
-      setError('Failed to upload file');
+      setError(t('resources.s3.failedToUploadFile'));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -125,7 +127,7 @@ export function S3Explorer() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
-      setError('Failed to download file');
+      setError(t('resources.s3.failedToDownloadFile'));
     } finally {
       setDownloadingKey(null);
     }
@@ -139,7 +141,7 @@ export function S3Explorer() {
       setDeleteTarget(null);
       await fetchFiles();
     } catch {
-      setError('Failed to delete file');
+      setError(t('resources.s3.failedToDeleteFile'));
     } finally {
       setDeleting(false);
     }
@@ -170,14 +172,14 @@ export function S3Explorer() {
                 isDark ? 'text-zinc-100' : 'text-zinc-900'
               }`}
             >
-              Object Storage
+              {t('resources.s3.title')}
             </h1>
-            <p className="text-xs text-zinc-500">Browse and manage files in your S3 bucket</p>
+            <p className="text-xs text-zinc-500">{t('resources.s3.subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <PillButton variant="ghost" size="sm" onClick={fetchFiles} icon={<RefreshCw size={12} />}>
-            Refresh
+            {t('common.refresh')}
           </PillButton>
           <input
             ref={fileInputRef}
@@ -199,7 +201,7 @@ export function S3Explorer() {
               )
             }
           >
-            {uploading ? 'Uploading...' : 'Upload'}
+            {uploading ? t('resources.s3.uploading') : t('resources.s3.upload')}
           </PillButton>
         </div>
       </div>
@@ -256,7 +258,7 @@ export function S3Explorer() {
             />
             <input
               type="text"
-              placeholder="Filter..."
+              placeholder={t('resources.s3.filterPlaceholder')}
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               className={`pl-7 pr-3 py-1.5 rounded-lg text-xs outline-none w-40 ${
@@ -272,16 +274,16 @@ export function S3Explorer() {
         {loading ? (
           <div className="p-8 text-center">
             <Loader2 size={24} className="mx-auto text-amber-400 animate-spin mb-3" />
-            <p className="text-xs text-zinc-500">Loading files...</p>
+            <p className="text-xs text-zinc-500">{t('resources.s3.loadingFiles')}</p>
           </div>
         ) : filteredFiles.length === 0 ? (
           <div className="p-12 text-center">
             <FileIcon size={32} className="mx-auto text-zinc-600 mb-3" />
             <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
-              {searchFilter ? 'No files match your filter' : 'This folder is empty'}
+              {searchFilter ? t('resources.s3.noFilesMatchFilter') : t('resources.s3.folderEmpty')}
             </p>
             <p className="text-xs text-zinc-500 mt-1">
-              {!searchFilter && 'Upload files using the button above'}
+              {!searchFilter && t('resources.s3.uploadFilesHint')}
             </p>
           </div>
         ) : (
@@ -353,7 +355,7 @@ export function S3Explorer() {
                         className={`p-1.5 rounded-lg transition-colors ${
                           isDark ? 'hover:bg-zinc-700' : 'hover:bg-zinc-200'
                         }`}
-                        title="Download"
+                        title={t('resources.s3.download')}
                       >
                         {downloadingKey === file.key ? (
                           <Loader2 size={14} className="animate-spin text-amber-400" />
@@ -369,7 +371,7 @@ export function S3Explorer() {
                         className={`p-1.5 rounded-lg transition-colors ${
                           isDark ? 'hover:bg-red-500/10' : 'hover:bg-red-50'
                         }`}
-                        title="Delete"
+                        title={t('resources.s3.delete')}
                       >
                         <Trash2 size={14} className="text-red-400" />
                       </button>
@@ -385,9 +387,9 @@ export function S3Explorer() {
       {/* Delete confirm */}
       <ConfirmDialog
         open={!!deleteTarget}
-        title="Delete File"
-        message={`Are you sure you want to delete "${deleteTarget?.split('/').pop()}"? This cannot be undone.`}
-        confirmLabel={deleting ? 'Deleting...' : 'Delete'}
+        title={t('resources.s3.deleteDialog.title')}
+        message={t('resources.s3.deleteDialog.message', { name: deleteTarget?.split('/').pop() })}
+        confirmLabel={deleting ? t('resources.s3.deleteDialog.deleting') : t('resources.s3.deleteDialog.confirm')}
         variant="danger"
         loading={deleting}
         onConfirm={handleDelete}

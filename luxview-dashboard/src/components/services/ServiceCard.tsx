@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Database, Eye, EyeOff, Copy, Trash2, Check } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { useThemeStore } from '../../stores/theme.store';
@@ -9,18 +10,19 @@ interface ServiceCardProps {
   onDelete: (serviceId: string) => void;
 }
 
-const serviceConfig: Record<ServiceType, { label: string; color: string; icon: string }> = {
-  postgres: { label: 'PostgreSQL', color: 'text-blue-400', icon: 'PG' },
-  redis: { label: 'Redis', color: 'text-red-400', icon: 'RD' },
-  mongodb: { label: 'MongoDB', color: 'text-emerald-400', icon: 'MG' },
-  rabbitmq: { label: 'RabbitMQ', color: 'text-orange-400', icon: 'RQ' },
-  s3: { label: 'Object Storage', color: 'text-purple-400', icon: 'S3' },
+const serviceConfig: Record<ServiceType, { labelKey: string; color: string; icon: string }> = {
+  postgres: { labelKey: 'resources.service.postgresql', color: 'text-blue-400', icon: 'PG' },
+  redis: { labelKey: 'resources.service.redis', color: 'text-red-400', icon: 'RD' },
+  mongodb: { labelKey: 'resources.service.mongodb', color: 'text-emerald-400', icon: 'MG' },
+  rabbitmq: { labelKey: 'resources.service.rabbitmq', color: 'text-orange-400', icon: 'RQ' },
+  s3: { labelKey: 'resources.service.objectStorage', color: 'text-purple-400', icon: 'S3' },
 };
 
 export function ServiceCard({ service, onDelete }: ServiceCardProps) {
   const [showCreds, setShowCreds] = useState(false);
   const [copied, setCopied] = useState(false);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const { t } = useTranslation();
   const config = serviceConfig[service.serviceType];
 
   const copyUrl = async () => {
@@ -45,7 +47,7 @@ export function ServiceCard({ service, onDelete }: ServiceCardProps) {
             <h4
               className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}
             >
-              {config.label}
+              {t(config.labelKey)}
             </h4>
             <p className="text-[11px] text-zinc-500">{service.dbName}</p>
           </div>
@@ -53,7 +55,7 @@ export function ServiceCard({ service, onDelete }: ServiceCardProps) {
         <button
           onClick={() => onDelete(service.id)}
           className="text-zinc-500 hover:text-red-400 transition-colors p-1"
-          title="Remove service"
+          title={t('resources.service.removeService')}
         >
           <Trash2 size={14} />
         </button>
@@ -63,20 +65,20 @@ export function ServiceCard({ service, onDelete }: ServiceCardProps) {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
-            Connection URL
+            {t('services.card.connectionUrl')}
           </span>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setShowCreds(!showCreds)}
               className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
-              title={showCreds ? 'Hide credentials' : 'Show credentials'}
+              title={showCreds ? t('services.card.hideCredentials') : t('services.card.showCredentials')}
             >
               {showCreds ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
             <button
               onClick={copyUrl}
               className="p-1 text-zinc-500 hover:text-amber-400 transition-colors"
-              title="Copy to clipboard"
+              title={t('services.card.copyToClipboard')}
             >
               {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
             </button>
@@ -102,10 +104,10 @@ export function ServiceCard({ service, onDelete }: ServiceCardProps) {
       {showCreds && (
         <div className="grid grid-cols-2 gap-2 mt-3">
           {[
-            { label: 'Host', value: service.credentials.host },
-            { label: 'Port', value: String(service.credentials.port) },
-            { label: 'User', value: service.credentials.username },
-            { label: 'Database', value: service.credentials.database },
+            { label: t('services.card.host'), value: service.credentials.host },
+            { label: t('services.card.port'), value: String(service.credentials.port) },
+            { label: t('services.card.user'), value: service.credentials.username },
+            { label: t('services.card.database'), value: service.credentials.database },
           ].map(({ label, value }) => (
             <div key={label}>
               <span className="text-[10px] text-zinc-500 uppercase tracking-wider">

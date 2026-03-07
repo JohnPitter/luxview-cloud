@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
   Table2,
@@ -25,6 +26,7 @@ import {
 export function DbExplorer() {
   const { serviceId } = useParams<{ serviceId: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const editorRef = useRef<HTMLTextAreaElement>(null);
 
@@ -45,11 +47,11 @@ export function DbExplorer() {
       const data = await servicesApi.listTables(serviceId);
       setTables(data);
     } catch {
-      setError('Failed to load tables');
+      setError(t('resources.db.failedToLoadTables'));
     } finally {
       setLoading((l) => ({ ...l, tables: false }));
     }
-  }, [serviceId]);
+  }, [serviceId, t]);
 
   useEffect(() => {
     fetchTables();
@@ -65,7 +67,7 @@ export function DbExplorer() {
       setSchema(data);
       setQuery(`SELECT * FROM "${tableName}" LIMIT 100;`);
     } catch {
-      setError('Failed to load schema');
+      setError(t('resources.db.failedToLoadSchema'));
     } finally {
       setLoading((l) => ({ ...l, schema: false }));
     }
@@ -84,8 +86,8 @@ export function DbExplorer() {
       const msg =
         err && typeof err === 'object' && 'response' in err
           ? (err as { response: { data: { error: string } } }).response?.data?.error
-          : 'Query failed';
-      setError(msg || 'Query failed');
+          : t('resources.db.queryFailed');
+      setError(msg || t('resources.db.queryFailed'));
     } finally {
       setLoading((l) => ({ ...l, query: false }));
     }
@@ -132,10 +134,10 @@ export function DbExplorer() {
               isDark ? 'text-zinc-100' : 'text-zinc-900'
             }`}
           >
-            Database Explorer
+            {t('resources.db.title')}
           </h1>
           <p className="text-xs text-zinc-500">
-            Browse tables, view schemas, and execute SQL queries
+            {t('resources.db.subtitle')}
           </p>
         </div>
       </div>
@@ -152,7 +154,7 @@ export function DbExplorer() {
                   isDark ? 'text-zinc-400' : 'text-zinc-600'
                 }`}
               >
-                Tables
+                {t('resources.db.tables')}
               </span>
               <span
                 className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
@@ -177,19 +179,19 @@ export function DbExplorer() {
               ) : tables.length === 0 ? (
                 <div className="p-6 text-center">
                   <Table2 size={24} className="mx-auto text-zinc-500 mb-2" />
-                  <p className="text-xs text-zinc-500">No tables found</p>
+                  <p className="text-xs text-zinc-500">{t('resources.db.noTablesFound')}</p>
                 </div>
               ) : (
                 <div className="p-2">
-                  {tables.map((t) => (
+                  {tables.map((tbl) => (
                     <button
-                      key={t.name}
-                      onClick={() => selectTable(t.name)}
+                      key={tbl.name}
+                      onClick={() => selectTable(tbl.name)}
                       className={`
                         w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm
                         transition-all duration-150
                         ${
-                          selectedTable === t.name
+                          selectedTable === tbl.name
                             ? isDark
                               ? 'bg-amber-400/10 text-amber-400'
                               : 'bg-amber-100 text-amber-700'
@@ -200,11 +202,11 @@ export function DbExplorer() {
                       `}
                     >
                       <Table2 size={14} className="flex-shrink-0 opacity-60" />
-                      <span className="truncate font-mono text-xs">{t.name}</span>
+                      <span className="truncate font-mono text-xs">{tbl.name}</span>
                       <ChevronRight
                         size={12}
                         className={`ml-auto flex-shrink-0 opacity-40 ${
-                          selectedTable === t.name ? 'opacity-100' : ''
+                          selectedTable === tbl.name ? 'opacity-100' : ''
                         }`}
                       />
                     </button>
@@ -227,10 +229,10 @@ export function DbExplorer() {
                   isDark ? 'text-zinc-400' : 'text-zinc-600'
                 }`}
               >
-                SQL Query
+                {t('resources.db.sqlQuery')}
               </span>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-zinc-500">Ctrl+Enter to run</span>
+                <span className="text-[10px] text-zinc-500">{t('resources.db.ctrlEnterToRun')}</span>
                 <PillButton
                   variant="primary"
                   size="sm"
@@ -244,7 +246,7 @@ export function DbExplorer() {
                     )
                   }
                 >
-                  {loading.query ? 'Running...' : 'Execute'}
+                  {loading.query ? t('resources.db.running') : t('resources.db.execute')}
                 </PillButton>
               </div>
             </div>
@@ -253,7 +255,7 @@ export function DbExplorer() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="SELECT * FROM users LIMIT 100;"
+              placeholder={t('resources.db.queryPlaceholder')}
               spellCheck={false}
               className={`
                 w-full p-4 font-mono text-sm resize-none outline-none
@@ -283,15 +285,15 @@ export function DbExplorer() {
                     }
                   `}
                 >
-                  {tab === 'results' ? 'Results' : 'Schema'}
+                  {tab === 'results' ? t('resources.db.results') : t('resources.db.schema')}
                   {tab === 'results' && result && (
                     <span className="ml-2 text-[10px] opacity-70">
-                      ({result.rowCount} row{result.rowCount !== 1 ? 's' : ''})
+                      ({t('resources.db.rowCount', { count: result.rowCount })})
                     </span>
                   )}
                   {tab === 'schema' && schema && (
                     <span className="ml-2 text-[10px] opacity-70">
-                      ({schema.columns.length} col{schema.columns.length !== 1 ? 's' : ''})
+                      ({t('resources.db.colCount', { count: schema.columns.length })})
                     </span>
                   )}
                 </button>
@@ -304,7 +306,7 @@ export function DbExplorer() {
                 <div className="p-4 flex items-start gap-3">
                   <AlertCircle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm text-red-400 font-medium">Error</p>
+                    <p className="text-sm text-red-400 font-medium">{t('resources.db.error')}</p>
                     <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
                       {error}
                     </p>
@@ -319,14 +321,14 @@ export function DbExplorer() {
                     <div className="p-12 text-center">
                       <Play size={32} className="mx-auto text-zinc-600 mb-3" />
                       <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                        Run a query to see results
+                        {t('resources.db.runQueryToSeeResults')}
                       </p>
                     </div>
                   )}
                   {loading.query && (
                     <div className="p-12 text-center">
                       <Loader2 size={24} className="mx-auto text-amber-400 animate-spin mb-3" />
-                      <p className="text-xs text-zinc-500">Executing query...</p>
+                      <p className="text-xs text-zinc-500">{t('resources.db.executingQuery')}</p>
                     </div>
                   )}
                   {result && result.columns.length > 0 && (
@@ -337,7 +339,7 @@ export function DbExplorer() {
                             isDark ? 'bg-amber-400/5 text-amber-400' : 'bg-amber-50 text-amber-600'
                           }`}
                         >
-                          Results truncated to 1,000 rows
+                          {t('resources.db.resultsTruncated')}
                         </div>
                       )}
                       <table className="w-full text-xs">
@@ -422,9 +424,9 @@ export function DbExplorer() {
                     <div className="p-8 text-center">
                       <Check size={24} className="mx-auto text-emerald-400 mb-2" />
                       <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                        Query executed successfully
+                        {t('resources.db.queryExecutedSuccessfully')}
                       </p>
-                      <p className="text-xs text-zinc-500 mt-1">No rows returned</p>
+                      <p className="text-xs text-zinc-500 mt-1">{t('resources.db.noRowsReturned')}</p>
                     </div>
                   )}
                 </>
@@ -437,14 +439,14 @@ export function DbExplorer() {
                     <div className="p-12 text-center">
                       <Columns3 size={32} className="mx-auto text-zinc-600 mb-3" />
                       <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                        Select a table to view its schema
+                        {t('resources.db.selectTableToViewSchema')}
                       </p>
                     </div>
                   )}
                   {loading.schema && (
                     <div className="p-12 text-center">
                       <Loader2 size={24} className="mx-auto text-amber-400 animate-spin mb-3" />
-                      <p className="text-xs text-zinc-500">Loading schema...</p>
+                      <p className="text-xs text-zinc-500">{t('resources.db.loadingSchema')}</p>
                     </div>
                   )}
                   {schema && !loading.schema && (
@@ -457,13 +459,18 @@ export function DbExplorer() {
                         </span>
                         <span className="flex items-center gap-1 text-[10px] text-zinc-500">
                           <Hash size={10} />
-                          {schema.rowCount.toLocaleString()} rows
+                          {t('resources.db.rowCount', { count: schema.rowCount })}
                         </span>
                       </div>
                       <table className="w-full text-xs">
                         <thead>
                           <tr className={headerBg}>
-                            {['Column', 'Type', 'Nullable', 'Default'].map((h) => (
+                            {[
+                              t('resources.db.schemaHeaders.column'),
+                              t('resources.db.schemaHeaders.type'),
+                              t('resources.db.schemaHeaders.nullable'),
+                              t('resources.db.schemaHeaders.default'),
+                            ].map((h) => (
                               <th
                                 key={h}
                                 className={`px-3 py-2 text-left font-semibold border-b ${borderColor} ${
@@ -509,9 +516,9 @@ export function DbExplorer() {
                                 }`}
                               >
                                 {col.nullable === 'YES' ? (
-                                  <span className="text-amber-400">nullable</span>
+                                  <span className="text-amber-400">{t('resources.db.nullable')}</span>
                                 ) : (
-                                  <span className="text-emerald-400">not null</span>
+                                  <span className="text-emerald-400">{t('resources.db.notNull')}</span>
                                 )}
                               </td>
                               <td

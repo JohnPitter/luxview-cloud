@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Check, ChevronRight, ChevronLeft, Rocket, Plus, Trash2 } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { PillButton } from '../common/PillButton';
@@ -23,8 +24,6 @@ export interface DeployConfig {
   envVars: Record<string, string>;
 }
 
-const steps = ['Select Repository', 'Configure', 'Environment', 'Review & Deploy'];
-
 export function DeployWizard({
   repos,
   loadingRepos,
@@ -33,6 +32,7 @@ export function DeployWizard({
   onDeploy,
   deploying,
 }: DeployWizardProps) {
+  const { t } = useTranslation();
   const [step, setStep] = useState(0);
   const [selectedRepo, setSelectedRepo] = useState<GithubRepo | null>(null);
   const [branch, setBranch] = useState('');
@@ -40,6 +40,13 @@ export function DeployWizard({
   const [subdomainAvailable, setSubdomainAvailable] = useState(false);
   const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>([]);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+
+  const steps = [
+    t('deploy.wizard.steps.selectRepository'),
+    t('deploy.wizard.steps.configure'),
+    t('deploy.wizard.steps.environment'),
+    t('deploy.wizard.steps.reviewDeploy'),
+  ];
 
   const handleRepoSelect = useCallback(
     (repo: GithubRepo) => {
@@ -89,7 +96,7 @@ export function DeployWizard({
       {/* Progress */}
       <div className="flex items-center justify-between mb-8">
         {steps.map((label, i) => (
-          <div key={label} className="flex items-center">
+          <div key={i} className="flex items-center">
             <div className="flex items-center gap-2">
               <div
                 className={`
@@ -136,7 +143,7 @@ export function DeployWizard({
                 isDark ? 'text-zinc-100' : 'text-zinc-900'
               }`}
             >
-              Select a Repository
+              {t('deploy.wizard.selectRepo.title')}
             </h2>
             <RepoSelector
               repos={repos}
@@ -152,12 +159,12 @@ export function DeployWizard({
             <h2
               className={`text-lg font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}
             >
-              Configure Deployment
+              {t('deploy.wizard.configure.title')}
             </h2>
 
             <div>
               <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                Branch
+                {t('deploy.wizard.configure.branch')}
               </label>
               <select
                 value={branch}
@@ -190,16 +197,16 @@ export function DeployWizard({
               <h2
                 className={`text-lg font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}
               >
-                Environment Variables
+                {t('deploy.wizard.env.title')}
               </h2>
               <PillButton variant="ghost" size="sm" onClick={addEnvVar} icon={<Plus size={14} />}>
-                Add Variable
+                {t('deploy.wizard.env.addVariable')}
               </PillButton>
             </div>
 
             {envVars.length === 0 ? (
               <p className="text-sm text-zinc-500 py-8 text-center">
-                No environment variables. You can add them later.
+                {t('deploy.wizard.env.noVariables')}
               </p>
             ) : (
               <div className="space-y-2">
@@ -209,14 +216,14 @@ export function DeployWizard({
                       type="text"
                       value={env.key}
                       onChange={(e) => updateEnvVar(i, 'key', e.target.value)}
-                      placeholder="KEY"
+                      placeholder={t('deploy.wizard.env.keyPlaceholder')}
                       className={`${inputClass} flex-1 font-mono text-xs`}
                     />
                     <input
                       type="text"
                       value={env.value}
                       onChange={(e) => updateEnvVar(i, 'value', e.target.value)}
-                      placeholder="value"
+                      placeholder={t('deploy.wizard.env.valuePlaceholder')}
                       className={`${inputClass} flex-1 font-mono text-xs`}
                     />
                     <button
@@ -237,16 +244,16 @@ export function DeployWizard({
             <h2
               className={`text-lg font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}
             >
-              Review & Deploy
+              {t('deploy.wizard.review.title')}
             </h2>
 
             <div className="space-y-3">
               {[
-                { label: 'Repository', value: selectedRepo.fullName },
-                { label: 'Branch', value: branch },
-                { label: 'Subdomain', value: `${subdomain}.luxview.cloud` },
-                { label: 'Language', value: selectedRepo.language || 'Auto-detect' },
-                { label: 'Env Variables', value: `${envVars.filter((e) => e.key).length} variables` },
+                { label: t('deploy.wizard.review.repository'), value: selectedRepo.fullName },
+                { label: t('deploy.wizard.review.branch'), value: branch },
+                { label: t('deploy.wizard.review.subdomain'), value: `${subdomain}.luxview.cloud` },
+                { label: t('deploy.wizard.review.language'), value: selectedRepo.language || t('deploy.wizard.review.autoDetect') },
+                { label: t('deploy.wizard.review.envVariables'), value: t('deploy.wizard.review.variablesCount', { count: envVars.filter((e) => e.key).length }) },
               ].map(({ label, value }) => (
                 <div
                   key={label}
@@ -278,7 +285,7 @@ export function DeployWizard({
           disabled={step === 0}
           icon={<ChevronLeft size={16} />}
         >
-          Back
+          {t('deploy.wizard.navigation.back')}
         </PillButton>
 
         {step < steps.length - 1 ? (
@@ -288,7 +295,7 @@ export function DeployWizard({
             onClick={() => setStep(step + 1)}
             disabled={!canProceed()}
           >
-            Continue
+            {t('deploy.wizard.navigation.continue')}
             <ChevronRight size={16} />
           </PillButton>
         ) : (
@@ -299,7 +306,7 @@ export function DeployWizard({
             disabled={deploying}
             icon={<Rocket size={16} />}
           >
-            {deploying ? 'Deploying...' : 'Deploy Now'}
+            {deploying ? t('deploy.wizard.navigation.deploying') : t('deploy.wizard.navigation.deployNow')}
           </PillButton>
         )}
       </div>

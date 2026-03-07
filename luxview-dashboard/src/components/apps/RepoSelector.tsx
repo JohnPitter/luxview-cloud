@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search, GitBranch, Lock, Globe } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { useThemeStore } from '../../stores/theme.store';
@@ -24,6 +25,7 @@ const langColors: Record<string, string> = {
 
 export function RepoSelector({ repos, loading, selected, onSelect }: RepoSelectorProps) {
   const [search, setSearch] = useState('');
+  const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
   const filtered = useMemo(
@@ -48,7 +50,7 @@ export function RepoSelector({ repos, loading, selected, onSelect }: RepoSelecto
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search repositories..."
+          placeholder={t('deploy.wizard.selectRepo.searchPlaceholder')}
           className={`
             w-full pl-10 pr-4 py-2.5 rounded-xl text-sm
             border transition-all duration-200
@@ -74,7 +76,7 @@ export function RepoSelector({ repos, loading, selected, onSelect }: RepoSelecto
             />
           ))
         ) : filtered.length === 0 ? (
-          <p className="text-center text-sm text-zinc-500 py-8">No repositories found</p>
+          <p className="text-center text-sm text-zinc-500 py-8">{t('deploy.wizard.selectRepo.noReposFound')}</p>
         ) : (
           filtered.map((repo) => {
             const isSelected = selected?.id === repo.id;

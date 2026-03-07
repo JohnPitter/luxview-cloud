@@ -1,4 +1,5 @@
 import { User, Github, Calendar, Shield, ExternalLink } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { GlassCard } from '../components/common/GlassCard';
 import { useThemeStore } from '../stores/theme.store';
 import { useAuthStore } from '../stores/auth.store';
@@ -9,6 +10,7 @@ export function Profile() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const user = useAuthStore((s) => s.user);
   const { apps, fetchApps } = useAppsStore();
+  const { t, i18n } = useTranslation();
 
   useEffect(() => {
     fetchApps();
@@ -26,9 +28,9 @@ export function Profile() {
               isDark ? 'text-zinc-100' : 'text-zinc-900'
             }`}
           >
-            Profile
+            {t('profile.title')}
           </h1>
-          <p className="text-sm text-zinc-500">Your account information</p>
+          <p className="text-sm text-zinc-500">{t('profile.subtitle')}</p>
         </div>
       </div>
 
@@ -62,10 +64,11 @@ export function Profile() {
               {user?.createdAt && (
                 <span className="inline-flex items-center gap-1 text-[11px] text-zinc-500">
                   <Calendar size={10} />
-                  Joined{' '}
-                  {new Date(user.createdAt).toLocaleDateString('en-US', {
-                    month: 'short',
-                    year: 'numeric',
+                  {t('profile.joined', {
+                    date: new Date(user.createdAt).toLocaleDateString(i18n.language, {
+                      month: 'short',
+                      year: 'numeric',
+                    }),
                   })}
                 </span>
               )}
@@ -77,17 +80,17 @@ export function Profile() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-4">
         <GlassCard>
-          <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">Total Apps</p>
+          <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">{t('profile.stats.totalApps')}</p>
           <p className={`text-2xl font-bold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
             {apps.length}
           </p>
         </GlassCard>
         <GlassCard>
-          <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">Running</p>
+          <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">{t('profile.stats.running')}</p>
           <p className="text-2xl font-bold text-emerald-400">{runningApps}</p>
         </GlassCard>
         <GlassCard>
-          <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">Role</p>
+          <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">{t('profile.stats.role')}</p>
           <p className="text-2xl font-bold text-amber-400 capitalize">{user?.role}</p>
         </GlassCard>
       </div>
@@ -99,7 +102,7 @@ export function Profile() {
             <Github size={20} className="text-zinc-400" />
             <div>
               <p className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-                GitHub Account
+                {t('profile.github.title')}
               </p>
               <p className="text-[11px] text-zinc-500">
                 github.com/{user?.username}
@@ -116,7 +119,7 @@ export function Profile() {
               ${isDark ? 'text-zinc-400 hover:text-white hover:bg-zinc-800' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}
             `}
           >
-            View Profile
+            {t('profile.github.viewProfile')}
             <ExternalLink size={12} />
           </a>
         </div>

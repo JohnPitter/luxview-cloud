@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Terminal, type TerminalLine } from '../common/Terminal';
 
 interface BuildLogViewerProps {
@@ -21,12 +22,13 @@ function parseBuildLog(log: string): TerminalLine[] {
 }
 
 export function BuildLogViewer({ log, streaming = false }: BuildLogViewerProps) {
+  const { t } = useTranslation();
   const lines = parseBuildLog(log);
 
   return (
     <Terminal
       lines={lines}
-      title={streaming ? 'Build Output (live)' : 'Build Output'}
+      title={streaming ? t('deploy.buildLog.titleLive') : t('deploy.buildLog.title')}
       maxHeight="400px"
     />
   );

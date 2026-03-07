@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bell, X, CheckCircle, AlertCircle, AlertTriangle, Info, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useNotificationsStore, type Notification } from '../../stores/notifications.store';
 import { useThemeStore } from '../../stores/theme.store';
 
@@ -11,6 +12,7 @@ const icons: Record<string, React.ReactNode> = {
 };
 
 export function NotificationsDropdown() {
+  const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const notifications = useNotificationsStore((s) => s.notifications);
   const removeNotification = useNotificationsStore((s) => s.remove);
@@ -37,7 +39,7 @@ export function NotificationsDropdown() {
           backdrop-blur-md transition-all duration-200
           ${isDark ? 'bg-zinc-900/60 text-zinc-400 hover:text-white border border-zinc-800/50' : 'bg-white/60 text-zinc-500 hover:text-zinc-900 border border-zinc-200/60'}
         `}
-        title="Notifications"
+        title={t('common.notifications')}
       >
         <Bell size={18} />
         {notifications.length > 0 && (
@@ -57,7 +59,7 @@ export function NotificationsDropdown() {
         >
           <div className={`flex items-center justify-between px-4 py-3 border-b ${isDark ? 'border-zinc-800' : 'border-zinc-100'}`}>
             <span className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-              Notifications
+              {t('common.notifications')}
             </span>
             {notifications.length > 0 && (
               <button
@@ -65,7 +67,7 @@ export function NotificationsDropdown() {
                 className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-red-400 transition-colors"
               >
                 <Trash2 size={12} />
-                Clear all
+                {t('common.clearAll')}
               </button>
             )}
           </div>
@@ -74,7 +76,7 @@ export function NotificationsDropdown() {
             {notifications.length === 0 ? (
               <div className="py-10 text-center">
                 <Bell size={24} className="mx-auto mb-2 text-zinc-600" />
-                <p className="text-sm text-zinc-500">No notifications</p>
+                <p className="text-sm text-zinc-500">{t('common.noNotifications')}</p>
               </div>
             ) : (
               <div className={`divide-y ${isDark ? 'divide-zinc-800/50' : 'divide-zinc-100'}`}>

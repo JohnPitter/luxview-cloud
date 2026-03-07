@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle, X } from 'lucide-react';
 import { PillButton } from './PillButton';
 import { useThemeStore } from '../../stores/theme.store';
@@ -19,15 +20,18 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   variant = 'danger',
   onConfirm,
   onCancel,
   loading = false,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const resolvedConfirmLabel = confirmLabel || t('common.confirm');
+  const resolvedCancelLabel = cancelLabel || t('common.cancel');
 
   useEffect(() => {
     if (open) {
@@ -82,7 +86,7 @@ export function ConfirmDialog({
           </div>
           <div className="flex items-center justify-end gap-3 mt-6">
             <PillButton variant="ghost" size="sm" onClick={onCancel}>
-              {cancelLabel}
+              {resolvedCancelLabel}
             </PillButton>
             <PillButton
               variant={variant === 'danger' ? 'danger' : 'primary'}
@@ -90,7 +94,7 @@ export function ConfirmDialog({
               onClick={onConfirm}
               disabled={loading}
             >
-              {loading ? 'Processing...' : confirmLabel}
+              {loading ? t('common.processing') : resolvedConfirmLabel}
             </PillButton>
           </div>
         </div>

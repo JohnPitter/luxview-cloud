@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search, Pause, Play, Trash2 } from 'lucide-react';
 import { useThemeStore } from '../../stores/theme.store';
 
@@ -22,12 +23,14 @@ const levelColors: Record<string, string> = {
   debug: 'text-zinc-500',
 };
 
-export function Terminal({ lines, title = 'Terminal', maxHeight = '500px', onClear }: TerminalProps) {
+export function Terminal({ lines, title, maxHeight = '500px', onClear }: TerminalProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [search, setSearch] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const displayTitle = title || t('monitoring.terminal.title');
 
   const filteredLines = search
     ? lines.filter((l) => l.message.toLowerCase().includes(search.toLowerCase()))
@@ -60,20 +63,20 @@ export function Terminal({ lines, title = 'Terminal', maxHeight = '500px', onCle
             <span className="w-3 h-3 rounded-full bg-amber-500/80" />
             <span className="w-3 h-3 rounded-full bg-emerald-500/80" />
           </div>
-          <span className="text-xs text-zinc-500 font-mono ml-2">{title}</span>
+          <span className="text-xs text-zinc-500 font-mono ml-2">{displayTitle}</span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setShowSearch(!showSearch)}
             className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
-            title="Search"
+            title={t('monitoring.terminal.search')}
           >
             <Search size={14} />
           </button>
           <button
             onClick={() => setAutoScroll(!autoScroll)}
             className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
-            title={autoScroll ? 'Pause auto-scroll' : 'Resume auto-scroll'}
+            title={autoScroll ? t('monitoring.terminal.pauseAutoScroll') : t('monitoring.terminal.resumeAutoScroll')}
           >
             {autoScroll ? <Pause size={14} /> : <Play size={14} />}
           </button>
@@ -81,7 +84,7 @@ export function Terminal({ lines, title = 'Terminal', maxHeight = '500px', onCle
             <button
               onClick={onClear}
               className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
-              title="Clear"
+              title={t('monitoring.terminal.clear')}
             >
               <Trash2 size={14} />
             </button>
@@ -96,7 +99,7 @@ export function Terminal({ lines, title = 'Terminal', maxHeight = '500px', onCle
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search logs..."
+            placeholder={t('monitoring.terminal.searchPlaceholder')}
             className="w-full bg-zinc-800/50 rounded-lg px-3 py-1.5 text-xs font-mono text-zinc-300 placeholder-zinc-600 border border-zinc-700 focus:outline-none focus:border-amber-400/50"
             autoFocus
           />
@@ -112,7 +115,7 @@ export function Terminal({ lines, title = 'Terminal', maxHeight = '500px', onCle
       >
         {filteredLines.length === 0 ? (
           <div className="text-zinc-600 text-center py-8">
-            {search ? 'No matching log entries' : 'Waiting for output...'}
+            {search ? t('monitoring.terminal.noMatchingEntries') : t('monitoring.terminal.waitingForOutput')}
           </div>
         ) : (
           filteredLines.map((line, i) => (

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Terminal, type TerminalLine } from '../common/Terminal';
 import { useThemeStore } from '../../stores/theme.store';
 
@@ -10,6 +11,7 @@ interface LogViewerProps {
 type LogLevel = 'all' | 'info' | 'error' | 'warn' | 'debug';
 
 export function LogViewer({ logs, onClear }: LogViewerProps) {
+  const { t } = useTranslation();
   const [level, setLevel] = useState<LogLevel>('all');
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
@@ -19,6 +21,13 @@ export function LogViewer({ logs, onClear }: LogViewerProps) {
   );
 
   const levels: LogLevel[] = ['all', 'info', 'warn', 'error', 'debug'];
+  const levelLabelKeys: Record<LogLevel, string> = {
+    all: 'monitoring.logViewer.levels.all',
+    info: 'monitoring.logViewer.levels.info',
+    warn: 'monitoring.logViewer.levels.warn',
+    error: 'monitoring.logViewer.levels.error',
+    debug: 'monitoring.logViewer.levels.debug',
+  };
 
   return (
     <div className="space-y-3">
@@ -40,12 +49,12 @@ export function LogViewer({ logs, onClear }: LogViewerProps) {
               }
             `}
           >
-            {l}
+            {t(levelLabelKeys[l])}
           </button>
         ))}
       </div>
 
-      <Terminal lines={filtered} title="Application Logs" maxHeight="600px" onClear={onClear} />
+      <Terminal lines={filtered} title={t('monitoring.logViewer.title')} maxHeight="600px" onClear={onClear} />
     </div>
   );
 }

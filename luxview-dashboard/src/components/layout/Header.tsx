@@ -1,11 +1,13 @@
 import { LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/auth.store';
 import { useThemeStore } from '../../stores/theme.store';
 import { NotificationsDropdown } from './NotificationsDropdown';
 
 export function Header() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -32,7 +34,7 @@ export function Header() {
           <button
             onClick={() => navigate('/dashboard/profile')}
             className="flex items-center gap-3 hover:opacity-80 transition-opacity"
-            title="View Profile"
+            title={t('common.viewProfile')}
           >
             <img
               src={user.avatarUrl || `https://github.com/${user.username}.png`}
@@ -51,7 +53,7 @@ export function Header() {
               ml-1 p-1 rounded-lg transition-all duration-200
               ${isDark ? 'text-zinc-500 hover:text-red-400 hover:bg-zinc-800/50' : 'text-zinc-400 hover:text-red-500 hover:bg-zinc-100'}
             `}
-            title="Logout"
+            title={t('common.logout')}
           >
             <LogOut size={16} />
           </button>

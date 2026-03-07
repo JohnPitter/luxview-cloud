@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { GitCommit, Clock, RotateCcw, Check, X, Loader2 } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { PillButton } from '../common/PillButton';
@@ -30,11 +31,12 @@ const statusColors: Record<DeployStatus, string> = {
 };
 
 export function DeployHistory({ deployments, onRollback, onViewLog }: DeployHistoryProps) {
+  const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
   if (deployments.length === 0) {
     return (
-      <div className="text-center py-12 text-zinc-500 text-sm">No deployments yet</div>
+      <div className="text-center py-12 text-zinc-500 text-sm">{t('deploy.history.noDeployments')}</div>
     );
   }
 
@@ -61,7 +63,7 @@ export function DeployHistory({ deployments, onRollback, onViewLog }: DeployHist
                   </span>
                   {i === 0 && deploy.status === 'live' && (
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      CURRENT
+                      {t('deploy.history.current')}
                     </span>
                   )}
                 </div>
@@ -70,7 +72,7 @@ export function DeployHistory({ deployments, onRollback, onViewLog }: DeployHist
                     isDark ? 'text-zinc-200' : 'text-zinc-800'
                   }`}
                 >
-                  {deploy.commitMessage || 'No commit message'}
+                  {deploy.commitMessage || t('deploy.history.noCommitMessage')}
                 </p>
               </div>
             </div>
@@ -96,7 +98,7 @@ export function DeployHistory({ deployments, onRollback, onViewLog }: DeployHist
                   }}
                   icon={<RotateCcw size={12} />}
                 >
-                  Rollback
+                  {t('deploy.history.rollback')}
                 </PillButton>
               )}
             </div>

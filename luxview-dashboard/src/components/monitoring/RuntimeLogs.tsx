@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Loader2, RotateCcw, Wifi, WifiOff, ArrowDown, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { appsApi } from '../../api/apps';
 import { useThemeStore } from '../../stores/theme.store';
@@ -11,6 +12,7 @@ interface RuntimeLogsProps {
 const LINES_PER_PAGE = 100;
 
 export function RuntimeLogs({ appId, containerId }: RuntimeLogsProps) {
+  const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [lines, setLines] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
@@ -109,7 +111,7 @@ export function RuntimeLogs({ appId, containerId }: RuntimeLogsProps) {
           isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-50 border-zinc-200'
         }`}
       >
-        <span className="text-sm text-zinc-500">No container running. Deploy the app to see runtime logs.</span>
+        <span className="text-sm text-zinc-500">{t('monitoring.runtimeLogs.noContainer')}</span>
       </div>
     );
   }
@@ -126,12 +128,12 @@ export function RuntimeLogs({ appId, containerId }: RuntimeLogsProps) {
             <WifiOff size={14} className="text-zinc-500" />
           )}
           <span className={`text-[11px] ${connected ? 'text-emerald-400' : 'text-zinc-500'}`}>
-            {connected ? 'Live' : 'Disconnected'}
+            {connected ? t('monitoring.runtimeLogs.live') : t('monitoring.runtimeLogs.disconnected')}
           </span>
         </div>
 
         <span className={`text-[11px] ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
-          {filtered.length} lines
+          {t('monitoring.runtimeLogs.lines', { count: filtered.length })}
         </span>
 
         <div className="flex-1" />
@@ -163,7 +165,7 @@ export function RuntimeLogs({ appId, containerId }: RuntimeLogsProps) {
           }`}
         >
           <ArrowDown size={10} className="inline mr-1" />
-          Auto
+          {t('monitoring.runtimeLogs.auto')}
         </button>
 
         {/* Refresh */}
@@ -176,7 +178,7 @@ export function RuntimeLogs({ appId, containerId }: RuntimeLogsProps) {
           }`}
         >
           <RotateCcw size={10} className="inline mr-1" />
-          Refresh
+          {t('monitoring.runtimeLogs.refresh')}
         </button>
       </div>
 
@@ -189,7 +191,7 @@ export function RuntimeLogs({ appId, containerId }: RuntimeLogsProps) {
             setSearch(e.target.value);
             setPage(0);
           }}
-          placeholder="Filter logs..."
+          placeholder={t('monitoring.runtimeLogs.filterPlaceholder')}
           className={`w-full px-3 py-2 text-xs font-mono rounded-lg border transition-all focus:outline-none focus:border-amber-400/50 ${
             isDark
               ? 'bg-zinc-900/50 border-zinc-800 text-zinc-300 placeholder:text-zinc-600'
@@ -214,11 +216,11 @@ export function RuntimeLogs({ appId, containerId }: RuntimeLogsProps) {
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
           </div>
-          <span className="text-[11px] text-zinc-500 font-mono ml-1">Runtime Logs — newest first</span>
+          <span className="text-[11px] text-zinc-500 font-mono ml-1">{t('monitoring.runtimeLogs.title')}</span>
           {connected && (
             <span className="ml-auto flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[10px] text-emerald-400/70">streaming</span>
+              <span className="text-[10px] text-emerald-400/70">{t('monitoring.runtimeLogs.streaming')}</span>
             </span>
           )}
         </div>
@@ -232,11 +234,11 @@ export function RuntimeLogs({ appId, containerId }: RuntimeLogsProps) {
           {loading ? (
             <div className="flex items-center gap-2 text-zinc-500 py-8 justify-center">
               <Loader2 size={14} className="animate-spin" />
-              Connecting to log stream...
+              {t('monitoring.runtimeLogs.connectingToLogStream')}
             </div>
           ) : pageLines.length === 0 ? (
             <div className="text-zinc-500 text-center py-8">
-              {search ? 'No matching log entries.' : 'No runtime logs yet. Waiting for output...'}
+              {search ? t('monitoring.runtimeLogs.noMatchingEntries') : t('monitoring.runtimeLogs.waitingForOutput')}
             </div>
           ) : (
             pageLines.map((line, i) => {
@@ -272,10 +274,10 @@ export function RuntimeLogs({ appId, containerId }: RuntimeLogsProps) {
                   : 'text-zinc-400 hover:text-amber-400'
               }`}
             >
-              <ChevronLeft size={12} /> Newer
+              <ChevronLeft size={12} /> {t('monitoring.runtimeLogs.newer')}
             </button>
             <span className="text-[11px] text-zinc-500">
-              Page {page + 1} of {totalPages}
+              {t('monitoring.runtimeLogs.pageOf', { current: page + 1, total: totalPages })}
             </span>
             <button
               onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
@@ -286,7 +288,7 @@ export function RuntimeLogs({ appId, containerId }: RuntimeLogsProps) {
                   : 'text-zinc-400 hover:text-amber-400'
               }`}
             >
-              Older <ChevronRight size={12} />
+              {t('monitoring.runtimeLogs.older')} <ChevronRight size={12} />
             </button>
           </div>
         )}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Check, X, Loader2 } from 'lucide-react';
 import { useThemeStore } from '../../stores/theme.store';
 import { appsApi } from '../../api/apps';
@@ -13,6 +14,7 @@ interface SubdomainInputProps {
 export function SubdomainInput({ value, onChange, onAvailabilityChange }: SubdomainInputProps) {
   const [checking, setChecking] = useState(false);
   const [available, setAvailable] = useState<boolean | null>(null);
+  const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
   const checkAvailability = useCallback(
@@ -47,7 +49,7 @@ export function SubdomainInput({ value, onChange, onAvailabilityChange }: Subdom
   return (
     <div>
       <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
-        Subdomain
+        {t('deploy.wizard.configure.subdomain')}
       </label>
       <div className="flex items-center gap-0">
         <div className="relative flex-1">
@@ -55,7 +57,7 @@ export function SubdomainInput({ value, onChange, onAvailabilityChange }: Subdom
             type="text"
             value={value}
             onChange={(e) => onChange(slugify(e.target.value))}
-            placeholder="my-app"
+            placeholder={t('deploy.wizard.configure.subdomainPlaceholder')}
             className={`
               w-full px-4 py-2.5 rounded-l-xl text-sm
               border-y border-l transition-all duration-200
@@ -95,10 +97,10 @@ export function SubdomainInput({ value, onChange, onAvailabilityChange }: Subdom
         </span>
       </div>
       {available === false && (
-        <p className="text-xs text-red-400 mt-1.5">This subdomain is already taken</p>
+        <p className="text-xs text-red-400 mt-1.5">{t('deploy.wizard.configure.subdomainTaken')}</p>
       )}
       {available === true && (
-        <p className="text-xs text-emerald-400 mt-1.5">Subdomain is available</p>
+        <p className="text-xs text-emerald-400 mt-1.5">{t('deploy.wizard.configure.subdomainAvailable')}</p>
       )}
     </div>
   );

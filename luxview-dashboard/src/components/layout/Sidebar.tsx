@@ -1,4 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   LayoutDashboard,
   Plus,
@@ -10,21 +11,22 @@ import { useAuthStore } from '../../stores/auth.store';
 
 interface SidebarItem {
   icon: typeof LayoutDashboard;
-  label: string;
+  labelKey: string;
   path: string;
   adminOnly?: boolean;
 }
 
 const items: SidebarItem[] = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-  { icon: Plus, label: 'New App', path: '/dashboard/new' },
-  { icon: Settings, label: 'Settings', path: '/dashboard/settings' },
-  { icon: Shield, label: 'Admin', path: '/dashboard/admin', adminOnly: true },
+  { icon: LayoutDashboard, labelKey: 'layout.sidebar.dashboard', path: '/dashboard' },
+  { icon: Plus, labelKey: 'layout.sidebar.newApp', path: '/dashboard/new' },
+  { icon: Settings, labelKey: 'layout.sidebar.settings', path: '/dashboard/settings' },
+  { icon: Shield, labelKey: 'layout.sidebar.admin', path: '/dashboard/admin', adminOnly: true },
 ];
 
 export function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const user = useAuthStore((s) => s.user);
 
@@ -45,7 +47,7 @@ export function Sidebar() {
           const Icon = item.icon;
           return (
             <button
-              key={item.label}
+              key={item.path}
               onClick={() => navigate(item.path)}
               className={`
                 flex items-center justify-center w-10 h-10 rounded-xl
@@ -58,7 +60,7 @@ export function Sidebar() {
                       : 'text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100'
                 }
               `}
-              title={item.label}
+              title={t(item.labelKey)}
             >
               <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
             </button>

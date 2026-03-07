@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ExternalLink, GitBranch, Clock } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { StatusDot } from '../common/StatusDot';
@@ -33,6 +34,7 @@ const stackColors: Record<string, string> = {
 
 export function AppCard({ app, metrics }: AppCardProps) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const cpuPercent = metrics?.cpuPercent ?? 0;
   const memoryMB = metrics?.memoryBytes ? metrics.memoryBytes / (1024 * 1024) : 0;

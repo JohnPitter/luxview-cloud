@@ -1,15 +1,19 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft } from 'lucide-react';
 import { DeployWizard, type DeployConfig } from '../components/deploy/DeployWizard';
 import { PillButton } from '../components/common/PillButton';
+import { PageTour } from '../components/common/PageTour';
 import { useAppsStore } from '../stores/apps.store';
 import { useNotificationsStore } from '../stores/notifications.store';
 import { useThemeStore } from '../stores/theme.store';
 import { githubApi, type GithubRepo } from '../api/github';
+import { newAppTourSteps } from '../tours/newApp';
 
 export function NewApp() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const createApp = useAppsStore((s) => s.createApp);
   const apps = useAppsStore((s) => s.apps);
   const fetchApps = useAppsStore((s) => s.fetchApps);
@@ -27,10 +31,10 @@ export function NewApp() {
       .listRepos()
       .then(setRepos)
       .catch(() => {
-        addNotification({ type: 'error', title: 'Failed to load repositories' });
+        addNotification({ type: 'error', title: t('app.notifications.failedToLoadRepos') });
       })
       .finally(() => setLoadingRepos(false));
-  }, [addNotification, fetchApps]);
+  }, [addNotification, fetchApps, t]);
 
   const deployedRepoUrls = useMemo(
     () => new Set(apps.map((a) => a.repoUrl.replace(/\.git$/, ''))),
@@ -66,15 +70,15 @@ export function NewApp() {
       });
       addNotification({
         type: 'success',
-        title: 'Deployment started',
-        message: `${app.name} is being deployed...`,
+        title: t('app.notifications.deploymentStarted'),
+        message: t('app.notifications.deploymentStartedMessage', { name: app.name }),
       });
       navigate(`/dashboard/apps/${app.id}`);
     } catch {
       addNotification({
         type: 'error',
-        title: 'Deployment failed',
-        message: 'Could not create the app. Please try again.',
+        title: t('app.notifications.deploymentFailed'),
+        message: t('app.notifications.deploymentFailedMessage'),
       });
     } finally {
       setDeploying(false);
@@ -83,6 +87,8 @@ export function NewApp() {
 
   return (
     <div className="animate-fade-in">
+      <PageTour tourId="newApp" steps={newAppTourSteps} autoStart />
+
       <div className="flex items-center gap-4 mb-8">
         <PillButton
           variant="ghost"
@@ -90,7 +96,7 @@ export function NewApp() {
           onClick={() => navigate('/dashboard')}
           icon={<ArrowLeft size={16} />}
         >
-          Back
+          {t('common.back')}
         </PillButton>
         <div>
           <h1
@@ -98,9 +104,9 @@ export function NewApp() {
               isDark ? 'text-zinc-100' : 'text-zinc-900'
             }`}
           >
-            Deploy New App
+            {t('app.title')}
           </h1>
-          <p className="text-sm text-zinc-500 mt-0.5">Select a repository and configure your deployment</p>
+          <p className="text-sm text-zinc-500 mt-0.5">{t('app.subtitle')}</p>
         </div>
       </div>
 

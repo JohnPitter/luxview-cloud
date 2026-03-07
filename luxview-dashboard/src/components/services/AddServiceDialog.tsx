@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Database, Zap } from 'lucide-react';
 import { PillButton } from '../common/PillButton';
 import { useThemeStore } from '../../stores/theme.store';
@@ -14,21 +15,22 @@ interface AddServiceDialogProps {
 
 const services: Array<{
   type: ServiceType;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   icon: string;
   color: string;
 }> = [
-  { type: 'postgres', label: 'PostgreSQL', description: 'Relational database', icon: 'PG', color: 'border-blue-500/30 hover:border-blue-500/60' },
-  { type: 'redis', label: 'Redis', description: 'In-memory cache & queue', icon: 'RD', color: 'border-red-500/30 hover:border-red-500/60' },
-  { type: 'mongodb', label: 'MongoDB', description: 'Document database', icon: 'MG', color: 'border-emerald-500/30 hover:border-emerald-500/60' },
-  { type: 'rabbitmq', label: 'RabbitMQ', description: 'Message broker', icon: 'RQ', color: 'border-orange-500/30 hover:border-orange-500/60' },
-  { type: 's3', label: 'Object Storage', description: 'S3-compatible file storage', icon: 'S3', color: 'border-purple-500/30 hover:border-purple-500/60' },
+  { type: 'postgres', labelKey: 'services.dialog.postgres.label', descriptionKey: 'services.dialog.postgres.description', icon: 'PG', color: 'border-blue-500/30 hover:border-blue-500/60' },
+  { type: 'redis', labelKey: 'services.dialog.redis.label', descriptionKey: 'services.dialog.redis.description', icon: 'RD', color: 'border-red-500/30 hover:border-red-500/60' },
+  { type: 'mongodb', labelKey: 'services.dialog.mongodb.label', descriptionKey: 'services.dialog.mongodb.description', icon: 'MG', color: 'border-emerald-500/30 hover:border-emerald-500/60' },
+  { type: 'rabbitmq', labelKey: 'services.dialog.rabbitmq.label', descriptionKey: 'services.dialog.rabbitmq.description', icon: 'RQ', color: 'border-orange-500/30 hover:border-orange-500/60' },
+  { type: 's3', labelKey: 'services.dialog.s3.label', descriptionKey: 'services.dialog.s3.description', icon: 'S3', color: 'border-purple-500/30 hover:border-purple-500/60' },
 ];
 
 export function AddServiceDialog({ open, onClose, onAdd, existingTypes, loading }: AddServiceDialogProps) {
   const [selected, setSelected] = useState<ServiceType | null>(null);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const { t } = useTranslation();
 
   if (!open) return null;
 
@@ -44,7 +46,7 @@ export function AddServiceDialog({ open, onClose, onAdd, existingTypes, loading 
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className={`text-lg font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
-            Add Service
+            {t('services.dialog.title')}
           </h2>
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 transition-colors">
             <X size={18} />
@@ -76,10 +78,10 @@ export function AddServiceDialog({ open, onClose, onAdd, existingTypes, loading 
                   {svc.icon}
                 </span>
                 <p className={`text-sm font-medium mt-2 ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-                  {svc.label}
+                  {t(svc.labelKey)}
                 </p>
                 <p className="text-[11px] text-zinc-500 mt-0.5">
-                  {exists ? 'Already added' : svc.description}
+                  {exists ? t('services.dialog.alreadyAdded') : t(svc.descriptionKey)}
                 </p>
               </button>
             );
@@ -88,7 +90,7 @@ export function AddServiceDialog({ open, onClose, onAdd, existingTypes, loading 
 
         <div className="flex justify-end gap-3">
           <PillButton variant="ghost" size="sm" onClick={onClose}>
-            Cancel
+            {t('services.dialog.cancel')}
           </PillButton>
           <PillButton
             variant="primary"
@@ -96,7 +98,7 @@ export function AddServiceDialog({ open, onClose, onAdd, existingTypes, loading 
             disabled={!selected || loading}
             onClick={() => selected && onAdd(selected)}
           >
-            {loading ? 'Provisioning...' : 'Add Service'}
+            {loading ? t('services.dialog.provisioning') : t('services.dialog.add')}
           </PillButton>
         </div>
       </div>

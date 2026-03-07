@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useThemeStore } from '../../stores/theme.store';
 
 interface UptimeBarProps {
@@ -13,13 +14,14 @@ const statusColors = {
 };
 
 export function UptimeBar({ days, uptimePercent }: UptimeBarProps) {
+  const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
         <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-          Uptime (30 days)
+          {t('monitoring.uptime.title')}
         </span>
         <span
           className={`text-sm font-mono font-bold ${
@@ -43,8 +45,8 @@ export function UptimeBar({ days, uptimePercent }: UptimeBarProps) {
         ))}
       </div>
       <div className="flex items-center justify-between mt-2">
-        <span className="text-[11px] text-zinc-500">30 days ago</span>
-        <span className="text-[11px] text-zinc-500">Today</span>
+        <span className="text-[11px] text-zinc-500">{t('monitoring.uptime.daysAgo')}</span>
+        <span className="text-[11px] text-zinc-500">{t('monitoring.uptime.today')}</span>
       </div>
     </div>
   );

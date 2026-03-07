@@ -1,23 +1,25 @@
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Signal, Layers, FileText, Database, Sun, Moon } from 'lucide-react';
 import { useThemeStore } from '../../stores/theme.store';
 
 interface NavItem {
   icon: typeof Signal;
   path: string;
-  label: string;
+  labelKey: string;
 }
 
 const navItems: NavItem[] = [
-  { icon: Signal, path: '/dashboard/admin', label: 'Monitoring' },
-  { icon: Layers, path: '/dashboard', label: 'Apps' },
-  { icon: Database, path: '/dashboard/resources', label: 'Resources' },
-  { icon: FileText, path: '/dashboard/logs', label: 'Logs' },
+  { icon: Signal, path: '/dashboard/admin', labelKey: 'layout.toolbar.monitoring' },
+  { icon: Layers, path: '/dashboard', labelKey: 'layout.toolbar.apps' },
+  { icon: Database, path: '/dashboard/resources', labelKey: 'layout.toolbar.resources' },
+  { icon: FileText, path: '/dashboard/logs', labelKey: 'layout.toolbar.logs' },
 ];
 
 export function Toolbar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const { theme, toggleTheme } = useThemeStore();
   const isDark = theme === 'dark';
 
@@ -42,7 +44,7 @@ export function Toolbar() {
           active:scale-95
           ${isDark ? 'bg-zinc-900' : 'bg-zinc-100'}
         `}
-        title="LuxView Cloud"
+        title={t('layout.toolbar.luxviewCloud')}
       >
         <img src="/logo.svg" alt="LuxView Cloud" className="w-5 h-5" />
       </button>
@@ -56,7 +58,7 @@ export function Toolbar() {
         const Icon = item.icon;
         return (
           <button
-            key={item.label}
+            key={item.path}
             onClick={() => navigate(item.path)}
             className={`
               flex items-center justify-center w-8 h-8 rounded-lg
@@ -72,7 +74,7 @@ export function Toolbar() {
                     : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'
               }
             `}
-            title={item.label}
+            title={t(item.labelKey)}
           >
             <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
           </button>
@@ -90,7 +92,7 @@ export function Toolbar() {
           transition-all duration-200 hover:scale-110
           ${isDark ? 'text-zinc-400 hover:text-amber-400 hover:bg-zinc-800/50' : 'text-zinc-500 hover:text-amber-600 hover:bg-zinc-100'}
         `}
-        title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+        title={isDark ? t('layout.toolbar.switchToLight') : t('layout.toolbar.switchToDark')}
       >
         {isDark ? <Sun size={18} /> : <Moon size={18} />}
       </button>

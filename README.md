@@ -44,6 +44,8 @@ Think of it as your own **Heroku / Railway / Render** — but you own the infras
 | **Rollback** | One-click rollback to any previous successful deployment |
 | **Alerts** | Configure CPU/memory thresholds and get notified |
 | **Resource Limits** | CPU and memory limits per app (cgroups-enforced) |
+| **Internationalization** | Full i18n — English, Português (BR), Español. Auto-detects browser language |
+| **Guided Tours** | Interactive tutorials on every page via react-joyride. First-time onboarding included |
 | **GitHub OAuth** | Secure login via GitHub — no passwords to manage |
 
 ---
@@ -293,7 +295,7 @@ make prod && make migrate
 |:---:|:---:|
 | **Proxy** | Traefik v3 (SSL, routing, middleware) |
 | **Backend** | Go 1.23, Chi router, pgx, Docker SDK, MinIO SDK |
-| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, Zustand |
+| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, Zustand, react-i18next, react-joyride |
 | **Database** | PostgreSQL 16 |
 | **Storage** | MinIO (S3-compatible) |
 | **Containers** | Docker Engine API |
@@ -333,12 +335,14 @@ luxview-cloud/
       api/                      # API client layer (apps, services, deployments, metrics)
       components/               # UI components (apps, deploy, monitoring, services, layout, common)
       hooks/                    # Custom React hooks
+      i18n/                     # Internationalization setup + locale files (en, pt-BR, es)
       lib/                      # Utility functions
       pages/
         DbExplorer.tsx          # SQL editor + table browser + schema viewer
         S3Explorer.tsx          # S3 file browser (upload, download, delete)
         Resources.tsx           # Resource overview (all services across apps)
       stores/                   # Zustand state management
+      tours/                    # Interactive guided tour step definitions per page
 
   traefik/                      # Traefik configuration
   scripts/                      # VPS setup, deploy, backup scripts

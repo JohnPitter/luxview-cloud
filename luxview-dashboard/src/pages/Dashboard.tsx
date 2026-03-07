@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Plus,
   Rocket,
@@ -15,6 +16,7 @@ import { EmptyState } from '../components/common/EmptyState';
 import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
 import { StatusDot } from '../components/common/StatusDot';
+import { PageTour, isOnboardingComplete } from '../components/common/PageTour';
 import { useAppsStore } from '../stores/apps.store';
 import { useAuthStore } from '../stores/auth.store';
 import { useThemeStore } from '../stores/theme.store';
@@ -22,9 +24,11 @@ import { metricsApi, type LatestMetric } from '../api/metrics';
 import { servicesApi } from '../api/services';
 import { deploymentsApi } from '../api/deployments';
 import { formatRelativeTime } from '../lib/format';
+import { dashboardTourSteps } from '../tours/dashboard';
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { apps, loading, fetchApps } = useAppsStore();
   const user = useAuthStore((s) => s.user);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -97,6 +101,8 @@ export function Dashboard() {
 
   return (
     <div className="animate-fade-in">
+      <PageTour tourId="dashboard" steps={dashboardTourSteps} autoStart={!isOnboardingComplete()} />
+
       {/* Hero Header */}
       <div className="mb-8">
         <h1
@@ -104,39 +110,39 @@ export function Dashboard() {
             isDark ? 'text-zinc-100' : 'text-zinc-900'
           }`}
         >
-          Welcome back, {firstName}
+          {t('dashboard.welcomeBack', { name: firstName })}
         </h1>
         <p className="text-sm text-zinc-500 mt-1">
-          Here's what's happening with your applications
+          {t('dashboard.subtitle')}
         </p>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8" data-tour="stats-grid">
         {[
           {
-            label: 'Total Apps',
+            label: t('dashboard.stats.totalApps'),
             value: totalCount,
             icon: Server,
             color: 'text-amber-400',
             bg: 'bg-amber-500/10',
           },
           {
-            label: 'Running',
+            label: t('dashboard.stats.running'),
             value: runningCount,
             icon: Activity,
             color: 'text-emerald-400',
             bg: 'bg-emerald-500/10',
           },
           {
-            label: 'Resources',
+            label: t('dashboard.stats.resources'),
             value: resourceCount,
             icon: Database,
             color: 'text-blue-400',
             bg: 'bg-blue-500/10',
           },
           {
-            label: 'Deploys',
+            label: t('dashboard.stats.deploys'),
             value: recentDeploys.length > 0 ? recentDeploys.length + '+' : '0',
             icon: Rocket,
             color: 'text-violet-400',
@@ -166,14 +172,14 @@ export function Dashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-6" data-tour="new-app-btn">
         <PillButton
           variant="primary"
           size="md"
           onClick={() => navigate('/dashboard/new')}
           icon={<Plus size={16} />}
         >
-          New App
+          {t('common.newApp')}
         </PillButton>
         <PillButton
           variant="ghost"
@@ -181,23 +187,23 @@ export function Dashboard() {
           onClick={() => navigate('/dashboard/resources')}
           icon={<Database size={16} />}
         >
-          Resources
+          {t('common.resources')}
         </PillButton>
       </div>
 
       {/* Main Content */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Apps Column - 2/3 */}
-        <div className="xl:col-span-2">
+        <div className="xl:col-span-2" data-tour="apps-list">
           <div className="flex items-center justify-between mb-4">
             <h2
               className={`text-lg font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}
             >
-              Your Apps
+              {t('dashboard.yourApps')}
             </h2>
             {totalCount > 0 && (
               <span className="text-xs text-zinc-500">
-                {runningCount} of {totalCount} running
+                {t('dashboard.runningCount', { running: runningCount, total: totalCount })}
               </span>
             )}
           </div>
@@ -220,8 +226,8 @@ export function Dashboard() {
           {!loading && apps.length === 0 && (
             <EmptyState
               icon={<Server size={28} />}
-              title="No apps yet"
-              description="Deploy your first application from GitHub in just a few clicks. We auto-detect your stack and handle the rest."
+              title={t('dashboard.emptyState.title')}
+              description={t('dashboard.emptyState.description')}
               action={
                 <PillButton
                   variant="primary"
@@ -229,7 +235,7 @@ export function Dashboard() {
                   onClick={() => navigate('/dashboard/new')}
                   icon={<Rocket size={16} />}
                 >
-                  Deploy Your First App
+                  {t('dashboard.emptyState.cta')}
                 </PillButton>
               }
             />
@@ -248,17 +254,17 @@ export function Dashboard() {
         {/* Sidebar - 1/3 */}
         <div className="space-y-6">
           {/* Recent Deploys */}
-          <GlassCard>
+          <GlassCard data-tour="recent-deploys">
             <div className="flex items-center justify-between mb-4">
               <h3
                 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}
               >
-                Recent Deploys
+                {t('dashboard.recentDeploys')}
               </h3>
               <Zap size={14} className="text-zinc-500" />
             </div>
             {recentDeploys.length === 0 ? (
-              <p className="text-xs text-zinc-500 py-4 text-center">No deploys yet</p>
+              <p className="text-xs text-zinc-500 py-4 text-center">{t('dashboard.noDeploysYet')}</p>
             ) : (
               <div className="space-y-3">
                 {recentDeploys.map((d) => (
@@ -313,17 +319,17 @@ export function Dashboard() {
                 isDark ? 'text-zinc-200' : 'text-zinc-800'
               }`}
             >
-              Quick Links
+              {t('dashboard.quickLinks')}
             </h3>
             <div className="space-y-1">
               {[
-                { label: 'Deploy New App', path: '/dashboard/new', icon: Rocket },
-                { label: 'View Resources', path: '/dashboard/resources', icon: Database },
-                { label: 'Monitoring', path: '/dashboard/admin', icon: Activity },
-                { label: 'Build Logs', path: '/dashboard/logs', icon: GitBranch },
+                { label: t('dashboard.quickLinks.deployNewApp'), path: '/dashboard/new', icon: Rocket },
+                { label: t('dashboard.quickLinks.viewResources'), path: '/dashboard/resources', icon: Database },
+                { label: t('dashboard.quickLinks.monitoring'), path: '/dashboard/admin', icon: Activity },
+                { label: t('dashboard.quickLinks.buildLogs'), path: '/dashboard/logs', icon: GitBranch },
               ].map((link) => (
                 <button
-                  key={link.label}
+                  key={link.path}
                   onClick={() => navigate(link.path)}
                   className={`
                     w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-xs

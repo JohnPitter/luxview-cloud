@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { AppStatus } from '../../api/apps';
 
 interface AppStatusBadgeProps {
@@ -14,16 +15,18 @@ const statusStyles: Record<AppStatus, string> = {
   sleeping: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
 };
 
-const statusLabels: Record<AppStatus, string> = {
-  running: 'Running',
-  building: 'Building',
-  deploying: 'Deploying',
-  stopped: 'Stopped',
-  error: 'Error',
-  sleeping: 'Sleeping',
+const statusLabelKeys: Record<AppStatus, string> = {
+  running: 'common.status.running',
+  building: 'common.status.building',
+  deploying: 'common.status.deploying',
+  stopped: 'common.status.stopped',
+  error: 'common.status.error',
+  sleeping: 'common.status.sleeping',
 };
 
 export function AppStatusBadge({ status, size = 'sm' }: AppStatusBadgeProps) {
+  const { t } = useTranslation();
+
   return (
     <span
       className={`
@@ -32,7 +35,7 @@ export function AppStatusBadge({ status, size = 'sm' }: AppStatusBadgeProps) {
         ${size === 'sm' ? 'text-[11px] px-2.5 py-0.5' : 'text-xs px-3 py-1'}
       `}
     >
-      {statusLabels[status]}
+      {t(statusLabelKeys[status])}
     </span>
   );
 }
