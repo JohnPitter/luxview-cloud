@@ -2,8 +2,13 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
+	"os/exec"
+	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -202,4 +207,121 @@ func (h *AdminHandler) ListAllApps(w http.ResponseWriter, r *http.Request) {
 		"apps":  apps,
 		"total": total,
 	})
+}
+
+// VPSInfo returns host system information (CPU, RAM, disk) for the admin panel.
+func (h *AdminHandler) VPSInfo(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	info := map[string]interface{}{
+		"cpu_cores":    runtime.NumCPU(),
+		"go_version":   runtime.Version(),
+		"os":           runtime.GOOS,
+		"arch":         runtime.GOARCH,
+		"hostname":     getHostname(),
+		"total_memory": readTotalMemory(),
+		"disk":         readDiskUsage(),
+	}
+
+	// Calculate total allocated resources across all apps
+	apps, _, err := h.appRepo.ListAll(ctx, 1000, 0)
+	if err == nil {
+		var totalCPU float64
+		var totalMemory int64
+		for _, app := range apps {
+			if app.ResourceLimits.CPU != "" {
+				if cpu, err := strconv.ParseFloat(app.ResourceLimits.CPU, 64); err == nil {
+					totalCPU += cpu
+				}
+			} else {
+				totalCPU += 0.5 // default
+			}
+			if app.ResourceLimits.Memory != "" {
+				totalMemory += parseMemoryString(app.ResourceLimits.Memory)
+			} else {
+				totalMemory += 512 * 1024 * 1024 // default 512MB
+			}
+		}
+		info["allocated_cpu"] = fmt.Sprintf("%.1f", totalCPU)
+		info["allocated_memory"] = totalMemory
+		info["total_apps_counted"] = len(apps)
+	}
+
+	writeJSON(w, http.StatusOK, info)
+}
+
+func getHostname() string {
+	h, err := os.Hostname()
+	if err != nil {
+		return "unknown"
+	}
+	return h
+}
+
+// readTotalMemory reads total system memory from /proc/meminfo (works inside Docker containers with host /proc).
+func readTotalMemory() int64 {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "MemTotal:") {
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				kb, _ := strconv.ParseInt(parts[1], 10, 64)
+				return kb * 1024 // return bytes
+			}
+		}
+	}
+	return 0
+}
+
+// readDiskUsage uses df to get disk info for the root partition.
+func readDiskUsage() map[string]interface{} {
+	out, err := exec.Command("df", "-B1", "/").Output()
+	if err != nil {
+		return nil
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) < 2 {
+		return nil
+	}
+	fields := strings.Fields(lines[1])
+	if len(fields) < 6 {
+		return nil
+	}
+	total, _ := strconv.ParseInt(fields[1], 10, 64)
+	used, _ := strconv.ParseInt(fields[2], 10, 64)
+	available, _ := strconv.ParseInt(fields[3], 10, 64)
+	return map[string]interface{}{
+		"total":     total,
+		"used":      used,
+		"available": available,
+		"percent":   fields[4],
+	}
+}
+
+// parseMemoryString converts memory strings like "512m", "1g" to bytes.
+func parseMemoryString(s string) int64 {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if len(s) == 0 {
+		return 0
+	}
+	suffix := s[len(s)-1]
+	numStr := s[:len(s)-1]
+	val, err := strconv.ParseFloat(numStr, 64)
+	if err != nil {
+		return 0
+	}
+	switch suffix {
+	case 'g':
+		return int64(val * 1024 * 1024 * 1024)
+	case 'm':
+		return int64(val * 1024 * 1024)
+	case 'k':
+		return int64(val * 1024)
+	default:
+		v, _ := strconv.ParseInt(s, 10, 64)
+		return v
+	}
 }

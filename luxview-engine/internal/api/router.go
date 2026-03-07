@@ -148,6 +148,7 @@ func NewRouter(deps Deps) *chi.Mux {
 				r.Get("/admin/apps", adminHandler.ListAllApps)
 				r.Patch("/admin/users/{id}/role", adminHandler.UpdateUserRole)
 				r.Patch("/admin/apps/{id}/limits", adminHandler.UpdateAppLimits)
+				r.Get("/admin/vps-info", adminHandler.VPSInfo)
 			})
 		})
 	})

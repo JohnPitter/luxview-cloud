@@ -35,9 +35,27 @@ export interface AdminApp {
   updatedAt: string;
 }
 
+export interface VPSInfo {
+  cpu_cores: number;
+  go_version: string;
+  os: string;
+  arch: string;
+  hostname: string;
+  total_memory: number;
+  disk: { total: number; used: number; available: number; percent: string } | null;
+  allocated_cpu: string;
+  allocated_memory: number;
+  total_apps_counted: number;
+}
+
 export const adminApi = {
   async stats(): Promise<AdminStats> {
     const { data } = await api.get<AdminStats>('/admin/stats');
+    return data;
+  },
+
+  async vpsInfo(): Promise<VPSInfo> {
+    const { data } = await api.get<VPSInfo>('/admin/vps-info');
     return data;
   },
 

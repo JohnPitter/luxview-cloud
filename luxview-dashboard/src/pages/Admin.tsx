@@ -13,6 +13,10 @@ import {
   SlidersHorizontal,
   X,
   Check,
+  Cpu,
+  MemoryStick,
+  HardDrive,
+  Monitor,
 } from 'lucide-react';
 import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
@@ -21,7 +25,7 @@ import { AppStatusBadge } from '../components/apps/AppStatusBadge';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { useThemeStore } from '../stores/theme.store';
 import { useNotificationsStore } from '../stores/notifications.store';
-import { adminApi, type AdminStats, type AdminUser, type AdminApp } from '../api/admin';
+import { adminApi, type AdminStats, type AdminUser, type AdminApp, type VPSInfo } from '../api/admin';
 import { formatRelativeTime } from '../lib/format';
 
 type Tab = 'overview' | 'users' | 'apps';
@@ -42,6 +46,7 @@ export function Admin() {
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [stats, setStats] = useState<AdminStats | null>(null);
+  const [vpsInfo, setVpsInfo] = useState<VPSInfo | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [apps, setApps] = useState<AdminApp[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,12 +62,14 @@ export function Admin() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [statsData, usersData, appsData] = await Promise.all([
+      const [statsData, vpsData, usersData, appsData] = await Promise.all([
         adminApi.stats(),
+        adminApi.vpsInfo(),
         adminApi.listUsers(100, 0),
         adminApi.listApps(100, 0),
       ]);
       setStats(statsData);
+      setVpsInfo(vpsData);
       setUsers(usersData.users ?? []);
       setApps(appsData.apps ?? []);
     } catch {
@@ -212,6 +219,93 @@ export function Admin() {
                   color="bg-violet-500/10"
                 />
               </div>
+
+              {/* VPS Resources */}
+              {vpsInfo && (
+                <GlassCard>
+                  <div className="flex items-center gap-2 mb-5">
+                    <Monitor size={18} className="text-amber-400" />
+                    <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                      VPS Resources — {vpsInfo.hostname}
+                    </h3>
+                    <span className="text-[10px] text-zinc-500 font-mono ml-auto">
+                      {vpsInfo.os}/{vpsInfo.arch} • {vpsInfo.go_version}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    {/* CPU */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Cpu size={14} className="text-blue-400" />
+                        <span className="text-xs text-zinc-400 uppercase tracking-wider">CPU</span>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className={`text-xl font-bold tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+                          {vpsInfo.cpu_cores}
+                        </span>
+                        <span className="text-xs text-zinc-500">cores available</span>
+                      </div>
+                      <ResourceBar
+                        used={parseFloat(vpsInfo.allocated_cpu || '0')}
+                        total={vpsInfo.cpu_cores}
+                        label={`${vpsInfo.allocated_cpu || '0'} / ${vpsInfo.cpu_cores} cores allocated`}
+                        color="blue"
+                        isDark={isDark}
+                      />
+                    </div>
+
+                    {/* Memory */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <MemoryStick size={14} className="text-emerald-400" />
+                        <span className="text-xs text-zinc-400 uppercase tracking-wider">Memory</span>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className={`text-xl font-bold tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+                          {formatBytes(vpsInfo.total_memory)}
+                        </span>
+                        <span className="text-xs text-zinc-500">total</span>
+                      </div>
+                      <ResourceBar
+                        used={vpsInfo.allocated_memory}
+                        total={vpsInfo.total_memory}
+                        label={`${formatBytes(vpsInfo.allocated_memory)} / ${formatBytes(vpsInfo.total_memory)} allocated`}
+                        color="emerald"
+                        isDark={isDark}
+                      />
+                    </div>
+
+                    {/* Disk */}
+                    {vpsInfo.disk && (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <HardDrive size={14} className="text-amber-400" />
+                          <span className="text-xs text-zinc-400 uppercase tracking-wider">Disk</span>
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <span className={`text-xl font-bold tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+                            {formatBytes(vpsInfo.disk.total)}
+                          </span>
+                          <span className="text-xs text-zinc-500">total</span>
+                        </div>
+                        <ResourceBar
+                          used={vpsInfo.disk.used}
+                          total={vpsInfo.disk.total}
+                          label={`${formatBytes(vpsInfo.disk.used)} / ${formatBytes(vpsInfo.disk.total)} used (${vpsInfo.disk.percent})`}
+                          color="amber"
+                          isDark={isDark}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] text-zinc-500 mt-4">
+                    Resource allocation across {vpsInfo.total_apps_counted} app{vpsInfo.total_apps_counted !== 1 ? 's' : ''}.
+                    Apps without explicit limits default to 0.5 CPU / 512MB RAM.
+                  </p>
+                </GlassCard>
+              )}
 
               {/* Quick lists */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -628,6 +722,43 @@ export function Admin() {
         onConfirm={handleForceDelete}
         onCancel={() => setDeleteApp(null)}
       />
+    </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const val = bytes / Math.pow(1024, i);
+  return `${val < 10 ? val.toFixed(1) : Math.round(val)} ${units[i]}`;
+}
+
+interface ResourceBarProps {
+  used: number;
+  total: number;
+  label: string;
+  color: 'blue' | 'emerald' | 'amber';
+  isDark: boolean;
+}
+
+function ResourceBar({ used, total, label, color, isDark }: ResourceBarProps) {
+  const pct = total > 0 ? Math.min((used / total) * 100, 100) : 0;
+  const colorMap = {
+    blue: { bar: 'bg-blue-500', bg: isDark ? 'bg-zinc-800' : 'bg-zinc-200' },
+    emerald: { bar: 'bg-emerald-500', bg: isDark ? 'bg-zinc-800' : 'bg-zinc-200' },
+    amber: { bar: 'bg-amber-500', bg: isDark ? 'bg-zinc-800' : 'bg-zinc-200' },
+  };
+  const warn = pct > 80;
+  return (
+    <div className="space-y-1">
+      <div className={`w-full h-2 rounded-full overflow-hidden ${colorMap[color].bg}`}>
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${warn ? 'bg-red-500' : colorMap[color].bar}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className={`text-[10px] ${warn ? 'text-red-400' : 'text-zinc-500'}`}>{label}</p>
     </div>
   );
 }
