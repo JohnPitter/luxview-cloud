@@ -195,17 +195,33 @@ func (p *Provisioner) deprovisionPostgres(ctx context.Context, dbName string) er
 }
 
 // GetEnvVarsForService returns the env vars a service injects into the app container.
+// Injects multiple common env var names so the app can use whichever it expects.
 func (p *Provisioner) GetEnvVarsForService(svc *model.AppService, creds map[string]string) map[string]string {
 	envVars := make(map[string]string)
 	switch svc.ServiceType {
 	case model.ServicePostgres:
 		envVars["DATABASE_URL"] = creds["url"]
+		// Spring Boot / JDBC compatible
+		jdbcURL := fmt.Sprintf("jdbc:postgresql://%s:%s/%s", creds["host"], creds["port"], creds["database"])
+		envVars["SPRING_DATASOURCE_URL"] = jdbcURL
+		envVars["SPRING_DATASOURCE_USERNAME"] = creds["username"]
+		envVars["SPRING_DATASOURCE_PASSWORD"] = creds["password"]
+		envVars["PGHOST"] = creds["host"]
+		envVars["PGPORT"] = creds["port"]
+		envVars["PGDATABASE"] = creds["database"]
+		envVars["PGUSER"] = creds["username"]
+		envVars["PGPASSWORD"] = creds["password"]
 	case model.ServiceRedis:
 		envVars["REDIS_URL"] = creds["url"]
+		envVars["REDIS_HOST"] = creds["host"]
+		envVars["REDIS_PORT"] = creds["port"]
+		envVars["REDIS_PASSWORD"] = creds["password"]
 	case model.ServiceMongoDB:
 		envVars["MONGODB_URL"] = creds["url"]
+		envVars["MONGO_URL"] = creds["url"]
 	case model.ServiceRabbitMQ:
 		envVars["RABBITMQ_URL"] = creds["url"]
+		envVars["AMQP_URL"] = creds["url"]
 	}
 	return envVars
 }

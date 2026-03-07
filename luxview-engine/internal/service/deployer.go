@@ -33,6 +33,8 @@ type Deployer struct {
 	appRepo        *repository.AppRepo
 	deployRepo     *repository.DeploymentRepo
 	userRepo       *repository.UserRepo
+	serviceRepo    *repository.ServiceRepo
+	provisioner    *Provisioner
 	detector       *Detector
 	builder        *Builder
 	container      *ContainerManager
@@ -48,6 +50,8 @@ func NewDeployer(
 	appRepo *repository.AppRepo,
 	deployRepo *repository.DeploymentRepo,
 	userRepo *repository.UserRepo,
+	serviceRepo *repository.ServiceRepo,
+	provisioner *Provisioner,
 	docker *dockerclient.Client,
 	portManager *PortManager,
 	encryptionKey []byte,
@@ -59,6 +63,8 @@ func NewDeployer(
 		appRepo:       appRepo,
 		deployRepo:    deployRepo,
 		userRepo:      userRepo,
+		serviceRepo:   serviceRepo,
+		provisioner:   provisioner,
 		detector:      NewDetector(),
 		builder:       NewBuilder(docker),
 		container:     container,
@@ -175,6 +181,27 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 			} else {
 				log.Warn().Err(err).Msg("failed to decrypt env vars")
 			}
+		}
+	}
+
+	// Inject service env vars (DATABASE_URL, REDIS_URL, etc.)
+	services, err := d.serviceRepo.ListByAppID(ctx, app.ID)
+	if err == nil {
+		for _, svc := range services {
+			var encSvc string
+			if err := json.Unmarshal(svc.Credentials, &encSvc); err == nil {
+				if decrypted, err := crypto.Decrypt(encSvc, d.encryptionKey); err == nil {
+					var creds map[string]string
+					if err := json.Unmarshal([]byte(decrypted), &creds); err == nil {
+						for k, v := range d.provisioner.GetEnvVarsForService(&svc, creds) {
+							envVars[k] = v
+						}
+					}
+				}
+			}
+		}
+		if len(services) > 0 {
+			log.Info().Int("count", len(services)).Msg("injected service env vars")
 		}
 	}
 

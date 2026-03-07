@@ -64,7 +64,7 @@ func main() {
 	containerMgr := service.NewContainerManager(docker, cfg.AppNetwork)
 	provisioner := service.NewProvisioner(serviceRepo, cfg, encryptionKey)
 	routerSvc := service.NewRouterService(appRepo, cfg.Domain)
-	deployer := service.NewDeployer(appRepo, deployRepo, userRepo, docker, portManager, encryptionKey, time.Duration(cfg.BuildTimeout)*time.Second, cfg.AppNetwork)
+	deployer := service.NewDeployer(appRepo, deployRepo, userRepo, serviceRepo, provisioner, docker, portManager, encryptionKey, time.Duration(cfg.BuildTimeout)*time.Second, cfg.AppNetwork)
 	metricsCollector := service.NewMetricsCollector(appRepo, metricRepo, docker)
 	healthChecker := service.NewHealthChecker(appRepo, containerMgr)
 	alerter := service.NewAlerter(alertRepo, metricRepo, appRepo)

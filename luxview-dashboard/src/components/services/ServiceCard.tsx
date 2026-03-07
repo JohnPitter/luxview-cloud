@@ -23,7 +23,7 @@ export function ServiceCard({ service, onDelete }: ServiceCardProps) {
   const config = serviceConfig[service.serviceType];
 
   const copyUrl = async () => {
-    await navigator.clipboard.writeText((service.credentials?.connectionUrl || ""));
+    await navigator.clipboard.writeText((service.credentials?.url || ""));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -89,8 +89,8 @@ export function ServiceCard({ service, onDelete }: ServiceCardProps) {
           `}
         >
           {showCreds
-            ? (service.credentials?.connectionUrl || "")
-            : (service.credentials?.connectionUrl || '').replace(
+            ? (service.credentials?.url || "")
+            : (service.credentials?.url || '').replace(
                 /\/\/.*@/,
                 '//****:****@',
               )}
