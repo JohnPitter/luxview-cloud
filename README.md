@@ -39,7 +39,7 @@ Think of it as your own **Heroku / Railway / Render** — but you own the infras
 | **S3 File Browser** | Upload, download, and manage files in your S3-compatible storage buckets |
 | **Environment Variables** | Encrypted at rest (AES-256-GCM), injected at deploy time |
 | **Real-time Metrics** | CPU, RAM, and network usage per container — live in the dashboard |
-| **Build & Runtime Logs** | Full deploy build logs + live container output |
+| **Real-time Logs** | SSE-streamed runtime logs (newest first, paginated) + full build logs |
 | **Auto Deploy** | Push to your branch, GitHub webhook triggers a new deploy automatically |
 | **Rollback** | One-click rollback to any previous successful deployment |
 | **Alerts** | Configure CPU/memory thresholds and get notified |

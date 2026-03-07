@@ -70,23 +70,46 @@ All services enforce per-app isolation:
 - "Browse Files" button for S3 services
 - S3-specific credential display (endpoint, bucket, access key, secret key)
 
-## 5. Files Changed
+## 5. Real-time Runtime Logs
+
+### Backend
+- `GET /api/apps/{id}/logs/stream` — SSE endpoint that streams container logs in real time
+- Uses Docker `Follow` mode for continuous streaming
+- Strips Docker multiplexed headers per line
+- Auth via `?token=` query param (EventSource doesn't support custom headers)
+- Logger middleware `responseWriter` implements `http.Flusher` for SSE compatibility
+
+### Frontend (`RuntimeLogs` component)
+- EventSource SSE connection with auto-reconnect (3s delay)
+- Logs displayed **newest first** (reversed order)
+- Pagination: 100 lines per page with Newer/Older navigation
+- Live connection indicator (green dot + "streaming" label)
+- Search/filter, auto-scroll toggle
+- Color-coded log levels (error=red, warn=yellow, info=green, debug=gray)
+
+## 6. Files Changed
 
 ### Created
 - `luxview-engine/internal/api/handlers/db_explorer.go`
 - `luxview-dashboard/src/pages/DbExplorer.tsx`
 - `luxview-dashboard/src/pages/S3Explorer.tsx`
+- `luxview-dashboard/src/components/monitoring/RuntimeLogs.tsx`
 
 ### Modified
-- `luxview-engine/internal/api/router.go` — added explorer routes
+- `luxview-engine/internal/api/router.go` — added explorer + log stream routes
+- `luxview-engine/internal/api/handlers/apps.go` — SSE streaming endpoint
+- `luxview-engine/internal/api/middleware/logger.go` — Flush/Unwrap for SSE
+- `luxview-engine/internal/service/container.go` — LogsFollow method
+- `luxview-engine/pkg/docker/client.go` — ContainerLogsFollow with Follow mode
 - `luxview-engine/internal/service/provisioner.go` — S3 provisioning + isolation for all services
 - `luxview-engine/internal/service/deployer.go` — env var priority (service first, user overrides)
 - `luxview-engine/internal/repository/service_repo.go` — added `CountByType`
 - `luxview-engine/internal/model/service.go` — added `ServiceS3` type
 - `luxview-engine/Dockerfile` — added `docker-cli` for MongoDB provisioning
+- `luxview-dashboard/src/api/apps.ts` — logsStreamUrl helper
 - `luxview-dashboard/src/api/services.ts` — explorer API methods + S3 types
 - `luxview-dashboard/src/pages/Resources.tsx` — S3 category + explorer buttons
-- `luxview-dashboard/src/pages/AppDetail.tsx` — fixed service delete call
+- `luxview-dashboard/src/pages/AppDetail.tsx` — RuntimeLogs component integration
 - `luxview-dashboard/src/components/services/AddServiceDialog.tsx` — S3 option
 - `luxview-dashboard/src/components/services/ServiceCard.tsx` — S3 config
 - `luxview-dashboard/src/App.tsx` — DB/S3 explorer routes
