@@ -188,8 +188,13 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		return fmt.Errorf("start container: %w", err)
 	}
 
-	// Health check
-	healthy := d.healthChecker.WaitForHealthy(ctx, app.ID, app.AssignedPort, 60*time.Second)
+	// Health check — longer timeout for slow-starting stacks (Java, etc.)
+	healthTimeout := 60 * time.Second
+	switch bp.Name() {
+	case "java", "nextjs":
+		healthTimeout = 180 * time.Second
+	}
+	healthy := d.healthChecker.WaitForHealthy(ctx, app.ID, app.AssignedPort, healthTimeout)
 	if !healthy {
 		// Rollback: stop new, restart old
 		_ = d.container.Stop(ctx, containerID)

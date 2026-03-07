@@ -18,14 +18,22 @@ export function Dashboard() {
     fetchApps();
   }, [fetchApps]);
 
+  const hasTransitional = apps.some((a) => ['building', 'deploying'].includes(a.status));
+
+  // Poll app statuses + metrics — faster when any app is in a transitional state
   useEffect(() => {
     if (apps.length === 0) return;
-    metricsApi.getLatestAll().then(setLatestMetrics).catch(() => {});
-    const interval = setInterval(() => {
+
+    const poll = () => {
+      fetchApps();
       metricsApi.getLatestAll().then(setLatestMetrics).catch(() => {});
-    }, 30000);
+    };
+
+    const intervalMs = hasTransitional ? 5000 : 30000;
+    metricsApi.getLatestAll().then(setLatestMetrics).catch(() => {});
+    const interval = setInterval(poll, intervalMs);
     return () => clearInterval(interval);
-  }, [apps.length]);
+  }, [apps.length, hasTransitional, fetchApps]);
 
   const runningCount = apps.filter((a) => a.status === 'running').length;
   const totalCount = apps.length;
