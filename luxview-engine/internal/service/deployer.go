@@ -194,7 +194,7 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	case "java", "nextjs":
 		healthTimeout = 180 * time.Second
 	}
-	healthy := d.healthChecker.WaitForHealthy(ctx, app.ID, app.AssignedPort, healthTimeout)
+	healthy := d.healthChecker.WaitForHealthy(ctx, app.ID, containerID, app.InternalPort, app.AssignedPort, healthTimeout)
 	if !healthy {
 		// Rollback: stop new, restart old
 		_ = d.container.Stop(ctx, containerID)

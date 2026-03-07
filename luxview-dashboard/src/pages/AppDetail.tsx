@@ -85,10 +85,13 @@ export function AppDetail() {
     }
   }, [appId, fetchApp]);
 
+  // Track the status at the moment the user clicked an action
+  const [statusWhenActionStarted, setStatusWhenActionStarted] = useState<string | null>(null);
+
   // Poll app status + deployments every 3s when in a transitional state or after user action
   useEffect(() => {
     if (!appId || !app) return;
-    const transitional = ['building', 'deploying', 'stopped'];
+    const transitional = ['building', 'deploying'];
     const shouldPoll = actionPending || transitional.includes(app.status);
     if (!shouldPoll) return;
 
@@ -99,13 +102,17 @@ export function AppDetail() {
     poll(); // immediate first poll
     const interval = setInterval(poll, 3000);
 
-    // Stop polling once app reaches a final state and action is no longer pending
-    if (actionPending && !['building', 'deploying'].includes(app.status)) {
-      setActionPending(false);
+    // Stop actionPending only after the status has actually changed from when the action started
+    if (actionPending && statusWhenActionStarted && app.status !== statusWhenActionStarted) {
+      // Status changed — if it's now in a final state, stop pending
+      if (!transitional.includes(app.status)) {
+        setActionPending(false);
+        setStatusWhenActionStarted(null);
+      }
     }
 
     return () => clearInterval(interval);
-  }, [appId, app?.status, actionPending, fetchApp]);
+  }, [appId, app?.status, actionPending, statusWhenActionStarted, fetchApp]);
 
   useEffect(() => {
     if (app) {
@@ -258,7 +265,7 @@ export function AppDetail() {
             <PillButton
               variant="secondary"
               size="sm"
-              onClick={() => { deployApp(appId!); setActionPending(true); }}
+              onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); deployApp(appId!); }}
               icon={<Play size={14} />}
             >
               Start
@@ -269,7 +276,7 @@ export function AppDetail() {
               <PillButton
                 variant="secondary"
                 size="sm"
-                onClick={() => { restartApp(appId!); setActionPending(true); }}
+                onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); restartApp(appId!); }}
                 icon={<RotateCcw size={14} />}
               >
                 Restart
@@ -277,7 +284,7 @@ export function AppDetail() {
               <PillButton
                 variant="ghost"
                 size="sm"
-                onClick={() => { stopApp(appId!); setActionPending(true); }}
+                onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); stopApp(appId!); }}
                 icon={<Square size={14} />}
               >
                 Stop
@@ -287,7 +294,7 @@ export function AppDetail() {
           <PillButton
             variant="primary"
             size="sm"
-            onClick={() => { deployApp(appId!); setActionPending(true); }}
+            onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); deployApp(appId!); }}
             icon={<Rocket size={14} />}
           >
             Deploy

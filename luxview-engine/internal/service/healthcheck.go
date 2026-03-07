@@ -62,30 +62,67 @@ func (hc *HealthChecker) CheckApp(ctx context.Context, app *model.App) bool {
 		return false
 	}
 
-	// HTTP health check
-	url := fmt.Sprintf("http://host.docker.internal:%d/", app.AssignedPort)
-	resp, err := hc.client.Get(url)
-	if err != nil {
-		return false
+	// Try container IP first (more reliable), then host port
+	urls := []string{
+		fmt.Sprintf("http://host.docker.internal:%d/", app.AssignedPort),
 	}
-	defer resp.Body.Close()
+	info, err := hc.container.docker.InspectContainer(ctx, app.ContainerID)
+	if err == nil {
+		for _, nw := range info.NetworkSettings.Networks {
+			if nw.IPAddress != "" {
+				urls = append([]string{fmt.Sprintf("http://%s:%d/", nw.IPAddress, app.InternalPort)}, urls...)
+				break
+			}
+		}
+	}
 
-	return resp.StatusCode < 500
-}
-
-// WaitForHealthy polls health until the app responds or timeout.
-func (hc *HealthChecker) WaitForHealthy(ctx context.Context, appID uuid.UUID, port int, timeout time.Duration) bool {
-	log := logger.With("healthcheck")
-	deadline := time.Now().Add(timeout)
-	url := fmt.Sprintf("http://host.docker.internal:%d/", port)
-
-	for time.Now().Before(deadline) {
+	for _, url := range urls {
 		resp, err := hc.client.Get(url)
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode < 500 {
-				log.Info().Str("app_id", appID.String()).Msg("app is healthy")
 				return true
+			}
+		}
+	}
+	return false
+}
+
+// WaitForHealthy polls health until the app responds or timeout.
+// It tries multiple URLs: container IP on Docker network first, then host.docker.internal.
+func (hc *HealthChecker) WaitForHealthy(ctx context.Context, appID uuid.UUID, containerID string, internalPort int, hostPort int, timeout time.Duration) bool {
+	log := logger.With("healthcheck")
+	deadline := time.Now().Add(timeout)
+
+	// Build list of health check URLs to try (container IP is most reliable)
+	urls := []string{
+		fmt.Sprintf("http://host.docker.internal:%d/", hostPort),
+	}
+
+	// Try to get container IP for direct health check (more reliable than host routing)
+	if containerID != "" {
+		info, err := hc.container.docker.InspectContainer(ctx, containerID)
+		if err == nil {
+			for _, nw := range info.NetworkSettings.Networks {
+				if nw.IPAddress != "" {
+					urls = append([]string{fmt.Sprintf("http://%s:%d/", nw.IPAddress, internalPort)}, urls...)
+					break
+				}
+			}
+		}
+	}
+
+	log.Debug().Strs("urls", urls).Str("app_id", appID.String()).Dur("timeout", timeout).Msg("starting health check")
+
+	for time.Now().Before(deadline) {
+		for _, url := range urls {
+			resp, err := hc.client.Get(url)
+			if err == nil {
+				resp.Body.Close()
+				if resp.StatusCode < 500 {
+					log.Info().Str("app_id", appID.String()).Str("url", url).Msg("app is healthy")
+					return true
+				}
 			}
 		}
 
