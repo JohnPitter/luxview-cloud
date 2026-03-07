@@ -3,8 +3,8 @@ import Joyride, { type Step, type CallBackProps, STATUS } from 'react-joyride';
 import { useTranslation } from 'react-i18next';
 import { useThemeStore } from '../../stores/theme.store';
 
-interface TourStep {
-  target: string;
+export interface TourStep {
+  target: string | HTMLElement;
   placement?: Step['placement'];
   title: string;
   content: string;
