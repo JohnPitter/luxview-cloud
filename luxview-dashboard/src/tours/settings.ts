@@ -1,6 +1,6 @@
-import type { Step } from 'react-joyride';
+import type { TourStep } from '../components/common/PageTour';
 
-export const settingsTourSteps: Step[] = [
+export const settingsTourSteps: TourStep[] = [
   {
     target: '[data-tour="theme-selector"]',
     title: 'tour.settings.theme.title',

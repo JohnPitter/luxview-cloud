@@ -1,6 +1,6 @@
-import type { Step } from 'react-joyride';
+import type { TourStep } from '../components/common/PageTour';
 
-export const resourcesTourSteps: Step[] = [
+export const resourcesTourSteps: TourStep[] = [
   {
     target: 'body',
     placement: 'center',
