@@ -229,7 +229,7 @@ export function Admin() {
                       VPS Resources — {vpsInfo.hostname}
                     </h3>
                     <span className="text-[10px] text-zinc-500 font-mono ml-auto">
-                      {vpsInfo.os}/{vpsInfo.arch} • {vpsInfo.go_version}
+                      {vpsInfo.os}/{vpsInfo.arch} • {vpsInfo.goVersion}
                     </span>
                   </div>
 
@@ -242,14 +242,14 @@ export function Admin() {
                       </div>
                       <div className="flex items-baseline gap-2">
                         <span className={`text-xl font-bold tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
-                          {vpsInfo.cpu_cores}
+                          {vpsInfo.cpuCores}
                         </span>
                         <span className="text-xs text-zinc-500">cores available</span>
                       </div>
                       <ResourceBar
-                        used={parseFloat(vpsInfo.allocated_cpu || '0')}
-                        total={vpsInfo.cpu_cores}
-                        label={`${vpsInfo.allocated_cpu || '0'} / ${vpsInfo.cpu_cores} cores allocated`}
+                        used={parseFloat(vpsInfo.allocatedCpu || '0')}
+                        total={vpsInfo.cpuCores}
+                        label={`${vpsInfo.allocatedCpu || '0'} / ${vpsInfo.cpuCores} cores allocated`}
                         color="blue"
                         isDark={isDark}
                       />
@@ -263,14 +263,14 @@ export function Admin() {
                       </div>
                       <div className="flex items-baseline gap-2">
                         <span className={`text-xl font-bold tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
-                          {formatBytes(vpsInfo.total_memory)}
+                          {formatBytes(vpsInfo.totalMemory)}
                         </span>
                         <span className="text-xs text-zinc-500">total</span>
                       </div>
                       <ResourceBar
-                        used={vpsInfo.allocated_memory}
-                        total={vpsInfo.total_memory}
-                        label={`${formatBytes(vpsInfo.allocated_memory)} / ${formatBytes(vpsInfo.total_memory)} allocated`}
+                        used={vpsInfo.allocatedMemory}
+                        total={vpsInfo.totalMemory}
+                        label={`${formatBytes(vpsInfo.allocatedMemory)} / ${formatBytes(vpsInfo.totalMemory)} allocated`}
                         color="emerald"
                         isDark={isDark}
                       />
@@ -301,7 +301,7 @@ export function Admin() {
                   </div>
 
                   <p className="text-[11px] text-zinc-500 mt-4">
-                    Resource allocation across {vpsInfo.total_apps_counted} app{vpsInfo.total_apps_counted !== 1 ? 's' : ''}.
+                    Resource allocation across {vpsInfo.totalAppsCounted} app{vpsInfo.totalAppsCounted !== 1 ? 's' : ''}.
                     Apps without explicit limits default to 0.5 CPU / 512MB RAM.
                   </p>
                 </GlassCard>

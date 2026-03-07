@@ -213,13 +213,15 @@ func (h *AdminHandler) ListAllApps(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) VPSInfo(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	hostCPU, hostMem := readHostResources()
+
 	info := map[string]interface{}{
-		"cpu_cores":    runtime.NumCPU(),
+		"cpu_cores":    hostCPU,
 		"go_version":   runtime.Version(),
 		"os":           runtime.GOOS,
 		"arch":         runtime.GOARCH,
-		"hostname":     getHostname(),
-		"total_memory": readTotalMemory(),
+		"hostname":     readHostHostname(),
+		"total_memory": hostMem,
 		"disk":         readDiskUsage(),
 	}
 
@@ -250,16 +252,50 @@ func (h *AdminHandler) VPSInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, info)
 }
 
-func getHostname() string {
-	h, err := os.Hostname()
+// readHostResources uses "docker info" to get the host's actual CPU and memory.
+func readHostResources() (cpuCores int, totalMemory int64) {
+	// Default to container values
+	cpuCores = runtime.NumCPU()
+
+	out, err := exec.Command("docker", "info", "--format", "{{.NCPU}} {{.MemTotal}}").Output()
 	if err != nil {
-		return "unknown"
+		// Fallback: read /proc/meminfo for memory
+		totalMemory = readProcMemTotal()
+		return
 	}
+
+	parts := strings.Fields(strings.TrimSpace(string(out)))
+	if len(parts) >= 2 {
+		if n, err := strconv.Atoi(parts[0]); err == nil {
+			cpuCores = n
+		}
+		if m, err := strconv.ParseInt(parts[1], 10, 64); err == nil {
+			totalMemory = m
+		}
+	}
+	if totalMemory == 0 {
+		totalMemory = readProcMemTotal()
+	}
+	return
+}
+
+// readHostHostname gets the actual host hostname via "docker info".
+func readHostHostname() string {
+	out, err := exec.Command("docker", "info", "--format", "{{.Name}}").Output()
+	if err != nil {
+		h, _ := os.Hostname()
+		return h
+	}
+	name := strings.TrimSpace(string(out))
+	if name != "" {
+		return name
+	}
+	h, _ := os.Hostname()
 	return h
 }
 
-// readTotalMemory reads total system memory from /proc/meminfo (works inside Docker containers with host /proc).
-func readTotalMemory() int64 {
+// readProcMemTotal reads total system memory from /proc/meminfo as fallback.
+func readProcMemTotal() int64 {
 	data, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
 		return 0

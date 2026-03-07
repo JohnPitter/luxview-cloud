@@ -36,16 +36,16 @@ export interface AdminApp {
 }
 
 export interface VPSInfo {
-  cpu_cores: number;
-  go_version: string;
+  cpuCores: number;
+  goVersion: string;
   os: string;
   arch: string;
   hostname: string;
-  total_memory: number;
+  totalMemory: number;
   disk: { total: number; used: number; available: number; percent: string } | null;
-  allocated_cpu: string;
-  allocated_memory: number;
-  total_apps_counted: number;
+  allocatedCpu: string;
+  allocatedMemory: number;
+  totalAppsCounted: number;
 }
 
 export const adminApi = {
