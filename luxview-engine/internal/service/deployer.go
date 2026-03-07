@@ -185,6 +185,9 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	}
 
 	// Inject service env vars (DATABASE_URL, REDIS_URL, etc.)
+	// Service vars are injected first, then user env vars override them.
+	// This ensures user-defined DATABASE_URL takes priority.
+	serviceEnvVars := make(map[string]string)
 	services, err := d.serviceRepo.ListByAppID(ctx, app.ID)
 	if err == nil {
 		for _, svc := range services {
@@ -194,7 +197,7 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 					var creds map[string]string
 					if err := json.Unmarshal([]byte(decrypted), &creds); err == nil {
 						for k, v := range d.provisioner.GetEnvVarsForService(&svc, creds) {
-							envVars[k] = v
+							serviceEnvVars[k] = v
 						}
 					}
 				}
@@ -204,6 +207,16 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 			log.Info().Int("count", len(services)).Msg("injected service env vars")
 		}
 	}
+
+	// Merge: service env vars first, then user env vars override
+	mergedEnvVars := make(map[string]string)
+	for k, v := range serviceEnvVars {
+		mergedEnvVars[k] = v
+	}
+	for k, v := range envVars {
+		mergedEnvVars[k] = v
+	}
+	envVars = mergedEnvVars
 
 	// Stop old container (blue-green)
 	oldContainerID := app.ContainerID

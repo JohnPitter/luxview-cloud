@@ -150,30 +150,47 @@ func (p *Provisioner) Provision(ctx context.Context, appID uuid.UUID, serviceTyp
 }
 
 func (p *Provisioner) provisionPostgres(ctx context.Context, dbName, userName, password string) error {
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/postgres?sslmode=disable",
+	adminConnStr := fmt.Sprintf("postgres://%s:%s@%s:%d/postgres?sslmode=disable",
 		p.cfg.SharedPGUser, p.cfg.SharedPGPassword, p.cfg.SharedPGHost, p.cfg.SharedPGPort)
 
-	conn, err := pgx.Connect(ctx, connStr)
+	conn, err := pgx.Connect(ctx, adminConnStr)
 	if err != nil {
 		return fmt.Errorf("connect to shared pg: %w", err)
 	}
 	defer conn.Close(ctx)
 
-	// Create database (cannot use parameterized queries for DDL)
-	_, err = conn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", quoteIdent(dbName)))
-	if err != nil && !isDuplicateDB(err) {
-		return fmt.Errorf("create database: %w", err)
-	}
-
+	// Create user first (needed before OWNER assignment)
 	_, err = conn.Exec(ctx, fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", quoteIdent(userName), password))
 	if err != nil && !isDuplicateRole(err) {
 		return fmt.Errorf("create user: %w", err)
+	}
+
+	// Create database owned by the app user — ensures full isolation
+	_, err = conn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s OWNER %s", quoteIdent(dbName), quoteIdent(userName)))
+	if err != nil && !isDuplicateDB(err) {
+		return fmt.Errorf("create database: %w", err)
 	}
 
 	_, err = conn.Exec(ctx, fmt.Sprintf("GRANT ALL PRIVILEGES ON DATABASE %s TO %s", quoteIdent(dbName), quoteIdent(userName)))
 	if err != nil {
 		return fmt.Errorf("grant privileges: %w", err)
 	}
+
+	// Connect to the new database to grant schema permissions (PG 15+ requirement)
+	dbConnStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
+		p.cfg.SharedPGUser, p.cfg.SharedPGPassword, p.cfg.SharedPGHost, p.cfg.SharedPGPort, dbName)
+	dbConn, err := pgx.Connect(ctx, dbConnStr)
+	if err != nil {
+		return fmt.Errorf("connect to new db: %w", err)
+	}
+	defer dbConn.Close(ctx)
+
+	// Grant schema permissions and set ownership so the app user can create tables
+	_, _ = dbConn.Exec(ctx, fmt.Sprintf("ALTER SCHEMA public OWNER TO %s", quoteIdent(userName)))
+	_, _ = dbConn.Exec(ctx, fmt.Sprintf("GRANT ALL ON SCHEMA public TO %s", quoteIdent(userName)))
+	// Revoke public access so other app users cannot access this database
+	_, _ = dbConn.Exec(ctx, "REVOKE ALL ON SCHEMA public FROM PUBLIC")
+	_, _ = dbConn.Exec(ctx, fmt.Sprintf("GRANT ALL ON SCHEMA public TO %s", quoteIdent(userName)))
 
 	return nil
 }

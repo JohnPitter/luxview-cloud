@@ -42,8 +42,10 @@ func NewExplorerHandler(
 }
 
 // decryptServiceCreds validates ownership and returns decrypted credentials.
-// For postgres services, if the app has a custom DATABASE_URL env var, it overrides
-// the provisioned URL so the explorer connects to the actual database the app uses.
+// Uses the provisioned credentials by default. For postgres, if the app has a
+// custom DATABASE_URL env var, the explorer connects using the provisioned user
+// but targets the database from the custom URL — ensuring the user only accesses
+// databases they own while seeing the actual data their app uses.
 func (h *ExplorerHandler) decryptServiceCreds(r *http.Request) (*model.AppService, map[string]string, error) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)
@@ -76,15 +78,23 @@ func (h *ExplorerHandler) decryptServiceCreds(r *http.Request) (*model.AppServic
 		return nil, nil, fmt.Errorf("parse credentials: %w", err)
 	}
 
-	// For postgres: check if the app has a custom DATABASE_URL that differs from provisioned
+	// For postgres: if the app overrides DATABASE_URL, rebuild the connection URL
+	// using the provisioned user/password but targeting the custom database name.
+	// This preserves isolation (app user can only access granted databases).
 	if svc.ServiceType == model.ServicePostgres && app.EnvVars != nil {
 		var appEncrypted string
 		if err := json.Unmarshal(app.EnvVars, &appEncrypted); err == nil {
 			if appDecrypted, err := crypto.Decrypt(appEncrypted, h.encryptionKey); err == nil {
 				var appEnv map[string]string
 				if err := json.Unmarshal([]byte(appDecrypted), &appEnv); err == nil {
-					if dbURL, ok := appEnv["DATABASE_URL"]; ok && dbURL != "" {
-						creds["url"] = dbURL
+					if dbURL, ok := appEnv["DATABASE_URL"]; ok && dbURL != "" && dbURL != creds["url"] {
+						// Extract database name from the custom URL
+						if dbName := extractDBNameFromURL(dbURL); dbName != "" && dbName != creds["database"] {
+							// Rebuild URL with provisioned auth but custom database
+							creds["url"] = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+								creds["username"], creds["password"], creds["host"], creds["port"], dbName)
+							creds["database"] = dbName
+						}
 					}
 				}
 			}
@@ -92,6 +102,20 @@ func (h *ExplorerHandler) decryptServiceCreds(r *http.Request) (*model.AppServic
 	}
 
 	return svc, creds, nil
+}
+
+// extractDBNameFromURL extracts the database name from a postgres connection URL.
+func extractDBNameFromURL(url string) string {
+	// Format: postgres://user:pass@host:port/dbname?params
+	// Find the last / before any ?
+	clean := url
+	if idx := strings.Index(clean, "?"); idx != -1 {
+		clean = clean[:idx]
+	}
+	if idx := strings.LastIndex(clean, "/"); idx != -1 {
+		return clean[idx+1:]
+	}
+	return ""
 }
 
 // ListTables lists tables (postgres) or returns an error for unsupported types.
