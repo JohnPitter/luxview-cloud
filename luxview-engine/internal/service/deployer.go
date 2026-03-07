@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,6 +39,7 @@ type Deployer struct {
 	docker         *dockerclient.Client
 	encryptionKey  []byte
 	buildTimeout   time.Duration
+	appLocks       sync.Map // per-app deploy lock to prevent concurrent deploys
 }
 
 func NewDeployer(
@@ -67,7 +69,16 @@ func NewDeployer(
 }
 
 // Deploy executes the full deploy pipeline for an app.
+// Uses a per-app lock to prevent concurrent deploys of the same app.
 func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
+	// Per-app lock: if another deploy is already running for this app, skip
+	if _, loaded := d.appLocks.LoadOrStore(req.AppID.String(), true); loaded {
+		log := logger.With("deployer")
+		log.Warn().Str("app_id", req.AppID.String()).Msg("deploy already in progress, skipping duplicate")
+		return fmt.Errorf("deploy already in progress for app %s", req.AppID.String())
+	}
+	defer d.appLocks.Delete(req.AppID.String())
+
 	log := logger.With("deployer")
 	start := time.Now()
 
