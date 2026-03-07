@@ -67,6 +67,9 @@ export function AppDetail() {
   const [deleting, setDeleting] = useState(false);
   const [selectedBuildLog, setSelectedBuildLog] = useState<string>('');
   const [actionPending, setActionPending] = useState(false);
+  const [logType, setLogType] = useState<'runtime' | 'build'>('runtime');
+  const [containerLogs, setContainerLogs] = useState<string>('');
+  const [containerLogsLoading, setContainerLogsLoading] = useState(false);
 
   // Env vars state
   const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>([]);
@@ -457,39 +460,102 @@ export function AppDetail() {
         {/* ==================== LOGS ==================== */}
         {activeTab === 'logs' && (
           <div className="space-y-4">
-            {/* Deployment selector */}
-            {deployments.length > 0 && (
-              <div className="flex items-center gap-3">
-                <label className="text-xs text-zinc-500">Deployment:</label>
-                <select
-                  value={deployments.find((d) => selectedBuildLog && d.buildLog === selectedBuildLog)?.id || deployments[0]?.id || ''}
-                  onChange={(e) => {
-                    const deployId = e.target.value;
-                    if (deployId) {
-                      deploymentsApi.getLogs(deployId).then((res) => {
-                        setSelectedBuildLog(res.buildLog || '');
-                      }).catch(() => {});
+            {/* Log type toggle */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setLogType('runtime')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                  logType === 'runtime'
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                    : isDark ? 'text-zinc-400 hover:text-zinc-200 border border-zinc-800' : 'text-zinc-600 hover:text-zinc-900 border border-zinc-200'
+                }`}
+              >
+                Runtime Logs
+              </button>
+              <button
+                onClick={() => setLogType('build')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                  logType === 'build'
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                    : isDark ? 'text-zinc-400 hover:text-zinc-200 border border-zinc-800' : 'text-zinc-600 hover:text-zinc-900 border border-zinc-200'
+                }`}
+              >
+                Build Logs
+              </button>
+              {logType === 'runtime' && (
+                <button
+                  onClick={() => {
+                    if (appId) {
+                      setContainerLogsLoading(true);
+                      appsApi.containerLogs(appId, 500).then(setContainerLogs).catch(() => setContainerLogs('Failed to fetch logs')).finally(() => setContainerLogsLoading(false));
                     }
                   }}
-                  className={`
-                    px-3 py-1.5 text-xs font-mono rounded-lg border transition-all
-                    focus:outline-none focus:ring-2 focus:ring-amber-400/30
-                    ${isDark ? 'bg-zinc-900/50 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-700'}
-                  `}
+                  className="ml-auto px-3 py-1.5 text-xs text-zinc-500 hover:text-amber-400 transition-colors border border-zinc-800 rounded-lg"
                 >
-                  {deployments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.commitSha.slice(0, 7)} — {d.status} — {d.commitMessage?.slice(0, 40) || 'no message'}
-                    </option>
-                  ))}
-                </select>
+                  <RotateCcw size={12} className="inline mr-1" />
+                  Refresh
+                </button>
+              )}
+            </div>
+
+            {/* Runtime logs */}
+            {logType === 'runtime' && (
+              <div
+                className={`
+                  rounded-xl border p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap overflow-auto max-h-[600px]
+                  ${isDark ? 'bg-zinc-950 border-zinc-800 text-zinc-300' : 'bg-zinc-50 border-zinc-200 text-zinc-700'}
+                `}
+              >
+                {containerLogsLoading ? (
+                  <div className="flex items-center gap-2 text-zinc-500">
+                    <Loader2 size={14} className="animate-spin" />
+                    Loading logs...
+                  </div>
+                ) : containerLogs ? (
+                  containerLogs
+                ) : (
+                  <span className="text-zinc-500">No runtime logs available. The app may not be running.</span>
+                )}
               </div>
             )}
-            <BuildLogViewer log={selectedBuildLog} />
-            {!selectedBuildLog && deployments.length === 0 && (
-              <div className="text-center py-12 text-zinc-500 text-sm">
-                No build logs available. Deploy your app to see logs here.
-              </div>
+
+            {/* Build logs */}
+            {logType === 'build' && (
+              <>
+                {deployments.length > 0 && (
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs text-zinc-500">Deployment:</label>
+                    <select
+                      value={deployments.find((d: Deployment) => selectedBuildLog && d.buildLog === selectedBuildLog)?.id || deployments[0]?.id || ''}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                        const deployId = e.target.value;
+                        if (deployId) {
+                          deploymentsApi.getLogs(deployId).then((res: { buildLog: string }) => {
+                            setSelectedBuildLog(res.buildLog || '');
+                          }).catch(() => {});
+                        }
+                      }}
+                      className={`
+                        px-3 py-1.5 text-xs font-mono rounded-lg border transition-all
+                        focus:outline-none focus:ring-2 focus:ring-amber-400/30
+                        ${isDark ? 'bg-zinc-900/50 border-zinc-800 text-zinc-300' : 'bg-white border-zinc-200 text-zinc-700'}
+                      `}
+                    >
+                      {deployments.map((d: Deployment) => (
+                        <option key={d.id} value={d.id}>
+                          {d.commitSha.slice(0, 7)} — {d.status} — {d.commitMessage?.slice(0, 40) || 'no message'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <BuildLogViewer log={selectedBuildLog} />
+                {!selectedBuildLog && deployments.length === 0 && (
+                  <div className="text-center py-12 text-zinc-500 text-sm">
+                    No build logs available. Deploy your app to see logs here.
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

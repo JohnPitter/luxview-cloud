@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -122,6 +123,14 @@ func (cm *ContainerManager) Restart(ctx context.Context, containerID string) err
 		return fmt.Errorf("no container to restart")
 	}
 	return cm.docker.RestartContainer(ctx, containerID, 30)
+}
+
+// Logs returns the last N lines of container logs.
+func (cm *ContainerManager) Logs(ctx context.Context, containerID string, tail string) (io.ReadCloser, error) {
+	if containerID == "" {
+		return nil, fmt.Errorf("no container ID")
+	}
+	return cm.docker.ContainerLogs(ctx, containerID, tail)
 }
 
 // IsRunning checks if a container is running.

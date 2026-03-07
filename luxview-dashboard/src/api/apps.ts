@@ -85,4 +85,11 @@ export const appsApi = {
   async updateEnvVars(id: string, envVars: Record<string, string>): Promise<void> {
     await api.patch(`/apps/${id}`, { envVars });
   },
+
+  async containerLogs(id: string, tail = 200): Promise<string> {
+    const { data } = await api.get<{ logs: string }>(`/apps/${id}/logs`, {
+      params: { tail },
+    });
+    return data.logs ?? '';
+  },
 };

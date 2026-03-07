@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -491,6 +492,71 @@ func (h *AppHandler) ListGitHubBranches(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, branches)
+}
+
+// ContainerLogs returns the runtime logs for an app's container.
+func (h *AppHandler) ContainerLogs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app ID")
+		return
+	}
+
+	app, err := h.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	if app.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	if app.ContainerID == "" {
+		writeJSON(w, http.StatusOK, map[string]string{"logs": ""})
+		return
+	}
+
+	tail := r.URL.Query().Get("tail")
+	if tail == "" {
+		tail = "200"
+	}
+
+	reader, err := h.container.Logs(ctx, app.ContainerID, tail)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]string{"logs": "Container not available"})
+		return
+	}
+	defer reader.Close()
+
+	logBytes, _ := io.ReadAll(reader)
+
+	// Strip Docker multiplexed stream headers (8-byte prefix per frame)
+	cleaned := stripDockerLogHeaders(logBytes)
+
+	writeJSON(w, http.StatusOK, map[string]string{"logs": string(cleaned)})
+}
+
+// stripDockerLogHeaders removes the 8-byte Docker multiplexed stream header from each log frame.
+func stripDockerLogHeaders(data []byte) []byte {
+	var result []byte
+	for len(data) >= 8 {
+		// Header: [stream_type(1)][0][0][0][size(4 big-endian)]
+		size := int(data[4])<<24 | int(data[5])<<16 | int(data[6])<<8 | int(data[7])
+		data = data[8:]
+		if size > len(data) {
+			size = len(data)
+		}
+		result = append(result, data[:size]...)
+		data = data[size:]
+	}
+	if len(result) == 0 {
+		return data // fallback: return raw if no headers detected
+	}
+	return result
 }
 
 func parseRepoURL(repoURL string) (owner, repo string) {
