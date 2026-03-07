@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -195,13 +196,24 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	}
 
 	// Health check — longer timeout for slow-starting stacks (Java, etc.)
-	healthTimeout := 60 * time.Second
+	healthTimeout := 120 * time.Second
 	switch bp.Name() {
-	case "java", "nextjs":
+	case "java", "nextjs", "dockerfile":
 		healthTimeout = 180 * time.Second
 	}
 	healthy := d.healthChecker.WaitForHealthy(ctx, app.ID, containerID, app.InternalPort, app.AssignedPort, healthTimeout)
 	if !healthy {
+		// Capture container logs to help user diagnose the issue
+		failReason := "health check failed"
+		containerLogs, logErr := d.docker.ContainerLogs(ctx, containerID, "30")
+		if logErr == nil {
+			logBytes, _ := io.ReadAll(containerLogs)
+			containerLogs.Close()
+			if len(logBytes) > 0 {
+				failReason = fmt.Sprintf("health check failed — container logs:\n%s", string(logBytes))
+			}
+		}
+
 		// Rollback: stop new, restart old
 		_ = d.container.Stop(ctx, containerID)
 		_ = d.container.Remove(ctx, containerID)
@@ -209,7 +221,7 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 			_ = d.container.Restart(ctx, oldContainerID)
 			_ = d.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusRunning, oldContainerID)
 		}
-		d.failDeploy(ctx, deployment, app, "health check failed", start)
+		d.failDeploy(ctx, deployment, app, failReason, start)
 		return fmt.Errorf("health check failed for app %s", app.Subdomain)
 	}
 
