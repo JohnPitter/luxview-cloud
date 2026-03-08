@@ -24,6 +24,7 @@ import {
   Pencil,
   ToggleLeft,
   ToggleRight,
+  Bot,
 } from 'lucide-react';
 import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
@@ -34,9 +35,10 @@ import { useThemeStore } from '../stores/theme.store';
 import { useNotificationsStore } from '../stores/notifications.store';
 import { adminApi, type AdminStats, type AdminUser, type AdminApp, type VPSInfo } from '../api/admin';
 import { plansApi, type Plan, type CreatePlanPayload } from '../api/plans';
+import { aiSettingsApi, type AISettings } from '../api/analyze';
 import { formatRelativeTime } from '../lib/format';
 
-type Tab = 'overview' | 'users' | 'apps' | 'plans';
+type Tab = 'overview' | 'users' | 'apps' | 'plans' | 'ai';
 
 function getDefaultPlanForm(): CreatePlanPayload {
   return {
@@ -94,6 +96,7 @@ export function Admin() {
     { id: 'users', label: t('admin.tabs.users'), icon: <Users size={14} /> },
     { id: 'apps', label: t('admin.tabs.applications'), icon: <Server size={14} /> },
     { id: 'plans', label: t('admin.tabs.plans'), icon: <CreditCard size={14} /> },
+    { id: 'ai', label: t('admin.tabs.ai'), icon: <Bot size={14} /> },
   ];
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -118,6 +121,18 @@ export function Admin() {
   const [deletePlanTarget, setDeletePlanTarget] = useState<Plan | null>(null);
   const [planFormData, setPlanFormData] = useState<CreatePlanPayload>(getDefaultPlanForm());
   const [planUserTarget, setPlanUserTarget] = useState<AdminUser | null>(null);
+
+  // AI Settings state
+  const [aiSettings, setAiSettings] = useState<AISettings | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSaving, setAiSaving] = useState(false);
+  const [aiForm, setAiForm] = useState({
+    anthropicApiKey: '',
+    claudeClientId: '',
+    claudeClientSecret: '',
+    aiEnabled: false,
+    aiModel: 'claude-sonnet-4-20250514',
+  });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -144,6 +159,49 @@ export function Admin() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const fetchAISettings = useCallback(async () => {
+    setAiLoading(true);
+    try {
+      const data = await aiSettingsApi.get();
+      setAiSettings(data);
+      setAiForm({
+        anthropicApiKey: '',
+        claudeClientId: '',
+        claudeClientSecret: '',
+        aiEnabled: data.aiEnabled,
+        aiModel: data.aiModel || 'claude-sonnet-4-20250514',
+      });
+    } catch {
+      addNotification({ type: 'error', title: t('admin.failedToLoad') });
+    } finally {
+      setAiLoading(false);
+    }
+  }, [addNotification, t]);
+
+  useEffect(() => {
+    if (activeTab === 'ai') fetchAISettings();
+  }, [activeTab, fetchAISettings]);
+
+  const handleSaveAISettings = async () => {
+    setAiSaving(true);
+    try {
+      const payload: Partial<AISettings> = {
+        aiEnabled: aiForm.aiEnabled,
+        aiModel: aiForm.aiModel,
+      };
+      if (aiForm.anthropicApiKey) payload.anthropicApiKey = aiForm.anthropicApiKey;
+      if (aiForm.claudeClientId) payload.claudeClientId = aiForm.claudeClientId;
+      if (aiForm.claudeClientSecret) payload.claudeClientSecret = aiForm.claudeClientSecret;
+      await aiSettingsApi.update(payload);
+      addNotification({ type: 'success', title: t('admin.ai.saved') });
+      fetchAISettings();
+    } catch {
+      addNotification({ type: 'error', title: t('admin.failedToLoad') });
+    } finally {
+      setAiSaving(false);
+    }
+  };
 
   const handleRoleChange = async (user: AdminUser, newRole: 'user' | 'admin') => {
     try {
@@ -746,6 +804,122 @@ export function Admin() {
                     />
                   ))}
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* ==================== AI SETTINGS ==================== */}
+          {activeTab === 'ai' && (
+            <div className="space-y-4">
+              {aiLoading ? (
+                <div className="text-center py-16 text-sm text-zinc-500">{t('admin.loadingData')}</div>
+              ) : (
+                <GlassCard>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Bot size={18} className="text-amber-400" />
+                    <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                      {t('admin.ai.title')}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-zinc-500 mb-6">{t('admin.ai.description')}</p>
+
+                  <div className="space-y-4">
+                    {/* Enable toggle */}
+                    <ToggleField
+                      label={t('admin.ai.enabled')}
+                      value={aiForm.aiEnabled}
+                      onChange={(v) => setAiForm((prev) => ({ ...prev, aiEnabled: v }))}
+                      isDark={isDark}
+                    />
+
+                    {/* Anthropic API Key */}
+                    <div>
+                      <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
+                        {t('admin.ai.apiKey')}
+                      </label>
+                      <input
+                        type="password"
+                        value={aiForm.anthropicApiKey}
+                        onChange={(e) => setAiForm((prev) => ({ ...prev, anthropicApiKey: e.target.value }))}
+                        placeholder={aiSettings?.anthropicApiKey || t('admin.ai.apiKeyPlaceholder')}
+                        className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
+                          isDark
+                            ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
+                            : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
+                        }`}
+                      />
+                    </div>
+
+                    {/* Claude Client ID */}
+                    <div>
+                      <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
+                        {t('admin.ai.clientId')}
+                      </label>
+                      <input
+                        type="text"
+                        value={aiForm.claudeClientId}
+                        onChange={(e) => setAiForm((prev) => ({ ...prev, claudeClientId: e.target.value }))}
+                        placeholder={aiSettings?.claudeClientId || t('admin.ai.clientIdPlaceholder')}
+                        className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
+                          isDark
+                            ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
+                            : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
+                        }`}
+                      />
+                    </div>
+
+                    {/* Claude Client Secret */}
+                    <div>
+                      <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
+                        {t('admin.ai.clientSecret')}
+                      </label>
+                      <input
+                        type="password"
+                        value={aiForm.claudeClientSecret}
+                        onChange={(e) => setAiForm((prev) => ({ ...prev, claudeClientSecret: e.target.value }))}
+                        placeholder={aiSettings?.claudeClientSecret || t('admin.ai.clientSecretPlaceholder')}
+                        className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
+                          isDark
+                            ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
+                            : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
+                        }`}
+                      />
+                    </div>
+
+                    {/* Model select */}
+                    <div>
+                      <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
+                        {t('admin.ai.model')}
+                      </label>
+                      <select
+                        value={aiForm.aiModel}
+                        onChange={(e) => setAiForm((prev) => ({ ...prev, aiModel: e.target.value }))}
+                        className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
+                          isDark
+                            ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50'
+                            : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50'
+                        }`}
+                      >
+                        <option value="claude-sonnet-4-20250514">Sonnet 4 — recommended</option>
+                        <option value="claude-haiku-4-5-20251001">Haiku 4.5 — faster</option>
+                        <option value="claude-opus-4-6">Opus 4.6 — most capable</option>
+                      </select>
+                    </div>
+
+                    {/* Save button */}
+                    <div className="pt-2">
+                      <PillButton
+                        variant="primary"
+                        size="sm"
+                        onClick={handleSaveAISettings}
+                        disabled={aiSaving}
+                        icon={aiSaving ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
+                      >
+                        {aiSaving ? t('common.saving') : t('common.save')}
+                      </PillButton>
+                    </div>
+                  </div>
+                </GlassCard>
               )}
             </div>
           )}

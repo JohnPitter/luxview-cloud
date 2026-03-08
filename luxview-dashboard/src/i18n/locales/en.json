@@ -3,6 +3,7 @@
   "common.cancel": "Cancel",
   "common.confirm": "Confirm",
   "common.save": "Save",
+  "common.saving": "Saving...",
   "common.delete": "Delete",
   "common.refresh": "Refresh",
   "common.search": "Search",
