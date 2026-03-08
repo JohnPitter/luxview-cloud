@@ -22,6 +22,16 @@ const (
 	httpClientTimeout   = 60 * time.Second
 )
 
+// setAuthHeader sets the appropriate auth header based on token type.
+// OAuth tokens (sk-ant-oat*) use Authorization: Bearer, API keys use x-api-key.
+func setAuthHeader(req *http.Request, token string) {
+	if strings.HasPrefix(token, "sk-ant-oat") {
+		req.Header.Set("Authorization", "Bearer "+token)
+	} else {
+		req.Header.Set("x-api-key", token)
+	}
+}
+
 // DeployAgent calls the Anthropic Messages API to analyze repositories
 // and generate optimal Dockerfiles for deployment.
 type DeployAgent struct {
@@ -103,7 +113,7 @@ func (a *DeployAgent) TestConnection(ctx context.Context, apiKey, model string) 
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", apiKey)
+	setAuthHeader(req, apiKey)
 	req.Header.Set("anthropic-version", anthropicVersion)
 
 	resp, err := a.client.Do(req)
@@ -190,7 +200,7 @@ func (a *DeployAgent) callClaude(ctx context.Context, apiKey, model, system, use
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", apiKey)
+	setAuthHeader(req, apiKey)
 	req.Header.Set("anthropic-version", anthropicVersion)
 
 	log.Debug().Str("model", model).Int("prompt_len", len(userPrompt)).Msg("calling Anthropic API")

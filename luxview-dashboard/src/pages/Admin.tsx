@@ -869,6 +869,7 @@ export function Admin() {
                             : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
                         }`}
                       />
+                      <p className="text-[11px] text-zinc-500 mt-1">{t('admin.ai.apiKeyHint')}</p>
                     </div>
 
                     {/* Claude Client ID */}
