@@ -74,6 +74,12 @@ func NewRouter(deps Deps) *chi.Mux {
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 
 	r.Route("/api", func(r chi.Router) {
+		// Health check (public, for status page)
+		r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"status":"ok"}`))
+		})
+
 		// Auth (public)
 		r.Get("/auth/github", authHandler.GitHubLogin)
 		r.Get("/auth/github/callback", authHandler.GitHubCallback)
