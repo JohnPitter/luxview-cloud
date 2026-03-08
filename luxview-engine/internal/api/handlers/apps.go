@@ -25,7 +25,9 @@ var subdomainRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 type AppHandler struct {
 	appRepo       *repository.AppRepo
 	userRepo      *repository.UserRepo
+	serviceRepo   *repository.ServiceRepo
 	container     *service.ContainerManager
+	provisioner   *service.Provisioner
 	github        *service.GitHubClient
 	buildQueue    chan<- service.DeployRequest
 	encryptionKey []byte
@@ -34,14 +36,18 @@ type AppHandler struct {
 func NewAppHandler(
 	appRepo *repository.AppRepo,
 	userRepo *repository.UserRepo,
+	serviceRepo *repository.ServiceRepo,
 	container *service.ContainerManager,
+	provisioner *service.Provisioner,
 	buildQueue chan<- service.DeployRequest,
 	encryptionKey []byte,
 ) *AppHandler {
 	return &AppHandler{
 		appRepo:       appRepo,
 		userRepo:      userRepo,
+		serviceRepo:   serviceRepo,
 		container:     container,
+		provisioner:   provisioner,
 		github:        service.NewGitHubClient(),
 		buildQueue:    buildQueue,
 		encryptionKey: encryptionKey,
@@ -345,6 +351,16 @@ func (h *AppHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if app.ContainerID != "" {
 		_ = h.container.Stop(ctx, app.ContainerID)
 		_ = h.container.Remove(ctx, app.ContainerID)
+	}
+
+	// Deprovision all associated services (databases, buckets, etc.)
+	services, err := h.serviceRepo.ListByAppID(ctx, appID)
+	if err == nil {
+		for i := range services {
+			if depErr := h.provisioner.Deprovision(ctx, &services[i]); depErr != nil {
+				log.Warn().Err(depErr).Str("service_id", services[i].ID.String()).Msg("failed to deprovision service during app deletion")
+			}
+		}
 	}
 
 	if err := h.appRepo.Delete(ctx, appID); err != nil {

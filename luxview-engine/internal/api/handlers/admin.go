@@ -19,23 +19,29 @@ import (
 )
 
 type AdminHandler struct {
-	userRepo   *repository.UserRepo
-	appRepo    *repository.AppRepo
-	deployRepo *repository.DeploymentRepo
-	container  *service.ContainerManager
+	userRepo    *repository.UserRepo
+	appRepo     *repository.AppRepo
+	deployRepo  *repository.DeploymentRepo
+	serviceRepo *repository.ServiceRepo
+	container   *service.ContainerManager
+	provisioner *service.Provisioner
 }
 
 func NewAdminHandler(
 	userRepo *repository.UserRepo,
 	appRepo *repository.AppRepo,
 	deployRepo *repository.DeploymentRepo,
+	serviceRepo *repository.ServiceRepo,
 	container *service.ContainerManager,
+	provisioner *service.Provisioner,
 ) *AdminHandler {
 	return &AdminHandler{
-		userRepo:   userRepo,
-		appRepo:    appRepo,
-		deployRepo: deployRepo,
-		container:  container,
+		userRepo:    userRepo,
+		appRepo:     appRepo,
+		deployRepo:  deployRepo,
+		serviceRepo: serviceRepo,
+		container:   container,
+		provisioner: provisioner,
 	}
 }
 
@@ -104,6 +110,16 @@ func (h *AdminHandler) ForceDeleteApp(w http.ResponseWriter, r *http.Request) {
 	if app.ContainerID != "" {
 		_ = h.container.Stop(ctx, app.ContainerID)
 		_ = h.container.Remove(ctx, app.ContainerID)
+	}
+
+	// Deprovision all associated services (databases, buckets, etc.)
+	services, err := h.serviceRepo.ListByAppID(ctx, appID)
+	if err == nil {
+		for i := range services {
+			if depErr := h.provisioner.Deprovision(ctx, &services[i]); depErr != nil {
+				log.Warn().Err(depErr).Str("service_id", services[i].ID.String()).Msg("failed to deprovision service during force delete")
+			}
+		}
 	}
 
 	if err := h.appRepo.Delete(ctx, appID); err != nil {

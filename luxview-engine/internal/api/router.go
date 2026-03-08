@@ -61,12 +61,12 @@ func NewRouter(deps Deps) *chi.Mux {
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(deps.Config, deps.UserRepo, deps.EncryptKey)
-	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.UserRepo, deps.Container, deps.BuildQueue, deps.EncryptKey)
+	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.BuildQueue, deps.EncryptKey)
 	deployHandler := handlers.NewDeploymentHandler(deps.DeployRepo, deps.AppRepo, deps.BuildQueue)
 	serviceHandler := handlers.NewServiceHandler(deps.ServiceRepo, deps.AppRepo, deps.Provisioner, deps.EncryptKey)
 	metricHandler := handlers.NewMetricHandler(deps.MetricRepo, deps.AppRepo)
 	alertHandler := handlers.NewAlertHandler(deps.AlertRepo, deps.AppRepo)
-	adminHandler := handlers.NewAdminHandler(deps.UserRepo, deps.AppRepo, deps.DeployRepo, deps.Container)
+	adminHandler := handlers.NewAdminHandler(deps.UserRepo, deps.AppRepo, deps.DeployRepo, deps.ServiceRepo, deps.Container, deps.Provisioner)
 	explorerHandler := handlers.NewExplorerHandler(deps.ServiceRepo, deps.AppRepo, deps.EncryptKey)
 	traefikHandler := handlers.NewTraefikHandler(deps.Router)
 	webhookHandler := handlers.NewWebhookHandler(deps.WebhookSvc, deps.Config.InternalToken)
