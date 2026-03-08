@@ -198,6 +198,7 @@ export function Admin() {
 
   const handleSaveAISettings = async () => {
     setAiSaving(true);
+    setAiTestResult(null);
     try {
       const payload: Partial<AISettings> = {
         authMode: aiForm.authMode,
@@ -215,6 +216,26 @@ export function Admin() {
       if (aiForm.claudeClientSecret) payload.claudeClientSecret = aiForm.claudeClientSecret;
       await aiSettingsApi.update(payload);
       addNotification({ type: 'success', title: t('admin.ai.saved') });
+
+      // Auto-test connection after save if credentials were provided
+      const hasCredentials = aiForm.authMode === 'api_key'
+        ? !!aiForm.anthropicApiKey
+        : !!(aiForm.oauthAccessToken || aiForm.oauthRefreshToken);
+      if (hasCredentials) {
+        setAiTesting(true);
+        try {
+          const result = await aiSettingsApi.testConnection({
+            authMode: aiForm.authMode,
+            model: aiForm.aiModel || undefined,
+          });
+          setAiTestResult(result);
+        } catch {
+          setAiTestResult({ success: false, error: t('admin.ai.testError') });
+        } finally {
+          setAiTesting(false);
+        }
+      }
+
       fetchAISettings();
     } catch {
       addNotification({ type: 'error', title: t('admin.failedToLoad') });
@@ -1041,7 +1062,11 @@ export function Admin() {
                         variant="ghost"
                         size="sm"
                         onClick={handleTestAIConnection}
-                        disabled={aiTesting}
+                        disabled={aiTesting || (
+                          aiForm.authMode === 'api_key'
+                            ? !aiForm.anthropicApiKey && !aiSettings?.anthropicApiKey
+                            : !aiForm.oauthAccessToken && !aiSettings?.oauthAccessToken && !aiForm.oauthRefreshToken && !aiSettings?.oauthRefreshToken
+                        )}
                         icon={aiTesting ? <RefreshCw size={14} className="animate-spin" /> : <Zap size={14} />}
                       >
                         {aiTesting ? t('admin.ai.testing') : t('admin.ai.testConnection')}
