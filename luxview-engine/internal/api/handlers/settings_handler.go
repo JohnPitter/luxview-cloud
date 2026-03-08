@@ -20,29 +20,17 @@ func NewSettingsHandler(settingsRepo *repository.SettingsRepo) *SettingsHandler 
 // aiSettingsResponse is the JSON shape returned by GetAISettings.
 // JSON tags use snake_case; the frontend axios interceptor converts to camelCase automatically.
 type aiSettingsResponse struct {
-	AuthMode           string `json:"auth_mode"`
-	AnthropicAPIKey    string `json:"anthropic_api_key"`
-	OAuthAccessToken   string `json:"o_auth_access_token"`
-	OAuthRefreshToken  string `json:"o_auth_refresh_token"`
-	OAuthExpiresAt     string `json:"o_auth_expires_at"`
-	ClaudeClientID     string `json:"claude_client_id"`
-	ClaudeClientSecret string `json:"claude_client_secret"`
-	AIEnabled          bool   `json:"ai_enabled"`
-	AIModel            string `json:"ai_model"`
+	APIKey    string `json:"api_key"`
+	AIEnabled bool   `json:"ai_enabled"`
+	AIModel   string `json:"ai_model"`
 }
 
 // updateAISettingsRequest accepts partial updates (pointer fields).
 // JSON tags use snake_case because the frontend axios interceptor converts camelCase → snake_case.
 type updateAISettingsRequest struct {
-	AuthMode           *string `json:"auth_mode"`
-	AnthropicAPIKey    *string `json:"anthropic_api_key"`
-	OAuthAccessToken   *string `json:"o_auth_access_token"`
-	OAuthRefreshToken  *string `json:"o_auth_refresh_token"`
-	OAuthExpiresAt     *string `json:"o_auth_expires_at"`
-	ClaudeClientID     *string `json:"claude_client_id"`
-	ClaudeClientSecret *string `json:"claude_client_secret"`
-	AIEnabled          *bool   `json:"ai_enabled"`
-	AIModel            *string `json:"ai_model"`
+	APIKey    *string `json:"api_key"`
+	AIEnabled *bool   `json:"ai_enabled"`
+	AIModel   *string `json:"ai_model"`
 }
 
 // maskSecret masks a string showing only the first 4 and last 4 characters.
@@ -52,7 +40,7 @@ func maskSecret(s string) string {
 		return ""
 	}
 	if len(s) <= 8 {
-		return "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+		return "••••••••"
 	}
 	return s[:4] + "..." + s[len(s)-4:]
 }
@@ -69,32 +57,14 @@ func (h *SettingsHandler) GetAISettings(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	authMode := settings["auth_mode"]
-	if authMode == "" {
-		// Auto-detect from existing data
-		if settings["anthropic_api_key"] != "" {
-			authMode = "api_key"
-		} else if settings["oauth_access_token"] != "" {
-			authMode = "oauth"
-		} else {
-			authMode = "api_key"
-		}
-	}
-
 	resp := aiSettingsResponse{
-		AuthMode:           authMode,
-		AnthropicAPIKey:    maskSecret(settings["anthropic_api_key"]),
-		OAuthAccessToken:   maskSecret(settings["oauth_access_token"]),
-		OAuthRefreshToken:  maskSecret(settings["oauth_refresh_token"]),
-		OAuthExpiresAt:     settings["oauth_expires_at"],
-		ClaudeClientID:     settings["claude_client_id"],
-		ClaudeClientSecret: maskSecret(settings["claude_client_secret"]),
-		AIEnabled:          settings["enabled"] == "true",
-		AIModel:            settings["model"],
+		APIKey:    maskSecret(settings["api_key"]),
+		AIEnabled: settings["enabled"] == "true",
+		AIModel:   settings["model"],
 	}
 
 	if resp.AIModel == "" {
-		resp.AIModel = "claude-sonnet-4-20250514"
+		resp.AIModel = "anthropic/claude-sonnet-4-20250514"
 	}
 
 	writeJSON(w, http.StatusOK, resp)
@@ -111,57 +81,9 @@ func (h *SettingsHandler) UpdateAISettings(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if req.AuthMode != nil {
-		if err := h.settingsRepo.Set(ctx, "ai_auth_mode", *req.AuthMode, false); err != nil {
-			log.Error().Err(err).Msg("failed to set auth mode")
-			writeError(w, http.StatusInternalServerError, "failed to update settings")
-			return
-		}
-	}
-
-	if req.AnthropicAPIKey != nil {
-		if err := h.settingsRepo.Set(ctx, "ai_anthropic_api_key", *req.AnthropicAPIKey, true); err != nil {
-			log.Error().Err(err).Msg("failed to set anthropic api key")
-			writeError(w, http.StatusInternalServerError, "failed to update settings")
-			return
-		}
-	}
-
-	if req.OAuthAccessToken != nil {
-		if err := h.settingsRepo.Set(ctx, "ai_oauth_access_token", *req.OAuthAccessToken, true); err != nil {
-			log.Error().Err(err).Msg("failed to set oauth access token")
-			writeError(w, http.StatusInternalServerError, "failed to update settings")
-			return
-		}
-	}
-
-	if req.OAuthRefreshToken != nil {
-		if err := h.settingsRepo.Set(ctx, "ai_oauth_refresh_token", *req.OAuthRefreshToken, true); err != nil {
-			log.Error().Err(err).Msg("failed to set oauth refresh token")
-			writeError(w, http.StatusInternalServerError, "failed to update settings")
-			return
-		}
-	}
-
-	if req.OAuthExpiresAt != nil {
-		if err := h.settingsRepo.Set(ctx, "ai_oauth_expires_at", *req.OAuthExpiresAt, false); err != nil {
-			log.Error().Err(err).Msg("failed to set oauth expires at")
-			writeError(w, http.StatusInternalServerError, "failed to update settings")
-			return
-		}
-	}
-
-	if req.ClaudeClientID != nil {
-		if err := h.settingsRepo.Set(ctx, "ai_claude_client_id", *req.ClaudeClientID, false); err != nil {
-			log.Error().Err(err).Msg("failed to set claude client id")
-			writeError(w, http.StatusInternalServerError, "failed to update settings")
-			return
-		}
-	}
-
-	if req.ClaudeClientSecret != nil {
-		if err := h.settingsRepo.Set(ctx, "ai_claude_client_secret", *req.ClaudeClientSecret, true); err != nil {
-			log.Error().Err(err).Msg("failed to set claude client secret")
+	if req.APIKey != nil {
+		if err := h.settingsRepo.Set(ctx, "ai_api_key", *req.APIKey, true); err != nil {
+			log.Error().Err(err).Msg("failed to set api key")
 			writeError(w, http.StatusInternalServerError, "failed to update settings")
 			return
 		}
@@ -191,19 +113,14 @@ func (h *SettingsHandler) UpdateAISettings(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]string{"message": "settings updated"})
 }
 
-// TestAIConnection tests the Anthropic API connection by sending a minimal request.
-// Supports both API key and OAuth token authentication.
+// TestAIConnection tests the OpenRouter API connection by sending a minimal request.
 func (h *SettingsHandler) TestAIConnection(w http.ResponseWriter, r *http.Request) {
 	log := logger.With("settings")
 	ctx := r.Context()
 
 	var req struct {
-		APIKey       string `json:"api_key"`
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresAt    string `json:"expires_at"`
-		AuthMode     string `json:"auth_mode"`
-		Model        string `json:"model"`
+		APIKey string `json:"api_key"`
+		Model  string `json:"model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -212,56 +129,16 @@ func (h *SettingsHandler) TestAIConnection(w http.ResponseWriter, r *http.Reques
 
 	da := agent.NewDeployAgent()
 
-	// Resolve the token to use based on auth mode
-	var token string
-	authMode := req.AuthMode
-
-	if authMode == "" {
-		stored, _ := h.settingsRepo.Get(ctx, "ai_auth_mode")
-		authMode = stored
-	}
-
-	if authMode == "oauth" {
-		token = req.AccessToken
-		if token == "" {
-			stored, _ := h.settingsRepo.Get(ctx, "ai_oauth_access_token")
-			token = stored
-		}
-		// Try refresh if we have a refresh token and no valid access token
-		if token == "" {
-			refreshTok := req.RefreshToken
-			if refreshTok == "" {
-				refreshTok, _ = h.settingsRepo.Get(ctx, "ai_oauth_refresh_token")
-			}
-			if refreshTok == "" {
-				writeJSON(w, http.StatusOK, map[string]interface{}{
-					"success": false,
-					"error":   "no OAuth token provided and none stored",
-				})
-				return
-			}
-			result, err := da.RefreshOAuthToken(ctx, refreshTok)
-			if err != nil {
-				writeJSON(w, http.StatusOK, map[string]interface{}{
-					"success": false,
-					"error":   "OAuth refresh failed: " + err.Error(),
-				})
-				return
-			}
-			token = result.AccessToken
-		}
-	} else {
-		token = req.APIKey
-		if token == "" {
-			stored, _ := h.settingsRepo.Get(ctx, "ai_anthropic_api_key")
-			token = stored
-		}
+	token := req.APIKey
+	if token == "" {
+		stored, _ := h.settingsRepo.Get(ctx, "ai_api_key")
+		token = stored
 	}
 
 	if token == "" {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"success": false,
-			"error":   "no credentials provided and none stored",
+			"error":   "no API key provided and none stored",
 		})
 		return
 	}

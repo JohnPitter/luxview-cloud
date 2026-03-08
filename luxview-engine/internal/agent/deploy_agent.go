@@ -14,91 +14,14 @@ import (
 )
 
 const (
-	anthropicAPIURL     = "https://api.anthropic.com/v1/messages"
-	anthropicOAuthURL   = "https://console.anthropic.com/v1/oauth/token"
-	anthropicVersion    = "2023-06-01"
-	defaultModel        = "claude-sonnet-4-20250514"
-	defaultMaxTokens    = 4096
-	defaultTemperature  = 0
-	httpClientTimeout   = 60 * time.Second
+	openRouterAPIURL   = "https://openrouter.ai/api/v1/chat/completions"
+	defaultModel       = "anthropic/claude-sonnet-4-20250514"
+	defaultMaxTokens   = 4096
+	defaultTemperature = 0
+	httpClientTimeout  = 60 * time.Second
 )
 
-// OAuthTokens holds OAuth token data for auto-refresh.
-type OAuthTokens struct {
-	AccessToken  string
-	RefreshToken string
-	ExpiresAt    int64 // Unix milliseconds
-}
-
-// OAuthRefreshResult contains the new tokens after a refresh.
-type OAuthRefreshResult struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int64  `json:"expires_in"` // seconds
-}
-
-// setAuthHeader sets the appropriate auth header based on token type.
-// OAuth tokens (sk-ant-oat*) use Authorization: Bearer, API keys use x-api-key.
-func setAuthHeader(req *http.Request, token string) {
-	if strings.HasPrefix(token, "sk-ant-oat") {
-		req.Header.Set("Authorization", "Bearer "+token)
-	} else {
-		req.Header.Set("x-api-key", token)
-	}
-}
-
-// RefreshOAuthToken exchanges a refresh token for a new access token.
-// Returns the new tokens or an error.
-func (a *DeployAgent) RefreshOAuthToken(ctx context.Context, refreshToken string) (*OAuthRefreshResult, error) {
-	log := logger.With("deploy-agent")
-	log.Info().Msg("refreshing OAuth token")
-
-	form := "grant_type=refresh_token&refresh_token=" + refreshToken
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, anthropicOAuthURL, strings.NewReader(form))
-	if err != nil {
-		return nil, fmt.Errorf("create refresh request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("refresh request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read refresh response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		log.Error().Int("status", resp.StatusCode).Str("body", string(body)).Msg("OAuth refresh failed")
-		return nil, fmt.Errorf("OAuth refresh failed (status %d): %s", resp.StatusCode, string(body))
-	}
-
-	var result OAuthRefreshResult
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("parse refresh response: %w", err)
-	}
-
-	log.Info().Msg("OAuth token refreshed successfully")
-	return &result, nil
-}
-
-// IsOAuthToken returns true if the token is an OAuth access token.
-func IsOAuthToken(token string) bool {
-	return strings.HasPrefix(token, "sk-ant-oat")
-}
-
-// IsTokenExpired checks if an OAuth token has expired or will expire within 60 seconds.
-func IsTokenExpired(expiresAtMs int64) bool {
-	if expiresAtMs == 0 {
-		return false
-	}
-	return time.Now().UnixMilli() >= (expiresAtMs - 60000) // 60s buffer
-}
-
-// DeployAgent calls the Anthropic Messages API to analyze repositories
+// DeployAgent calls the OpenRouter API to analyze repositories
 // and generate optimal Dockerfiles for deployment.
 type DeployAgent struct {
 	client *http.Client
@@ -123,7 +46,7 @@ func (a *DeployAgent) Analyze(ctx context.Context, apiKey, model, repoDir string
 		return nil, fmt.Errorf("build context: %w", err)
 	}
 
-	result, err := a.callClaude(ctx, apiKey, model, systemPrompt, userPrompt)
+	result, err := a.callLLM(ctx, apiKey, model, systemPrompt, userPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("analyze: %w", err)
 	}
@@ -142,7 +65,7 @@ func (a *DeployAgent) AnalyzeFailure(ctx context.Context, apiKey, model, repoDir
 		return nil, fmt.Errorf("build failure context: %w", err)
 	}
 
-	result, err := a.callClaude(ctx, apiKey, model, failureSystemPrompt, userPrompt)
+	result, err := a.callLLM(ctx, apiKey, model, failureSystemPrompt, userPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("analyze failure: %w", err)
 	}
@@ -151,19 +74,19 @@ func (a *DeployAgent) AnalyzeFailure(ctx context.Context, apiKey, model, repoDir
 	return result, nil
 }
 
-// TestConnection sends a minimal request to the Anthropic API to verify the key is valid.
+// TestConnection sends a minimal request to the OpenRouter API to verify the key is valid.
 // Returns the model name on success or an error describing the failure.
 func (a *DeployAgent) TestConnection(ctx context.Context, apiKey, model string) (string, error) {
 	if model == "" {
 		model = defaultModel
 	}
 
-	reqBody := anthropicRequest{
+	reqBody := openRouterRequest{
 		Model:       model,
 		MaxTokens:   10,
 		Temperature: 0,
-		System:      "Reply with only: ok",
-		Messages: []anthropicMessage{
+		Messages: []openRouterMessage{
+			{Role: "system", Content: "Reply with only: ok"},
 			{Role: "user", Content: "test"},
 		},
 	}
@@ -173,14 +96,13 @@ func (a *DeployAgent) TestConnection(ctx context.Context, apiKey, model string) 
 		return "", fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, anthropicAPIURL, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, openRouterAPIURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	setAuthHeader(req, apiKey)
-	req.Header.Set("anthropic-version", anthropicVersion)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -194,7 +116,7 @@ func (a *DeployAgent) TestConnection(ctx context.Context, apiKey, model string) 
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		var apiResp anthropicResponse
+		var apiResp openRouterResponse
 		if json.Unmarshal(respBody, &apiResp) == nil && apiResp.Error != nil {
 			return "", fmt.Errorf("%s", apiResp.Error.Message)
 		}
@@ -204,47 +126,46 @@ func (a *DeployAgent) TestConnection(ctx context.Context, apiKey, model string) 
 	return model, nil
 }
 
-// anthropicRequest represents the request body for the Anthropic Messages API.
-type anthropicRequest struct {
-	Model       string             `json:"model"`
-	MaxTokens   int                `json:"max_tokens"`
-	Temperature float64            `json:"temperature"`
-	System      string             `json:"system"`
-	Messages    []anthropicMessage `json:"messages"`
+// openRouterRequest represents the request body for the OpenRouter chat completions API.
+type openRouterRequest struct {
+	Model       string               `json:"model"`
+	MaxTokens   int                  `json:"max_tokens"`
+	Temperature float64              `json:"temperature"`
+	Messages    []openRouterMessage  `json:"messages"`
 }
 
-// anthropicMessage represents a single message in the conversation.
-type anthropicMessage struct {
+// openRouterMessage represents a single message in the conversation.
+type openRouterMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-// anthropicResponse represents the response from the Anthropic Messages API.
-type anthropicResponse struct {
-	Content []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
-	} `json:"content"`
+// openRouterResponse represents the response from the OpenRouter chat completions API.
+type openRouterResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
 	Error *struct {
-		Type    string `json:"type"`
 		Message string `json:"message"`
 	} `json:"error"`
 }
 
-// callClaude sends a request to the Anthropic Messages API and parses the response.
-func (a *DeployAgent) callClaude(ctx context.Context, apiKey, model, system, userPrompt string) (*AnalysisResult, error) {
+// callLLM sends a request to the OpenRouter API and parses the response.
+func (a *DeployAgent) callLLM(ctx context.Context, apiKey, model, system, userPrompt string) (*AnalysisResult, error) {
 	log := logger.With("deploy-agent")
 
 	if model == "" {
 		model = defaultModel
 	}
 
-	reqBody := anthropicRequest{
+	reqBody := openRouterRequest{
 		Model:       model,
 		MaxTokens:   defaultMaxTokens,
 		Temperature: defaultTemperature,
-		System:      system,
-		Messages: []anthropicMessage{
+		Messages: []openRouterMessage{
+			{Role: "system", Content: system},
 			{Role: "user", Content: userPrompt},
 		},
 	}
@@ -254,20 +175,19 @@ func (a *DeployAgent) callClaude(ctx context.Context, apiKey, model, system, use
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, anthropicAPIURL, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, openRouterAPIURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	setAuthHeader(req, apiKey)
-	req.Header.Set("anthropic-version", anthropicVersion)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	log.Debug().Str("model", model).Int("prompt_len", len(userPrompt)).Msg("calling Anthropic API")
+	log.Debug().Str("model", model).Int("prompt_len", len(userPrompt)).Msg("calling OpenRouter API")
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("call anthropic api: %w", err)
+		return nil, fmt.Errorf("call OpenRouter API: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -277,31 +197,25 @@ func (a *DeployAgent) callClaude(ctx context.Context, apiKey, model, system, use
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Error().Int("status", resp.StatusCode).Str("body", string(respBody)).Msg("anthropic api error")
-		return nil, fmt.Errorf("anthropic api returned status %d: %s", resp.StatusCode, string(respBody))
+		log.Error().Int("status", resp.StatusCode).Str("body", string(respBody)).Msg("OpenRouter API error")
+		return nil, fmt.Errorf("OpenRouter API returned status %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	var apiResp anthropicResponse
+	var apiResp openRouterResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 
 	if apiResp.Error != nil {
-		return nil, fmt.Errorf("anthropic api error: %s: %s", apiResp.Error.Type, apiResp.Error.Message)
+		return nil, fmt.Errorf("OpenRouter API error: %s", apiResp.Error.Message)
 	}
 
 	// Extract text content from the response
-	var text string
-	for _, block := range apiResp.Content {
-		if block.Type == "text" {
-			text = block.Text
-			break
-		}
-	}
-
-	if text == "" {
+	if len(apiResp.Choices) == 0 || apiResp.Choices[0].Message.Content == "" {
 		return nil, fmt.Errorf("no text content in response")
 	}
+
+	text := apiResp.Choices[0].Message.Content
 
 	// Strip markdown code fences if present
 	text = stripCodeFences(text)

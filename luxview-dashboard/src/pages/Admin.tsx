@@ -132,15 +132,9 @@ export function Admin() {
   const [aiTesting, setAiTesting] = useState(false);
   const [aiTestResult, setAiTestResult] = useState<AITestResult | null>(null);
   const [aiForm, setAiForm] = useState({
-    authMode: 'api_key' as 'api_key' | 'oauth',
-    anthropicApiKey: '',
-    oauthAccessToken: '',
-    oauthRefreshToken: '',
-    oauthExpiresAt: '',
-    claudeClientId: '',
-    claudeClientSecret: '',
+    apiKey: '',
     aiEnabled: false,
-    aiModel: 'claude-sonnet-4-20250514',
+    aiModel: 'anthropic/claude-sonnet-4-20250514',
   });
 
   const fetchData = useCallback(async () => {
@@ -175,15 +169,9 @@ export function Admin() {
       const data = await aiSettingsApi.get();
       setAiSettings(data);
       setAiForm({
-        authMode: data.authMode || 'api_key',
-        anthropicApiKey: '',
-        oauthAccessToken: '',
-        oauthRefreshToken: '',
-        oauthExpiresAt: '',
-        claudeClientId: '',
-        claudeClientSecret: '',
+        apiKey: '',
         aiEnabled: data.aiEnabled,
-        aiModel: data.aiModel || 'claude-sonnet-4-20250514',
+        aiModel: data.aiModel || 'anthropic/claude-sonnet-4-20250514',
       });
     } catch {
       addNotification({ type: 'error', title: t('admin.failedToLoad') });
@@ -201,31 +189,18 @@ export function Admin() {
     setAiTestResult(null);
     try {
       const payload: Partial<AISettings> = {
-        authMode: aiForm.authMode,
         aiEnabled: aiForm.aiEnabled,
         aiModel: aiForm.aiModel,
       };
-      if (aiForm.authMode === 'api_key') {
-        if (aiForm.anthropicApiKey) payload.anthropicApiKey = aiForm.anthropicApiKey;
-      } else {
-        if (aiForm.oauthAccessToken) payload.oauthAccessToken = aiForm.oauthAccessToken;
-        if (aiForm.oauthRefreshToken) payload.oauthRefreshToken = aiForm.oauthRefreshToken;
-        if (aiForm.oauthExpiresAt) payload.oauthExpiresAt = aiForm.oauthExpiresAt;
-      }
-      if (aiForm.claudeClientId) payload.claudeClientId = aiForm.claudeClientId;
-      if (aiForm.claudeClientSecret) payload.claudeClientSecret = aiForm.claudeClientSecret;
+      if (aiForm.apiKey) payload.apiKey = aiForm.apiKey;
       await aiSettingsApi.update(payload);
       addNotification({ type: 'success', title: t('admin.ai.saved') });
 
       // Auto-test connection after save if credentials were provided
-      const hasCredentials = aiForm.authMode === 'api_key'
-        ? !!aiForm.anthropicApiKey
-        : !!(aiForm.oauthAccessToken || aiForm.oauthRefreshToken);
-      if (hasCredentials) {
+      if (aiForm.apiKey) {
         setAiTesting(true);
         try {
           const result = await aiSettingsApi.testConnection({
-            authMode: aiForm.authMode,
             model: aiForm.aiModel || undefined,
           });
           setAiTestResult(result);
@@ -249,11 +224,7 @@ export function Admin() {
     setAiTestResult(null);
     try {
       const result = await aiSettingsApi.testConnection({
-        authMode: aiForm.authMode,
-        apiKey: aiForm.authMode === 'api_key' ? aiForm.anthropicApiKey || undefined : undefined,
-        accessToken: aiForm.authMode === 'oauth' ? aiForm.oauthAccessToken || undefined : undefined,
-        refreshToken: aiForm.authMode === 'oauth' ? aiForm.oauthRefreshToken || undefined : undefined,
-        expiresAt: aiForm.authMode === 'oauth' ? aiForm.oauthExpiresAt || undefined : undefined,
+        apiKey: aiForm.apiKey || undefined,
         model: aiForm.aiModel || undefined,
       });
       setAiTestResult(result);
@@ -893,116 +864,24 @@ export function Admin() {
                       isDark={isDark}
                     />
 
-                    {/* Auth Mode Selector */}
+                    {/* API Key */}
                     <div>
                       <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
-                        {t('admin.ai.authMode')}
+                        {t('admin.ai.apiKey')}
                       </label>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setAiForm((prev) => ({ ...prev, authMode: 'api_key' }))}
-                          className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-all ${
-                            aiForm.authMode === 'api_key'
-                              ? 'border-amber-500 bg-amber-500/10 text-amber-500 font-medium'
-                              : isDark
-                                ? 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600'
-                                : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
-                          }`}
-                        >
-                          API Key
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAiForm((prev) => ({ ...prev, authMode: 'oauth' }))}
-                          className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-all ${
-                            aiForm.authMode === 'oauth'
-                              ? 'border-amber-500 bg-amber-500/10 text-amber-500 font-medium'
-                              : isDark
-                                ? 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600'
-                                : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
-                          }`}
-                        >
-                          OAuth Token
-                        </button>
-                      </div>
+                      <input
+                        type="password"
+                        value={aiForm.apiKey}
+                        onChange={(e) => setAiForm((prev) => ({ ...prev, apiKey: e.target.value }))}
+                        placeholder={aiSettings?.apiKey || t('admin.ai.apiKeyPlaceholder')}
+                        className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
+                          isDark
+                            ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
+                            : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
+                        }`}
+                      />
+                      <p className="text-[11px] text-zinc-500 mt-1">{t('admin.ai.apiKeyHint')}</p>
                     </div>
-
-                    {/* API Key fields */}
-                    {aiForm.authMode === 'api_key' && (
-                      <div>
-                        <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
-                          {t('admin.ai.apiKey')}
-                        </label>
-                        <input
-                          type="password"
-                          value={aiForm.anthropicApiKey}
-                          onChange={(e) => setAiForm((prev) => ({ ...prev, anthropicApiKey: e.target.value }))}
-                          placeholder={aiSettings?.anthropicApiKey || t('admin.ai.apiKeyPlaceholder')}
-                          className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
-                            isDark
-                              ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
-                              : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
-                          }`}
-                        />
-                        <p className="text-[11px] text-zinc-500 mt-1">{t('admin.ai.apiKeyHint')}</p>
-                      </div>
-                    )}
-
-                    {/* OAuth fields */}
-                    {aiForm.authMode === 'oauth' && (
-                      <>
-                        <div>
-                          <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
-                            {t('admin.ai.oauthAccessToken')}
-                          </label>
-                          <input
-                            type="password"
-                            value={aiForm.oauthAccessToken}
-                            onChange={(e) => setAiForm((prev) => ({ ...prev, oauthAccessToken: e.target.value }))}
-                            placeholder={aiSettings?.oauthAccessToken || 'sk-ant-oat01-...'}
-                            className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
-                              isDark
-                                ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
-                                : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
-                            }`}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
-                            {t('admin.ai.oauthRefreshToken')}
-                          </label>
-                          <input
-                            type="password"
-                            value={aiForm.oauthRefreshToken}
-                            onChange={(e) => setAiForm((prev) => ({ ...prev, oauthRefreshToken: e.target.value }))}
-                            placeholder={aiSettings?.oauthRefreshToken || 'sk-ant-ort01-...'}
-                            className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
-                              isDark
-                                ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
-                                : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
-                            }`}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
-                            {t('admin.ai.oauthExpiresAt')}
-                          </label>
-                          <input
-                            type="text"
-                            value={aiForm.oauthExpiresAt}
-                            onChange={(e) => setAiForm((prev) => ({ ...prev, oauthExpiresAt: e.target.value }))}
-                            placeholder={aiSettings?.oauthExpiresAt || t('admin.ai.oauthExpiresAtPlaceholder')}
-                            className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
-                              isDark
-                                ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
-                                : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
-                            }`}
-                          />
-                        </div>
-                        <p className="text-[11px] text-zinc-500">{t('admin.ai.oauthHint')}</p>
-                      </>
-                    )}
 
                     {/* Model select */}
                     <div>
@@ -1018,9 +897,11 @@ export function Admin() {
                             : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50'
                         }`}
                       >
-                        <option value="claude-sonnet-4-20250514">Sonnet 4 — recommended</option>
-                        <option value="claude-haiku-4-5-20251001">Haiku 4.5 — faster</option>
-                        <option value="claude-opus-4-6">Opus 4.6 — most capable</option>
+                        <option value="anthropic/claude-sonnet-4-20250514">Claude Sonnet 4 — recommended</option>
+                        <option value="anthropic/claude-haiku-4-5-20251001">Claude Haiku 4.5 — faster</option>
+                        <option value="anthropic/claude-opus-4-6">Claude Opus 4.6 — most capable</option>
+                        <option value="google/gemini-2.5-pro-preview">Gemini 2.5 Pro</option>
+                        <option value="openai/gpt-4o">GPT-4o</option>
                       </select>
                     </div>
 
@@ -1062,11 +943,7 @@ export function Admin() {
                         variant="ghost"
                         size="sm"
                         onClick={handleTestAIConnection}
-                        disabled={aiTesting || (
-                          aiForm.authMode === 'api_key'
-                            ? !aiForm.anthropicApiKey && !aiSettings?.anthropicApiKey
-                            : !aiForm.oauthAccessToken && !aiSettings?.oauthAccessToken && !aiForm.oauthRefreshToken && !aiSettings?.oauthRefreshToken
-                        )}
+                        disabled={aiTesting || (!aiForm.apiKey && !aiSettings?.apiKey)}
                         icon={aiTesting ? <RefreshCw size={14} className="animate-spin" /> : <Zap size={14} />}
                       >
                         {aiTesting ? t('admin.ai.testing') : t('admin.ai.testConnection')}

@@ -21,13 +21,7 @@ export interface AnalysisResult {
 }
 
 export interface AISettings {
-  authMode: 'api_key' | 'oauth';
-  anthropicApiKey: string;
-  oauthAccessToken: string;
-  oauthRefreshToken: string;
-  oauthExpiresAt: string;
-  claudeClientId: string;
-  claudeClientSecret: string;
+  apiKey: string;
   aiEnabled: boolean;
   aiModel: string;
 }
@@ -64,11 +58,7 @@ export const aiSettingsApi = {
     await api.put('/admin/settings/ai', settings);
   },
   async testConnection(params: {
-    authMode?: string;
     apiKey?: string;
-    accessToken?: string;
-    refreshToken?: string;
-    expiresAt?: string;
     model?: string;
   }): Promise<AITestResult> {
     const { data } = await api.post<AITestResult>('/admin/settings/ai/test', params);
