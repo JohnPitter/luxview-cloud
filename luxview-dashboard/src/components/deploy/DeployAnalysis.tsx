@@ -12,9 +12,12 @@ import {
   Server,
   Database,
   GitBranch,
+  GitPullRequest,
   FileSearch,
   FileCode,
   CheckCircle,
+  Rocket,
+  Save,
 } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { useThemeStore } from '../../stores/theme.store';
@@ -125,6 +128,96 @@ function AnalysisLoadingAnimation({ isDark, isFailure }: { isDark: boolean; isFa
   );
 }
 
+function DeployFlowAnimation({ isDark, hasAutoServices }: { isDark: boolean; hasAutoServices: boolean }) {
+  const { t } = useTranslation();
+  const [activeStep, setActiveStep] = useState(0);
+
+  const steps = hasAutoServices
+    ? [
+        { icon: <Save size={16} />, label: t('analyze.deployFlow.savingDockerfile') },
+        { icon: <Database size={16} />, label: t('analyze.deployFlow.provisioningService') },
+        { icon: <Sparkles size={16} />, label: t('analyze.deployFlow.generatingChanges') },
+        { icon: <GitPullRequest size={16} />, label: t('analyze.deployFlow.creatingPR') },
+        { icon: <Rocket size={16} />, label: t('analyze.deployFlow.startingDeploy') },
+      ]
+    : [
+        { icon: <Save size={16} />, label: t('analyze.deployFlow.savingDockerfile') },
+        { icon: <Rocket size={16} />, label: t('analyze.deployFlow.startingDeploy') },
+      ];
+
+  useEffect(() => {
+    const delays = hasAutoServices ? [3000, 5000, 60000, 15000, 5000] : [3000, 5000];
+    let timeout: ReturnType<typeof setTimeout>;
+    let current = 0;
+
+    const advance = () => {
+      if (current < steps.length - 1) {
+        current++;
+        setActiveStep(current);
+        timeout = setTimeout(advance, delays[current] ?? 10000);
+      }
+    };
+    timeout = setTimeout(advance, delays[0] ?? 3000);
+    return () => clearTimeout(timeout);
+  }, [steps.length, hasAutoServices]);
+
+  return (
+    <div className="flex flex-col items-center gap-6 py-8">
+      <div className="relative">
+        <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+          <Rocket size={28} className="text-primary animate-pulse" />
+        </div>
+      </div>
+      <div className="text-center space-y-1">
+        <h3 className={`text-base font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+          {t('analyze.deployFlow.title')}
+        </h3>
+        <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>
+          {hasAutoServices ? t('analyze.deployFlow.patienceAuto') : t('analyze.deployFlow.patience')}
+        </p>
+      </div>
+      <div className="w-full max-w-xs space-y-2">
+        {steps.map((step, i) => (
+          <div
+            key={i}
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-500 ${
+              i < activeStep
+                ? 'opacity-60'
+                : i === activeStep
+                  ? isDark ? 'bg-zinc-800/50' : 'bg-zinc-100'
+                  : 'opacity-30'
+            }`}
+          >
+            <span
+              className={`shrink-0 ${
+                i < activeStep
+                  ? 'text-emerald-400'
+                  : i === activeStep
+                    ? 'text-primary animate-pulse'
+                    : isDark ? 'text-zinc-600' : 'text-zinc-400'
+              }`}
+            >
+              {i < activeStep ? <CheckCircle size={16} /> : step.icon}
+            </span>
+            <span
+              className={`text-sm ${
+                i === activeStep
+                  ? isDark ? 'text-zinc-200 font-medium' : 'text-zinc-800 font-medium'
+                  : isDark ? 'text-zinc-400' : 'text-zinc-600'
+              }`}
+            >
+              {step.label}
+            </span>
+            {i === activeStep && (
+              <Loader2 size={14} className="ml-auto text-primary animate-spin" />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function DeployAnalysis({
   result,
   loading = false,
@@ -168,6 +261,16 @@ export function DeployAnalysis({
       }),
     [result.suggestions],
   );
+
+  const hasAutoServices = Object.values(serviceModes).some((m) => m === 'auto');
+
+  if (deploying) {
+    return (
+      <GlassCard padding="lg" className="animate-fade-in">
+        <DeployFlowAnimation isDark={isDark} hasAutoServices={hasAutoServices} />
+      </GlassCard>
+    );
+  }
 
   if (loading) {
     return (
