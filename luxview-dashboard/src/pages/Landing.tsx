@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { type Plan, plansApi } from '../api/plans';
 import {
@@ -26,6 +26,71 @@ import {
 import { useAuthStore } from '../stores/auth.store';
 import { useThemeStore } from '../stores/theme.store';
 import { GlassCard } from '../components/common/GlassCard';
+
+// ---------------------------------------------------------------------------
+// Scroll-reveal primitives
+// ---------------------------------------------------------------------------
+
+type RevealVariant = 'fade-up' | 'fade-left' | 'fade-right' | 'zoom-in' | 'fade';
+
+const variantStyles: Record<RevealVariant, { hidden: string; visible: string }> = {
+  'fade-up':    { hidden: 'opacity-0 translate-y-10', visible: 'opacity-100 translate-y-0' },
+  'fade-left':  { hidden: 'opacity-0 -translate-x-10', visible: 'opacity-100 translate-x-0' },
+  'fade-right': { hidden: 'opacity-0 translate-x-10', visible: 'opacity-100 translate-x-0' },
+  'zoom-in':    { hidden: 'opacity-0 scale-95', visible: 'opacity-100 scale-100' },
+  'fade':       { hidden: 'opacity-0', visible: 'opacity-100' },
+};
+
+function Reveal({
+  children,
+  variant = 'fade-up',
+  delay = 0,
+  duration = 700,
+  className = '',
+  once = true,
+}: {
+  children: React.ReactNode;
+  variant?: RevealVariant;
+  delay?: number;
+  duration?: number;
+  className?: string;
+  once?: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          if (once) observer.unobserve(el);
+        } else if (!once) {
+          setIsVisible(false);
+        }
+      },
+      { threshold: 0.15, rootMargin: '0px 0px -40px 0px' },
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [once]);
+
+  const v = variantStyles[variant];
+
+  return (
+    <div
+      ref={ref}
+      className={`transition-all ease-out ${isVisible ? v.visible : v.hidden} ${className}`}
+      style={{ transitionDuration: `${duration}ms`, transitionDelay: `${delay}ms` }}
+    >
+      {children}
+    </div>
+  );
+}
 
 function AnimatedDashboard() {
   const { t } = useTranslation();
@@ -527,128 +592,147 @@ export function Landing() {
       <main className="relative z-10">
         <section className="mx-auto grid max-w-[1240px] gap-14 px-6 pb-20 pt-32 sm:px-8 sm:pt-40 lg:grid-cols-2 lg:items-center">
           <div className="max-w-3xl">
-            <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] ${isDark ? 'border border-amber-400/20 bg-amber-400/10 text-amber-300' : 'border border-amber-500/20 bg-amber-50 text-amber-700'}`}>
-              <Sparkles size={14} />
-              {t('landing.hero.announcement')}
-            </div>
-
-            <h1 className={`mt-8 text-5xl font-semibold tracking-[-0.05em] sm:text-6xl lg:text-[82px] lg:leading-[0.95] ${isDark ? 'text-zinc-50' : 'text-zinc-950'}`}>
-              <span>{t('landing.hero.title1')}</span>
-              <br />
-              <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #fcd34d 0%, #f59e0b 40%, #60a5fa 100%)' }}>
-                {t('landing.hero.title2')}
-              </span>
-            </h1>
-
-            <p className={`mt-7 max-w-2xl text-lg leading-8 sm:text-xl ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
-              {t('landing.hero.subtitle')}{' '}
-              <code className={`rounded-lg px-2 py-1 text-base ${isDark ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900 shadow-sm'}`}>
-                {t('landing.hero.subtitleCode')}
-              </code>
-              .
-            </p>
-
-            <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-              <button onClick={handleAuth} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-500 px-7 py-4 text-base font-semibold text-zinc-950 shadow-[0_18px_50px_rgba(245,158,11,0.28)] transition-all duration-200 hover:bg-amber-400">
-                <Github size={18} />
-                {t('landing.hero.ctaPrimary')}
-              </button>
-              <button
-                onClick={() => scrollTo('how-it-works')}
-                className={`inline-flex items-center justify-center gap-2 rounded-2xl px-7 py-4 text-base font-medium transition-all duration-200 ${
-                  isDark ? 'border border-zinc-800 bg-zinc-900/70 text-zinc-100 hover:border-zinc-700' : 'border border-zinc-200 bg-white/80 text-zinc-900 hover:border-zinc-300'
-                }`}
-              >
-                {t('landing.hero.ctaSecondary')}
-                <ArrowRight size={16} />
-              </button>
-            </div>
-
-            <div className="mt-8 flex flex-wrap gap-3">
-              {[t('landing.hero.noCreditCard'), t('landing.hero.freeSSL'), t('landing.hero.instantSubdomains')].map((item) => (
-                <span key={item} className={`rounded-full px-4 py-2 text-sm ${isDark ? 'border border-zinc-800 bg-zinc-900/70 text-zinc-300' : 'border border-zinc-200 bg-white/80 text-zinc-700'}`}>
-                  {item}
-                </span>
-              ))}
-            </div>
-
-          </div>
-
-          <div className="relative">
-            <div className="absolute -right-12 top-8 h-48 w-48 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.16), transparent 70%)' }} />
-            <AnimatedDashboard />
-          </div>
-        </section>
-
-        <section className="mx-auto max-w-[1240px] px-6 pb-24 sm:px-8">
-          <GlassCard className="overflow-hidden">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-400">{t('landing.stacks.title')}</p>
-                <p className={`mt-2 text-sm leading-6 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                  {t('landing.stacks.subtitle')}
-                </p>
+            <Reveal variant="fade-up" duration={600}>
+              <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] ${isDark ? 'border border-amber-400/20 bg-amber-400/10 text-amber-300' : 'border border-amber-500/20 bg-amber-50 text-amber-700'}`}>
+                <Sparkles size={14} />
+                {t('landing.hero.announcement')}
               </div>
-              <div className="flex flex-wrap gap-2.5">
-                {stacks.map((stack) => (
-                  <span key={stack.name} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ${isDark ? 'border border-zinc-800 bg-zinc-950/70 text-zinc-200' : 'border border-zinc-200 bg-white/80 text-zinc-700'}`}>
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: stack.color }} />
-                    {stack.name}
+            </Reveal>
+
+            <Reveal variant="fade-up" delay={120} duration={700}>
+              <h1 className={`mt-8 text-5xl font-semibold tracking-[-0.05em] sm:text-6xl lg:text-[82px] lg:leading-[0.95] ${isDark ? 'text-zinc-50' : 'text-zinc-950'}`}>
+                <span>{t('landing.hero.title1')}</span>
+                <br />
+                <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #fcd34d 0%, #f59e0b 40%, #60a5fa 100%)' }}>
+                  {t('landing.hero.title2')}
+                </span>
+              </h1>
+            </Reveal>
+
+            <Reveal variant="fade-up" delay={240}>
+              <p className={`mt-7 max-w-2xl text-lg leading-8 sm:text-xl ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                {t('landing.hero.subtitle')}{' '}
+                <code className={`rounded-lg px-2 py-1 text-base ${isDark ? 'bg-zinc-900 text-zinc-100' : 'bg-white text-zinc-900 shadow-sm'}`}>
+                  {t('landing.hero.subtitleCode')}
+                </code>
+                .
+              </p>
+            </Reveal>
+
+            <Reveal variant="fade-up" delay={360}>
+              <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+                <button onClick={handleAuth} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-500 px-7 py-4 text-base font-semibold text-zinc-950 shadow-[0_18px_50px_rgba(245,158,11,0.28)] transition-all duration-200 hover:bg-amber-400">
+                  <Github size={18} />
+                  {t('landing.hero.ctaPrimary')}
+                </button>
+                <button
+                  onClick={() => scrollTo('how-it-works')}
+                  className={`inline-flex items-center justify-center gap-2 rounded-2xl px-7 py-4 text-base font-medium transition-all duration-200 ${
+                    isDark ? 'border border-zinc-800 bg-zinc-900/70 text-zinc-100 hover:border-zinc-700' : 'border border-zinc-200 bg-white/80 text-zinc-900 hover:border-zinc-300'
+                  }`}
+                >
+                  {t('landing.hero.ctaSecondary')}
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            </Reveal>
+
+            <Reveal variant="fade-up" delay={480}>
+              <div className="mt-8 flex flex-wrap gap-3">
+                {[t('landing.hero.noCreditCard'), t('landing.hero.freeSSL'), t('landing.hero.instantSubdomains')].map((item) => (
+                  <span key={item} className={`rounded-full px-4 py-2 text-sm ${isDark ? 'border border-zinc-800 bg-zinc-900/70 text-zinc-300' : 'border border-zinc-200 bg-white/80 text-zinc-700'}`}>
+                    {item}
                   </span>
                 ))}
               </div>
+            </Reveal>
+          </div>
+
+          <Reveal variant="fade-left" delay={300} duration={800}>
+            <div className="relative">
+              <div className="absolute -right-12 top-8 h-48 w-48 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.16), transparent 70%)' }} />
+              <AnimatedDashboard />
             </div>
-          </GlassCard>
+          </Reveal>
         </section>
 
+        <Reveal variant="fade-up">
+          <section className="mx-auto max-w-[1240px] px-6 pb-24 sm:px-8">
+            <GlassCard className="overflow-hidden">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-400">{t('landing.stacks.title')}</p>
+                  <p className={`mt-2 text-sm leading-6 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                    {t('landing.stacks.subtitle')}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2.5">
+                  {stacks.map((stack) => (
+                    <span key={stack.name} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ${isDark ? 'border border-zinc-800 bg-zinc-950/70 text-zinc-200' : 'border border-zinc-200 bg-white/80 text-zinc-700'}`}>
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: stack.color }} />
+                      {stack.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </GlassCard>
+          </section>
+        </Reveal>
+
         <section id="features" className="mx-auto max-w-[1240px] px-6 pb-24 sm:px-8">
-          <SectionIntro
-            eyebrow={t('landing.nav.features')}
-            title={t('landing.features.title')}
-            description={t('landing.features.subtitle')}
-            isDark={isDark}
-          />
+          <Reveal variant="fade-up">
+            <SectionIntro
+              eyebrow={t('landing.nav.features')}
+              title={t('landing.features.title')}
+              description={t('landing.features.subtitle')}
+              isDark={isDark}
+            />
+          </Reveal>
 
           <div className="mt-12 grid gap-4 lg:grid-cols-3">
-            {features.map((feature) => {
+            {features.map((feature, index) => {
               const Icon = feature.icon;
               return (
-                <GlassCard key={feature.title} className={`group relative overflow-hidden ${feature.className}`} hover>
-                  <div className={`absolute inset-0 bg-gradient-to-br ${feature.accent} opacity-70`} />
-                  <div className="relative flex h-full flex-col justify-between">
-                    <div>
-                      <div className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl ${isDark ? 'bg-zinc-950/70 ring-1 ring-white/5' : 'bg-white/85 ring-1 ring-zinc-200/80'}`}>
-                        <Icon size={22} className={feature.iconColor} />
+                <Reveal key={feature.title} variant="fade-up" delay={index * 100} duration={600}>
+                  <GlassCard className={`group relative overflow-hidden h-full ${feature.className}`} hover>
+                    <div className={`absolute inset-0 bg-gradient-to-br ${feature.accent} opacity-70`} />
+                    <div className="relative flex h-full flex-col justify-between">
+                      <div>
+                        <div className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl ${isDark ? 'bg-zinc-950/70 ring-1 ring-white/5' : 'bg-white/85 ring-1 ring-zinc-200/80'}`}>
+                          <Icon size={22} className={feature.iconColor} />
+                        </div>
+                        <h3 className={`mt-5 text-xl font-semibold tracking-tight ${isDark ? 'text-zinc-50' : 'text-zinc-950'}`}>{feature.title}</h3>
+                        <p className={`mt-3 max-w-xl text-sm leading-7 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>{feature.description}</p>
                       </div>
-                      <h3 className={`mt-5 text-xl font-semibold tracking-tight ${isDark ? 'text-zinc-50' : 'text-zinc-950'}`}>{feature.title}</h3>
-                      <p className={`mt-3 max-w-xl text-sm leading-7 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>{feature.description}</p>
-                    </div>
 
-                    {(feature.title === t('landing.features.autoDetect.title') || feature.title === t('landing.features.autoDeploy.title')) && (
-                      <div className="mt-6 flex flex-wrap gap-2">
-                        {(feature.title === t('landing.features.autoDetect.title')
-                          ? stacks.map((stack) => stack.name)
-                          : ['main', t('common.rollback'), 'webhooks', t('landing.howItWorks.deploy.healthCheck')]).map((item) => (
-                          <span key={item} className={`rounded-full px-3 py-1.5 text-xs uppercase tracking-[0.18em] ${isDark ? 'border border-zinc-800 bg-zinc-950/80 text-zinc-400' : 'border border-zinc-200 bg-white/80 text-zinc-600'}`}>
-                            {item}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </GlassCard>
+                      {(feature.title === t('landing.features.autoDetect.title') || feature.title === t('landing.features.autoDeploy.title')) && (
+                        <div className="mt-6 flex flex-wrap gap-2">
+                          {(feature.title === t('landing.features.autoDetect.title')
+                            ? stacks.map((stack) => stack.name)
+                            : ['main', t('common.rollback'), 'webhooks', t('landing.howItWorks.deploy.healthCheck')]).map((item) => (
+                            <span key={item} className={`rounded-full px-3 py-1.5 text-xs uppercase tracking-[0.18em] ${isDark ? 'border border-zinc-800 bg-zinc-950/80 text-zinc-400' : 'border border-zinc-200 bg-white/80 text-zinc-600'}`}>
+                              {item}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </GlassCard>
+                </Reveal>
               );
             })}
           </div>
         </section>
 
         <section id="how-it-works" className="mx-auto max-w-[1240px] px-6 pb-24 sm:px-8">
-          <SectionIntro
-            eyebrow={t('landing.nav.howItWorks')}
-            title={t('landing.howItWorks.title')}
-            description={t('landing.howItWorks.subtitle')}
-            isDark={isDark}
-          />
+          <Reveal variant="fade-up">
+            <SectionIntro
+              eyebrow={t('landing.nav.howItWorks')}
+              title={t('landing.howItWorks.title')}
+              description={t('landing.howItWorks.subtitle')}
+              isDark={isDark}
+            />
+          </Reveal>
 
           <div className="relative mt-12">
             <div
@@ -660,23 +744,25 @@ export function Landing() {
               {steps.map((step, index) => {
                 const Icon = step.icon;
                 return (
-                  <GlassCard key={step.title} className="relative h-full">
-                    <div className="flex items-center gap-3">
-                      <span className="inline-flex rounded-full bg-amber-500/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-400">
-                        {t('landing.howItWorks.step', { number: index + 1 })}
-                      </span>
-                    </div>
-                    <div className="mt-5 flex items-start gap-4">
-                      <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${isDark ? 'bg-zinc-950/70 ring-1 ring-white/5' : 'bg-white/85 ring-1 ring-zinc-200/80'}`}>
-                        <Icon size={22} className="text-amber-400" />
+                  <Reveal key={step.title} variant="fade-up" delay={index * 150} duration={600}>
+                    <GlassCard className="relative h-full">
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex rounded-full bg-amber-500/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-400">
+                          {t('landing.howItWorks.step', { number: index + 1 })}
+                        </span>
                       </div>
-                      <div>
-                        <h3 className={`text-2xl font-semibold tracking-tight ${isDark ? 'text-zinc-50' : 'text-zinc-950'}`}>{step.title}</h3>
-                        <p className={`mt-3 text-sm leading-7 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>{step.description}</p>
+                      <div className="mt-5 flex items-start gap-4">
+                        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${isDark ? 'bg-zinc-950/70 ring-1 ring-white/5' : 'bg-white/85 ring-1 ring-zinc-200/80'}`}>
+                          <Icon size={22} className="text-amber-400" />
+                        </div>
+                        <div>
+                          <h3 className={`text-2xl font-semibold tracking-tight ${isDark ? 'text-zinc-50' : 'text-zinc-950'}`}>{step.title}</h3>
+                          <p className={`mt-3 text-sm leading-7 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>{step.description}</p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="mt-8">{renderStepVisual(step.visual)}</div>
-                  </GlassCard>
+                      <div className="mt-8">{renderStepVisual(step.visual)}</div>
+                    </GlassCard>
+                  </Reveal>
                 );
               })}
             </div>
@@ -685,13 +771,16 @@ export function Landing() {
 
         {pricingVisible && (
           <section id="pricing" className="mx-auto max-w-[1240px] px-6 pb-24 sm:px-8">
-            <SectionIntro
-              eyebrow={t('landing.nav.pricing')}
-              title={t('landing.pricing.title')}
-              description={t('landing.pricing.subtitle')}
-              isDark={isDark}
-            />
+            <Reveal variant="fade-up">
+              <SectionIntro
+                eyebrow={t('landing.nav.pricing')}
+                title={t('landing.pricing.title')}
+                description={t('landing.pricing.subtitle')}
+                isDark={isDark}
+              />
+            </Reveal>
 
+            <Reveal variant="zoom-in" delay={150}>
             <div className="mt-12">
               {plansLoading ? (
                 <div className="grid gap-4 lg:grid-cols-3">
@@ -788,10 +877,12 @@ export function Landing() {
                 </div>
               )}
             </div>
+            </Reveal>
           </section>
         )}
       </main>
 
+      <Reveal variant="fade" duration={600}>
       <footer className={`relative z-10 border-t ${isDark ? 'border-zinc-900 bg-zinc-950' : 'border-zinc-200 bg-[#f7f4ec]'}`}>
         <div className="mx-auto max-w-[1240px] px-6 py-12 sm:px-8">
           <div className="flex flex-col gap-10 lg:flex-row lg:items-start lg:justify-between">
@@ -835,6 +926,7 @@ export function Landing() {
           </div>
         </div>
       </footer>
+      </Reveal>
     </div>
   );
 }
