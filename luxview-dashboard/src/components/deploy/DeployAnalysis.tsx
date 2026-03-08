@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Sparkles,
@@ -11,6 +11,10 @@ import {
   Check,
   Server,
   Database,
+  GitBranch,
+  FileSearch,
+  FileCode,
+  CheckCircle,
 } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { useThemeStore } from '../../stores/theme.store';
@@ -36,6 +40,89 @@ const severityBorder: Record<Suggestion['type'], string> = {
   warning: 'border-amber-500/30 bg-amber-500/5',
   info: 'border-blue-500/30 bg-blue-500/5',
 };
+
+function AnalysisLoadingAnimation({ isDark, isFailure }: { isDark: boolean; isFailure: boolean }) {
+  const { t } = useTranslation();
+  const [activeStep, setActiveStep] = useState(0);
+
+  const steps = isFailure
+    ? [
+        { icon: <GitBranch size={16} />, label: t('analyze.loading.cloningRepo') },
+        { icon: <FileSearch size={16} />, label: t('analyze.loading.readingLogs') },
+        { icon: <Sparkles size={16} />, label: t('analyze.loading.diagnosing') },
+        { icon: <FileCode size={16} />, label: t('analyze.loading.generatingFix') },
+      ]
+    : [
+        { icon: <GitBranch size={16} />, label: t('analyze.loading.cloningRepo') },
+        { icon: <FileSearch size={16} />, label: t('analyze.loading.scanningFiles') },
+        { icon: <Database size={16} />, label: t('analyze.loading.detectingServices') },
+        { icon: <Sparkles size={16} />, label: t('analyze.loading.generatingDockerfile') },
+        { icon: <CheckCircle size={16} />, label: t('analyze.loading.preparingResults') },
+      ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveStep((prev) => (prev < steps.length - 1 ? prev + 1 : prev));
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [steps.length]);
+
+  return (
+    <div className="flex flex-col items-center gap-6 py-8">
+      <div className="relative">
+        <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+          <Sparkles size={28} className="text-primary animate-pulse" />
+        </div>
+      </div>
+      <div className="text-center space-y-1">
+        <h3 className={`text-base font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+          {isFailure ? t('analyze.diagnosingFailure') : t('analyze.analyzingRepo')}
+        </h3>
+        <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>
+          {t('analyze.loading.patience')}
+        </p>
+      </div>
+      <div className="w-full max-w-xs space-y-2">
+        {steps.map((step, i) => (
+          <div
+            key={i}
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-500 ${
+              i < activeStep
+                ? 'opacity-60'
+                : i === activeStep
+                  ? isDark ? 'bg-zinc-800/50' : 'bg-zinc-100'
+                  : 'opacity-30'
+            }`}
+          >
+            <span
+              className={`shrink-0 ${
+                i < activeStep
+                  ? 'text-emerald-400'
+                  : i === activeStep
+                    ? 'text-primary animate-pulse'
+                    : isDark ? 'text-zinc-600' : 'text-zinc-400'
+              }`}
+            >
+              {i < activeStep ? <CheckCircle size={16} /> : step.icon}
+            </span>
+            <span
+              className={`text-sm ${
+                i === activeStep
+                  ? isDark ? 'text-zinc-200 font-medium' : 'text-zinc-800 font-medium'
+                  : isDark ? 'text-zinc-400' : 'text-zinc-600'
+              }`}
+            >
+              {step.label}
+            </span>
+            {i === activeStep && (
+              <Loader2 size={14} className="ml-auto text-primary animate-spin" />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function DeployAnalysis({
   result,
@@ -70,9 +157,6 @@ export function DeployAnalysis({
   const isFailure = mode === 'failure';
 
   const title = isFailure ? t('analyze.failureTitle') : t('analyze.title');
-  const loadingText = isFailure
-    ? t('analyze.diagnosingFailure')
-    : t('analyze.analyzingRepo');
 
   const sortedSuggestions = useMemo(
     () =>
@@ -86,12 +170,7 @@ export function DeployAnalysis({
   if (loading) {
     return (
       <GlassCard padding="lg" className="animate-fade-in">
-        <div className="flex flex-col items-center justify-center gap-4 py-12">
-          <Loader2 size={32} className="text-primary animate-spin" />
-          <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
-            {loadingText}
-          </p>
-        </div>
+        <AnalysisLoadingAnimation isDark={isDark} isFailure={isFailure} />
       </GlassCard>
     );
   }

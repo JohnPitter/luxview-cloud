@@ -37,6 +37,9 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // Send current locale for AI responses
+  const lang = localStorage.getItem('i18nextLng') || navigator.language || 'en';
+  config.headers['Accept-Language'] = lang;
   if (config.data && typeof config.data === 'object') {
     config.data = transformKeys(config.data, camelToSnake);
   }

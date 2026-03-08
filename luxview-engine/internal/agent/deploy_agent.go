@@ -37,7 +37,7 @@ func NewDeployAgent() *DeployAgent {
 }
 
 // Analyze scans a repository and returns deployment suggestions with a generated Dockerfile.
-func (a *DeployAgent) Analyze(ctx context.Context, apiKey, model, repoDir string) (*AnalysisResult, error) {
+func (a *DeployAgent) Analyze(ctx context.Context, apiKey, model, repoDir, lang string) (*AnalysisResult, error) {
 	log := logger.With("deploy-agent")
 	log.Info().Str("repo", repoDir).Msg("starting repository analysis")
 
@@ -46,7 +46,8 @@ func (a *DeployAgent) Analyze(ctx context.Context, apiKey, model, repoDir string
 		return nil, fmt.Errorf("build context: %w", err)
 	}
 
-	result, err := a.callLLM(ctx, apiKey, model, systemPrompt, userPrompt)
+	localizedPrompt := systemPrompt + "\n\nIMPORTANT: All text content in your response (suggestions messages, reasons, manual steps, env hint descriptions) MUST be written in " + lang + " language. JSON keys stay in English."
+	result, err := a.callLLM(ctx, apiKey, model, localizedPrompt, userPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("analyze: %w", err)
 	}
@@ -56,7 +57,7 @@ func (a *DeployAgent) Analyze(ctx context.Context, apiKey, model, repoDir string
 }
 
 // AnalyzeFailure diagnoses a failed build and returns a corrected Dockerfile.
-func (a *DeployAgent) AnalyzeFailure(ctx context.Context, apiKey, model, repoDir, buildLog, dockerfile string) (*AnalysisResult, error) {
+func (a *DeployAgent) AnalyzeFailure(ctx context.Context, apiKey, model, repoDir, buildLog, dockerfile, lang string) (*AnalysisResult, error) {
 	log := logger.With("deploy-agent")
 	log.Info().Str("repo", repoDir).Msg("starting failure analysis")
 
@@ -65,7 +66,8 @@ func (a *DeployAgent) AnalyzeFailure(ctx context.Context, apiKey, model, repoDir
 		return nil, fmt.Errorf("build failure context: %w", err)
 	}
 
-	result, err := a.callLLM(ctx, apiKey, model, failureSystemPrompt, userPrompt)
+	localizedPrompt := failureSystemPrompt + "\n\nIMPORTANT: All text content in your response (suggestions messages, diagnosis, reasons, manual steps) MUST be written in " + lang + " language. JSON keys stay in English."
+	result, err := a.callLLM(ctx, apiKey, model, localizedPrompt, userPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("analyze failure: %w", err)
 	}

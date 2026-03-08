@@ -146,6 +146,11 @@ func (h *AnalyzeHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	lang := r.Header.Get("Accept-Language")
+	if lang == "" {
+		lang = "en"
+	}
+
 	cloneDir, err := h.cloneRepo(ctx, appID, app.RepoURL, app.RepoBranch)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to clone repo")
@@ -154,7 +159,7 @@ func (h *AnalyzeHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.RemoveAll(cloneDir)
 
-	result, err := h.agent.Analyze(ctx, cfg.apiKey, cfg.model, cloneDir)
+	result, err := h.agent.Analyze(ctx, cfg.apiKey, cfg.model, cloneDir, lang)
 	if err != nil {
 		log.Error().Err(err).Str("app", app.Subdomain).Msg("analysis failed")
 		writeError(w, http.StatusInternalServerError, "analysis failed: "+err.Error())
@@ -208,6 +213,11 @@ func (h *AnalyzeHandler) AnalyzeFailure(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	lang := r.Header.Get("Accept-Language")
+	if lang == "" {
+		lang = "en"
+	}
+
 	var dockerfile string
 	if app.CustomDockerfile != nil {
 		dockerfile = *app.CustomDockerfile
@@ -221,7 +231,7 @@ func (h *AnalyzeHandler) AnalyzeFailure(w http.ResponseWriter, r *http.Request) 
 	}
 	defer os.RemoveAll(cloneDir)
 
-	result, err := h.agent.AnalyzeFailure(ctx, cfg.apiKey, cfg.model, cloneDir, latestDeploy.BuildLog, dockerfile)
+	result, err := h.agent.AnalyzeFailure(ctx, cfg.apiKey, cfg.model, cloneDir, latestDeploy.BuildLog, dockerfile, lang)
 	if err != nil {
 		log.Error().Err(err).Str("app", app.Subdomain).Msg("failure analysis failed")
 		writeError(w, http.StatusInternalServerError, "failure analysis failed: "+err.Error())
