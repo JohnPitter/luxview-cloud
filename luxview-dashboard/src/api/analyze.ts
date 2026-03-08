@@ -45,11 +45,11 @@ export interface AISettings {
 
 export const analyzeApi = {
   async analyze(appId: string): Promise<AnalysisResult> {
-    const { data } = await api.post<AnalysisResult>(`/apps/${appId}/analyze`, null, { timeout: 120000 });
+    const { data } = await api.post<AnalysisResult>(`/apps/${appId}/analyze`, null, { timeout: 300000 });
     return data;
   },
   async analyzeFailure(appId: string): Promise<AnalysisResult> {
-    const { data } = await api.post<AnalysisResult>(`/apps/${appId}/analyze-failure`, null, { timeout: 120000 });
+    const { data } = await api.post<AnalysisResult>(`/apps/${appId}/analyze-failure`, null, { timeout: 300000 });
     return data;
   },
   async saveDockerfile(appId: string, content: string): Promise<void> {
