@@ -22,9 +22,9 @@ func NewSettingsHandler(settingsRepo *repository.SettingsRepo) *SettingsHandler 
 type aiSettingsResponse struct {
 	AuthMode           string `json:"auth_mode"`
 	AnthropicAPIKey    string `json:"anthropic_api_key"`
-	OAuthAccessToken   string `json:"oauth_access_token"`
-	OAuthRefreshToken  string `json:"oauth_refresh_token"`
-	OAuthExpiresAt     string `json:"oauth_expires_at"`
+	OAuthAccessToken   string `json:"o_auth_access_token"`
+	OAuthRefreshToken  string `json:"o_auth_refresh_token"`
+	OAuthExpiresAt     string `json:"o_auth_expires_at"`
 	ClaudeClientID     string `json:"claude_client_id"`
 	ClaudeClientSecret string `json:"claude_client_secret"`
 	AIEnabled          bool   `json:"ai_enabled"`
@@ -36,9 +36,9 @@ type aiSettingsResponse struct {
 type updateAISettingsRequest struct {
 	AuthMode           *string `json:"auth_mode"`
 	AnthropicAPIKey    *string `json:"anthropic_api_key"`
-	OAuthAccessToken   *string `json:"oauth_access_token"`
-	OAuthRefreshToken  *string `json:"oauth_refresh_token"`
-	OAuthExpiresAt     *string `json:"oauth_expires_at"`
+	OAuthAccessToken   *string `json:"o_auth_access_token"`
+	OAuthRefreshToken  *string `json:"o_auth_refresh_token"`
+	OAuthExpiresAt     *string `json:"o_auth_expires_at"`
 	ClaudeClientID     *string `json:"claude_client_id"`
 	ClaudeClientSecret *string `json:"claude_client_secret"`
 	AIEnabled          *bool   `json:"ai_enabled"`
