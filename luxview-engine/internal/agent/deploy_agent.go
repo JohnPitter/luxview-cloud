@@ -15,12 +15,27 @@ import (
 
 const (
 	anthropicAPIURL     = "https://api.anthropic.com/v1/messages"
+	anthropicOAuthURL   = "https://console.anthropic.com/v1/oauth/token"
 	anthropicVersion    = "2023-06-01"
 	defaultModel        = "claude-sonnet-4-20250514"
 	defaultMaxTokens    = 4096
 	defaultTemperature  = 0
 	httpClientTimeout   = 60 * time.Second
 )
+
+// OAuthTokens holds OAuth token data for auto-refresh.
+type OAuthTokens struct {
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    int64 // Unix milliseconds
+}
+
+// OAuthRefreshResult contains the new tokens after a refresh.
+type OAuthRefreshResult struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int64  `json:"expires_in"` // seconds
+}
 
 // setAuthHeader sets the appropriate auth header based on token type.
 // OAuth tokens (sk-ant-oat*) use Authorization: Bearer, API keys use x-api-key.
@@ -30,6 +45,57 @@ func setAuthHeader(req *http.Request, token string) {
 	} else {
 		req.Header.Set("x-api-key", token)
 	}
+}
+
+// RefreshOAuthToken exchanges a refresh token for a new access token.
+// Returns the new tokens or an error.
+func (a *DeployAgent) RefreshOAuthToken(ctx context.Context, refreshToken string) (*OAuthRefreshResult, error) {
+	log := logger.With("deploy-agent")
+	log.Info().Msg("refreshing OAuth token")
+
+	form := "grant_type=refresh_token&refresh_token=" + refreshToken
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, anthropicOAuthURL, strings.NewReader(form))
+	if err != nil {
+		return nil, fmt.Errorf("create refresh request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("refresh request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read refresh response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Error().Int("status", resp.StatusCode).Str("body", string(body)).Msg("OAuth refresh failed")
+		return nil, fmt.Errorf("OAuth refresh failed (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result OAuthRefreshResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("parse refresh response: %w", err)
+	}
+
+	log.Info().Msg("OAuth token refreshed successfully")
+	return &result, nil
+}
+
+// IsOAuthToken returns true if the token is an OAuth access token.
+func IsOAuthToken(token string) bool {
+	return strings.HasPrefix(token, "sk-ant-oat")
+}
+
+// IsTokenExpired checks if an OAuth token has expired or will expire within 60 seconds.
+func IsTokenExpired(expiresAtMs int64) bool {
+	if expiresAtMs == 0 {
+		return false
+	}
+	return time.Now().UnixMilli() >= (expiresAtMs - 60000) // 60s buffer
 }
 
 // DeployAgent calls the Anthropic Messages API to analyze repositories

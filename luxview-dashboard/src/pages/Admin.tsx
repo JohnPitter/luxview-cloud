@@ -132,7 +132,11 @@ export function Admin() {
   const [aiTesting, setAiTesting] = useState(false);
   const [aiTestResult, setAiTestResult] = useState<AITestResult | null>(null);
   const [aiForm, setAiForm] = useState({
+    authMode: 'api_key' as 'api_key' | 'oauth',
     anthropicApiKey: '',
+    oauthAccessToken: '',
+    oauthRefreshToken: '',
+    oauthExpiresAt: '',
     claudeClientId: '',
     claudeClientSecret: '',
     aiEnabled: false,
@@ -171,7 +175,11 @@ export function Admin() {
       const data = await aiSettingsApi.get();
       setAiSettings(data);
       setAiForm({
+        authMode: data.authMode || 'api_key',
         anthropicApiKey: '',
+        oauthAccessToken: '',
+        oauthRefreshToken: '',
+        oauthExpiresAt: '',
         claudeClientId: '',
         claudeClientSecret: '',
         aiEnabled: data.aiEnabled,
@@ -192,10 +200,17 @@ export function Admin() {
     setAiSaving(true);
     try {
       const payload: Partial<AISettings> = {
+        authMode: aiForm.authMode,
         aiEnabled: aiForm.aiEnabled,
         aiModel: aiForm.aiModel,
       };
-      if (aiForm.anthropicApiKey) payload.anthropicApiKey = aiForm.anthropicApiKey;
+      if (aiForm.authMode === 'api_key') {
+        if (aiForm.anthropicApiKey) payload.anthropicApiKey = aiForm.anthropicApiKey;
+      } else {
+        if (aiForm.oauthAccessToken) payload.oauthAccessToken = aiForm.oauthAccessToken;
+        if (aiForm.oauthRefreshToken) payload.oauthRefreshToken = aiForm.oauthRefreshToken;
+        if (aiForm.oauthExpiresAt) payload.oauthExpiresAt = aiForm.oauthExpiresAt;
+      }
       if (aiForm.claudeClientId) payload.claudeClientId = aiForm.claudeClientId;
       if (aiForm.claudeClientSecret) payload.claudeClientSecret = aiForm.claudeClientSecret;
       await aiSettingsApi.update(payload);
@@ -212,10 +227,14 @@ export function Admin() {
     setAiTesting(true);
     setAiTestResult(null);
     try {
-      const result = await aiSettingsApi.testConnection(
-        aiForm.anthropicApiKey || undefined,
-        aiForm.aiModel || undefined,
-      );
+      const result = await aiSettingsApi.testConnection({
+        authMode: aiForm.authMode,
+        apiKey: aiForm.authMode === 'api_key' ? aiForm.anthropicApiKey || undefined : undefined,
+        accessToken: aiForm.authMode === 'oauth' ? aiForm.oauthAccessToken || undefined : undefined,
+        refreshToken: aiForm.authMode === 'oauth' ? aiForm.oauthRefreshToken || undefined : undefined,
+        expiresAt: aiForm.authMode === 'oauth' ? aiForm.oauthExpiresAt || undefined : undefined,
+        model: aiForm.aiModel || undefined,
+      });
       setAiTestResult(result);
     } catch {
       setAiTestResult({ success: false, error: t('admin.ai.testError') });
@@ -853,60 +872,116 @@ export function Admin() {
                       isDark={isDark}
                     />
 
-                    {/* Anthropic API Key */}
+                    {/* Auth Mode Selector */}
                     <div>
                       <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
-                        {t('admin.ai.apiKey')}
+                        {t('admin.ai.authMode')}
                       </label>
-                      <input
-                        type="password"
-                        value={aiForm.anthropicApiKey}
-                        onChange={(e) => setAiForm((prev) => ({ ...prev, anthropicApiKey: e.target.value }))}
-                        placeholder={aiSettings?.anthropicApiKey || t('admin.ai.apiKeyPlaceholder')}
-                        className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
-                          isDark
-                            ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
-                            : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
-                        }`}
-                      />
-                      <p className="text-[11px] text-zinc-500 mt-1">{t('admin.ai.apiKeyHint')}</p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setAiForm((prev) => ({ ...prev, authMode: 'api_key' }))}
+                          className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-all ${
+                            aiForm.authMode === 'api_key'
+                              ? 'border-amber-500 bg-amber-500/10 text-amber-500 font-medium'
+                              : isDark
+                                ? 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600'
+                                : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
+                          }`}
+                        >
+                          API Key
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAiForm((prev) => ({ ...prev, authMode: 'oauth' }))}
+                          className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-all ${
+                            aiForm.authMode === 'oauth'
+                              ? 'border-amber-500 bg-amber-500/10 text-amber-500 font-medium'
+                              : isDark
+                                ? 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600'
+                                : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
+                          }`}
+                        >
+                          OAuth Token
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Claude Client ID */}
-                    <div>
-                      <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
-                        {t('admin.ai.clientId')}
-                      </label>
-                      <input
-                        type="text"
-                        value={aiForm.claudeClientId}
-                        onChange={(e) => setAiForm((prev) => ({ ...prev, claudeClientId: e.target.value }))}
-                        placeholder={aiSettings?.claudeClientId || t('admin.ai.clientIdPlaceholder')}
-                        className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
-                          isDark
-                            ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
-                            : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
-                        }`}
-                      />
-                    </div>
+                    {/* API Key fields */}
+                    {aiForm.authMode === 'api_key' && (
+                      <div>
+                        <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
+                          {t('admin.ai.apiKey')}
+                        </label>
+                        <input
+                          type="password"
+                          value={aiForm.anthropicApiKey}
+                          onChange={(e) => setAiForm((prev) => ({ ...prev, anthropicApiKey: e.target.value }))}
+                          placeholder={aiSettings?.anthropicApiKey || t('admin.ai.apiKeyPlaceholder')}
+                          className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
+                            isDark
+                              ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
+                              : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
+                          }`}
+                        />
+                        <p className="text-[11px] text-zinc-500 mt-1">{t('admin.ai.apiKeyHint')}</p>
+                      </div>
+                    )}
 
-                    {/* Claude Client Secret */}
-                    <div>
-                      <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
-                        {t('admin.ai.clientSecret')}
-                      </label>
-                      <input
-                        type="password"
-                        value={aiForm.claudeClientSecret}
-                        onChange={(e) => setAiForm((prev) => ({ ...prev, claudeClientSecret: e.target.value }))}
-                        placeholder={aiSettings?.claudeClientSecret || t('admin.ai.clientSecretPlaceholder')}
-                        className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
-                          isDark
-                            ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
-                            : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
-                        }`}
-                      />
-                    </div>
+                    {/* OAuth fields */}
+                    {aiForm.authMode === 'oauth' && (
+                      <>
+                        <div>
+                          <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
+                            {t('admin.ai.oauthAccessToken')}
+                          </label>
+                          <input
+                            type="password"
+                            value={aiForm.oauthAccessToken}
+                            onChange={(e) => setAiForm((prev) => ({ ...prev, oauthAccessToken: e.target.value }))}
+                            placeholder={aiSettings?.oauthAccessToken || 'sk-ant-oat01-...'}
+                            className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
+                              isDark
+                                ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
+                                : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
+                            {t('admin.ai.oauthRefreshToken')}
+                          </label>
+                          <input
+                            type="password"
+                            value={aiForm.oauthRefreshToken}
+                            onChange={(e) => setAiForm((prev) => ({ ...prev, oauthRefreshToken: e.target.value }))}
+                            placeholder={aiSettings?.oauthRefreshToken || 'sk-ant-ort01-...'}
+                            className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
+                              isDark
+                                ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
+                                : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
+                            {t('admin.ai.oauthExpiresAt')}
+                          </label>
+                          <input
+                            type="text"
+                            value={aiForm.oauthExpiresAt}
+                            onChange={(e) => setAiForm((prev) => ({ ...prev, oauthExpiresAt: e.target.value }))}
+                            placeholder={aiSettings?.oauthExpiresAt || t('admin.ai.oauthExpiresAtPlaceholder')}
+                            className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
+                              isDark
+                                ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50 placeholder:text-zinc-600'
+                                : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50 placeholder:text-zinc-400'
+                            }`}
+                          />
+                        </div>
+                        <p className="text-[11px] text-zinc-500">{t('admin.ai.oauthHint')}</p>
+                      </>
+                    )}
 
                     {/* Model select */}
                     <div>

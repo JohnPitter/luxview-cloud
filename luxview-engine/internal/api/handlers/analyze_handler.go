@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -52,7 +53,10 @@ type aiConfig struct {
 }
 
 // getAIConfig reads and validates AI settings from the settings repo.
+// For OAuth tokens, it auto-refreshes if expired and persists the new tokens.
 func (h *AnalyzeHandler) getAIConfig(ctx context.Context) (*aiConfig, error) {
+	log := logger.With("analyze")
+
 	settings, err := h.settingsRepo.GetAll(ctx, "ai_")
 	if err != nil {
 		return nil, fmt.Errorf("get AI settings: %w", err)
@@ -62,14 +66,57 @@ func (h *AnalyzeHandler) getAIConfig(ctx context.Context) (*aiConfig, error) {
 		return nil, fmt.Errorf("AI features are disabled")
 	}
 
-	apiKey := settings["anthropic_api_key"]
-	if apiKey == "" {
-		return nil, fmt.Errorf("Anthropic API key not configured")
-	}
-
 	model := settings["model"]
 	if model == "" {
 		model = "claude-sonnet-4-20250514"
+	}
+
+	authMode := settings["auth_mode"]
+	if authMode == "oauth" {
+		accessToken := settings["oauth_access_token"]
+		refreshToken := settings["oauth_refresh_token"]
+		expiresAtStr := settings["oauth_expires_at"]
+
+		if accessToken == "" && refreshToken == "" {
+			return nil, fmt.Errorf("OAuth tokens not configured")
+		}
+
+		// Check if token needs refresh
+		var expiresAt int64
+		if expiresAtStr != "" {
+			fmt.Sscanf(expiresAtStr, "%d", &expiresAt)
+		}
+
+		if agent.IsTokenExpired(expiresAt) && refreshToken != "" {
+			log.Info().Msg("OAuth token expired, refreshing...")
+			result, err := h.agent.RefreshOAuthToken(ctx, refreshToken)
+			if err != nil {
+				return nil, fmt.Errorf("OAuth token refresh failed: %w", err)
+			}
+
+			// Persist new tokens
+			accessToken = result.AccessToken
+			_ = h.settingsRepo.Set(ctx, "ai_oauth_access_token", result.AccessToken, true)
+			if result.RefreshToken != "" {
+				_ = h.settingsRepo.Set(ctx, "ai_oauth_refresh_token", result.RefreshToken, true)
+			}
+			newExpiry := fmt.Sprintf("%d", time.Now().UnixMilli()+(result.ExpiresIn*1000))
+			_ = h.settingsRepo.Set(ctx, "ai_oauth_expires_at", newExpiry, false)
+
+			log.Info().Msg("OAuth tokens refreshed and persisted")
+		}
+
+		if accessToken == "" {
+			return nil, fmt.Errorf("OAuth access token unavailable")
+		}
+
+		return &aiConfig{apiKey: accessToken, model: model}, nil
+	}
+
+	// Default: API key mode
+	apiKey := settings["anthropic_api_key"]
+	if apiKey == "" {
+		return nil, fmt.Errorf("Anthropic API key not configured")
 	}
 
 	return &aiConfig{apiKey: apiKey, model: model}, nil

@@ -21,7 +21,11 @@ export interface AnalysisResult {
 }
 
 export interface AISettings {
+  authMode: 'api_key' | 'oauth';
   anthropicApiKey: string;
+  oauthAccessToken: string;
+  oauthRefreshToken: string;
+  oauthExpiresAt: string;
   claudeClientId: string;
   claudeClientSecret: string;
   aiEnabled: boolean;
@@ -59,8 +63,15 @@ export const aiSettingsApi = {
   async update(settings: Partial<AISettings>): Promise<void> {
     await api.put('/admin/settings/ai', settings);
   },
-  async testConnection(apiKey?: string, model?: string): Promise<AITestResult> {
-    const { data } = await api.post<AITestResult>('/admin/settings/ai/test', { apiKey, model });
+  async testConnection(params: {
+    authMode?: string;
+    apiKey?: string;
+    accessToken?: string;
+    refreshToken?: string;
+    expiresAt?: string;
+    model?: string;
+  }): Promise<AITestResult> {
+    const { data } = await api.post<AITestResult>('/admin/settings/ai/test', params);
     return data;
   },
 };
