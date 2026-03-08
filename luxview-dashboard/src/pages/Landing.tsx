@@ -30,154 +30,248 @@ import { GlassCard } from '../components/common/GlassCard';
 function AnimatedDashboard() {
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
+  const [logIndex, setLogIndex] = useState(0);
+  const [cpuData, setCpuData] = useState<number[]>([20, 22, 18, 25, 20, 23, 19, 21, 24, 20, 18, 22]);
+  const [memData] = useState([45, 47, 44, 48, 46, 49, 45, 47, 50, 46, 44, 48]);
 
-  const steps = useMemo(
+  const logLines = useMemo(
     () => [
-      { delay: 0 },
-      { delay: 1200 },
-      { delay: 2800 },
-      { delay: 4200 },
-      { delay: 5600 },
-      { delay: 7000 },
+      { text: 'GET /api/health 200 2ms', color: 'text-emerald-400' },
+      { text: 'GET /api/users 200 18ms', color: 'text-emerald-400' },
+      { text: 'POST /api/auth/login 200 45ms', color: 'text-emerald-400' },
+      { text: 'GET /api/apps 200 12ms', color: 'text-emerald-400' },
+      { text: 'GET /static/main.js 304 1ms', color: 'text-zinc-500' },
+      { text: 'POST /api/webhook 200 8ms', color: 'text-emerald-400' },
     ],
     [],
   );
 
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
-    const duration = steps[steps.length - 1].delay + 3000;
+    const totalDuration = 12000;
 
     const runSequence = () => {
       setStep(0);
-      steps.forEach((s, i) => {
-        timers.push(setTimeout(() => setStep(i + 1), s.delay));
+      setLogIndex(0);
+      const delays = [0, 600, 1800, 3200, 4800, 6200, 7200];
+      delays.forEach((d, i) => {
+        timers.push(setTimeout(() => setStep(i + 1), d));
       });
+      // Animate logs after deploy
+      for (let i = 0; i < logLines.length; i++) {
+        timers.push(setTimeout(() => setLogIndex(i + 1), 7800 + i * 500));
+      }
     };
 
     runSequence();
-    const interval = setInterval(runSequence, duration);
+    const interval = setInterval(runSequence, totalDuration);
 
     return () => {
       timers.forEach(clearTimeout);
       clearInterval(interval);
     };
-  }, [steps]);
+  }, [logLines]);
 
-  const fade = 'animate-[fadeSlideIn_0.35s_ease-out]';
-  const surface = 'border-zinc-800/70 bg-zinc-900/80';
-  const dimText = 'text-zinc-500';
-  const brightText = 'text-zinc-100';
+  // Animate CPU data
+  useEffect(() => {
+    if (step < 7) return;
+    const interval = setInterval(() => {
+      setCpuData((prev) => [...prev.slice(1), Math.floor(Math.random() * 15) + 15]);
+    }, 800);
+    return () => clearInterval(interval);
+  }, [step]);
+
+  const sparkline = (data: number[], max: number, color: string) => {
+    const w = 120;
+    const h = 28;
+    const points = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - (v / max) * h}`).join(' ');
+    const areaPoints = `0,${h} ${points} ${w},${h}`;
+    return (
+      <svg width={w} height={h} className="overflow-visible">
+        <polyline fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" points={points} className="drop-shadow-sm" />
+        <polygon fill={`${color}15`} points={areaPoints} />
+      </svg>
+    );
+  };
+
+  const pipelineStages = [
+    { label: 'Clone', done: step >= 3 },
+    { label: 'Build', done: step >= 4 },
+    { label: 'SSL', done: step >= 5 },
+    { label: 'Deploy', done: step >= 6 },
+    { label: 'Live', done: step >= 7 },
+  ];
 
   return (
-    <div className="overflow-hidden rounded-[28px] border border-zinc-800/70 bg-zinc-950 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+    <div className="overflow-hidden rounded-[20px] border border-zinc-800/60 bg-[#0c0c0f] shadow-[0_32px_100px_rgba(0,0,0,0.55)]">
       {/* Window chrome */}
-      <div className="flex items-center gap-2 border-b border-zinc-800/70 bg-zinc-900/60 px-4 py-3">
-        <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
-        <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
-        <span className="h-3 w-3 rounded-full bg-[#28c840]" />
-        <span className="ml-3 text-xs text-zinc-500">LuxView Cloud</span>
+      <div className="flex items-center gap-2 border-b border-zinc-800/50 bg-zinc-900/40 px-4 py-2.5">
+        <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+        <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+        <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+        <div className="ml-3 flex items-center gap-2">
+          <img src="/logo.svg" alt="" className="h-3.5 w-3.5 opacity-50" />
+          <span className="text-[11px] text-zinc-600">LuxView Cloud</span>
+        </div>
       </div>
 
-      <div className="min-h-[340px] p-5 space-y-4">
-        {/* Step 1: Select repository */}
-        {step >= 1 && (
-          <div className={fade} style={{ animationFillMode: 'both' }}>
-            <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-400 mb-3`}>
-              {t('landing.demo.selectRepo')}
-            </p>
-            <div className={`rounded-2xl border ${surface} p-3`}>
-              <div className="flex items-center gap-3">
-                <Github size={16} className="text-zinc-400" />
-                <span className={`text-sm font-medium ${brightText}`}>JohnPitter/my-awesome-app</span>
-                <Check size={14} className="ml-auto text-amber-400" />
-              </div>
-            </div>
+      <div className="flex min-h-[380px]">
+        {/* Mini sidebar */}
+        <div className="hidden w-[52px] shrink-0 border-r border-zinc-800/40 bg-zinc-950/80 sm:flex sm:flex-col sm:items-center sm:gap-3 sm:py-4">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/15">
+            <Rocket size={14} className="text-amber-400" />
           </div>
-        )}
+          <div className="h-px w-5 bg-zinc-800/60" />
+          <Box size={14} className="text-zinc-600" />
+          <Database size={14} className="text-zinc-600" />
+          <BarChart3 size={14} className="text-zinc-600" />
+          <Activity size={14} className="text-zinc-600" />
+        </div>
 
-        {/* Step 2: Configure */}
-        {step >= 2 && (
-          <div className={fade} style={{ animationFillMode: 'both' }}>
-            <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-400 mb-3`}>
-              {t('landing.demo.configure')}
-            </p>
-            <div className={`grid gap-2 sm:grid-cols-2`}>
-              <div className={`rounded-2xl border ${surface} px-3 py-2.5`}>
-                <p className={`text-[10px] uppercase tracking-wider ${dimText} mb-1`}>{t('landing.howItWorks.configure.branch')}</p>
-                <div className="flex items-center gap-2">
-                  <GitBranch size={13} className={dimText} />
-                  <span className={`text-sm ${brightText}`}>main</span>
-                </div>
-              </div>
-              <div className={`rounded-2xl border ${surface} px-3 py-2.5`}>
-                <p className={`text-[10px] uppercase tracking-wider ${dimText} mb-1`}>{t('landing.howItWorks.configure.subdomain')}</p>
-                <span className={`text-sm ${brightText}`}>my-app<span className={dimText}>.luxview.cloud</span></span>
-              </div>
+        {/* Main content */}
+        <div className="flex-1 overflow-hidden">
+          {/* Top bar with app info */}
+          <div className="flex items-center justify-between border-b border-zinc-800/40 px-4 py-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className={`h-2 w-2 rounded-full transition-all duration-500 ${
+                step >= 7 ? 'bg-emerald-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]' : step >= 3 ? 'bg-amber-400 animate-pulse' : 'bg-zinc-700'
+              }`} />
+              <span className="text-[13px] font-medium text-zinc-200">my-awesome-app</span>
+              <span className="rounded bg-zinc-800/80 px-1.5 py-0.5 text-[10px] text-zinc-500">Node.js</span>
             </div>
-          </div>
-        )}
-
-        {/* Step 3: Building */}
-        {step >= 3 && (
-          <div className={fade} style={{ animationFillMode: 'both' }}>
-            <div className={`rounded-2xl border ${surface} p-3`}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Box size={14} className={step >= 4 ? 'text-emerald-400' : 'text-amber-400'} />
-                  <span className={`text-sm font-medium ${brightText}`}>{t('landing.demo.building')}</span>
-                </div>
-                <span className={`text-xs font-mono ${step >= 4 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                  {step >= 4 ? '32s' : '...'}
-                </span>
+            {step >= 7 && (
+              <div className="flex items-center gap-1.5 animate-[fadeSlideIn_0.3s_ease-out]" style={{ animationFillMode: 'both' }}>
+                <Globe size={11} className="text-sky-400" />
+                <span className="text-[11px] text-sky-400">my-app.luxview.cloud</span>
               </div>
-              <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-1000 ease-out ${step >= 4 ? 'w-full bg-emerald-400' : 'w-[65%] bg-amber-400'}`}
-                />
-              </div>
-            </div>
+            )}
           </div>
-        )}
 
-        {/* Step 4: Deploy checklist */}
-        {step >= 4 && (
-          <div className={fade} style={{ animationFillMode: 'both' }}>
-            <div className={`rounded-2xl border ${surface} p-3 space-y-2`}>
-              {[
-                { label: t('landing.demo.stackDetected'), value: 'Node.js', done: step >= 4 },
-                { label: t('landing.demo.sslProvisioned'), value: t('landing.demo.auto'), done: step >= 5 },
-                { label: t('landing.demo.healthCheck'), value: t('landing.demo.passed'), done: step >= 5 },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {item.done ? <Check size={13} className="text-emerald-400" /> : <div className="h-3.5 w-3.5 rounded-full border-2 border-zinc-700 animate-spin border-t-amber-400" />}
-                    <span className={`text-sm ${brightText}`}>{item.label}</span>
+          {/* Deploy pipeline */}
+          {step >= 2 && (
+            <div className="border-b border-zinc-800/40 px-4 py-3 animate-[fadeSlideIn_0.3s_ease-out]" style={{ animationFillMode: 'both' }}>
+              <div className="flex items-center gap-1.5">
+                {pipelineStages.map((stage, i) => (
+                  <div key={stage.label} className="flex items-center gap-1.5">
+                    <div className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-wider transition-all duration-500 ${
+                      stage.done
+                        ? 'bg-emerald-500/15 text-emerald-400'
+                        : i === pipelineStages.findIndex((s) => !s.done)
+                          ? 'bg-amber-500/15 text-amber-400'
+                          : 'bg-zinc-900 text-zinc-600'
+                    }`}>
+                      {stage.done ? (
+                        <Check size={10} />
+                      ) : i === pipelineStages.findIndex((s) => !s.done) ? (
+                        <div className="h-2.5 w-2.5 rounded-full border-[1.5px] border-zinc-700 border-t-amber-400 animate-spin" />
+                      ) : null}
+                      {stage.label}
+                    </div>
+                    {i < pipelineStages.length - 1 && (
+                      <div className={`h-px w-3 transition-colors duration-500 ${stage.done ? 'bg-emerald-500/40' : 'bg-zinc-800'}`} />
+                    )}
                   </div>
-                  <span className={`text-xs font-mono ${item.done ? 'text-emerald-400' : dimText}`}>{item.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Step 5: Live */}
-        {step >= 6 && (
-          <div className={fade} style={{ animationFillMode: 'both' }}>
-            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(74,222,128,0.5)]" />
-                  <span className="text-sm font-semibold text-emerald-400">{t('landing.demo.liveNow')}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Globe size={13} className="text-sky-400" />
-                  <span className="text-sm text-sky-300">my-app.luxview.cloud</span>
-                  <ExternalLink size={11} className={dimText} />
-                </div>
+                ))}
               </div>
             </div>
+          )}
+
+          {/* Content area — switches between deploy view and live dashboard */}
+          <div className="p-4">
+            {step < 7 ? (
+              /* Deploy progress view */
+              <div className="space-y-3">
+                {/* Repo selection */}
+                {step >= 1 && (
+                  <div className="flex items-center gap-2.5 animate-[fadeSlideIn_0.3s_ease-out]" style={{ animationFillMode: 'both' }}>
+                    <Github size={14} className="text-zinc-500" />
+                    <span className="text-[13px] text-zinc-300">JohnPitter/<span className="text-zinc-100 font-medium">my-awesome-app</span></span>
+                    <span className="ml-auto flex items-center gap-1 text-[11px] text-zinc-600"><GitBranch size={11} />main</span>
+                  </div>
+                )}
+
+                {/* Build log area */}
+                {step >= 3 && (
+                  <div className="rounded-xl border border-zinc-800/50 bg-zinc-950/60 overflow-hidden animate-[fadeSlideIn_0.3s_ease-out]" style={{ animationFillMode: 'both' }}>
+                    <div className="flex items-center justify-between border-b border-zinc-800/40 px-3 py-2">
+                      <span className="text-[11px] font-medium text-zinc-400">{t('landing.demo.buildLog')}</span>
+                      <span className={`text-[10px] font-mono ${step >= 5 ? 'text-emerald-400' : 'text-amber-400 animate-pulse'}`}>
+                        {step >= 5 ? '32s' : t('landing.demo.building') + '...'}
+                      </span>
+                    </div>
+                    <div className="px-3 py-2 font-mono text-[11px] leading-5 space-y-0.5 max-h-[120px] overflow-hidden">
+                      {step >= 3 && <p className="text-zinc-500 animate-[fadeSlideIn_0.25s_ease-out]" style={{ animationFillMode: 'both' }}><span className="text-amber-400/70">→</span> {t('landing.demo.detectingStack')}</p>}
+                      {step >= 3 && <p className="text-zinc-400 animate-[fadeSlideIn_0.25s_ease-out]" style={{ animationFillMode: 'both', animationDelay: '200ms' }}>&nbsp;&nbsp;Node.js 20 + Next.js 14</p>}
+                      {step >= 4 && <p className="text-zinc-500 animate-[fadeSlideIn_0.25s_ease-out]" style={{ animationFillMode: 'both' }}><span className="text-amber-400/70">→</span> npm install <span className="text-zinc-600">(1,247 packages)</span></p>}
+                      {step >= 4 && <p className="text-zinc-500 animate-[fadeSlideIn_0.25s_ease-out]" style={{ animationFillMode: 'both', animationDelay: '200ms' }}><span className="text-amber-400/70">→</span> npm run build</p>}
+                      {step >= 5 && <p className="text-emerald-400/80 animate-[fadeSlideIn_0.25s_ease-out]" style={{ animationFillMode: 'both' }}><span className="text-emerald-500">✓</span> {t('landing.demo.buildSuccess')}</p>}
+                      {step >= 5 && <p className="text-emerald-400/80 animate-[fadeSlideIn_0.25s_ease-out]" style={{ animationFillMode: 'both', animationDelay: '200ms' }}><span className="text-emerald-500">✓</span> SSL → my-app.luxview.cloud</p>}
+                      {step >= 6 && <p className="text-emerald-400/80 animate-[fadeSlideIn_0.25s_ease-out]" style={{ animationFillMode: 'both' }}><span className="text-emerald-500">✓</span> {t('landing.demo.containerStarted')}</p>}
+                      {step >= 6 && <p className="text-emerald-400 font-medium animate-[fadeSlideIn_0.25s_ease-out]" style={{ animationFillMode: 'both', animationDelay: '200ms' }}><span className="text-emerald-500">✓</span> {t('landing.demo.healthCheck')} — <span className="text-sky-400">https://my-app.luxview.cloud</span></p>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Progress bar */}
+                {step >= 3 && (
+                  <div className="space-y-1.5">
+                    <div className="h-1 rounded-full bg-zinc-800/80 overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ease-out ${
+                        step >= 7 ? 'w-full bg-emerald-400 duration-500' : step >= 6 ? 'w-[90%] bg-emerald-400 duration-700' : step >= 5 ? 'w-[70%] bg-amber-400 duration-1000' : step >= 4 ? 'w-[45%] bg-amber-400 duration-1000' : 'w-[15%] bg-amber-400 duration-700'
+                      }`} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Live dashboard view — appears after deploy */
+              <div className="space-y-3 animate-[fadeSlideIn_0.4s_ease-out]" style={{ animationFillMode: 'both' }}>
+                {/* Metrics row */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-xl border border-zinc-800/50 bg-zinc-900/40 px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wider text-zinc-600">CPU</p>
+                    <div className="mt-1 flex items-end justify-between">
+                      <span className="text-lg font-semibold text-zinc-100">{cpuData[cpuData.length - 1]}%</span>
+                      {sparkline(cpuData, 50, '#f59e0b')}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-zinc-800/50 bg-zinc-900/40 px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wider text-zinc-600">{t('landing.demo.memory')}</p>
+                    <div className="mt-1 flex items-end justify-between">
+                      <span className="text-lg font-semibold text-zinc-100">128M</span>
+                      {sparkline(memData, 80, '#60a5fa')}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-zinc-800/50 bg-zinc-900/40 px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-wider text-zinc-600">{t('landing.demo.requests')}</p>
+                    <div className="mt-1 flex items-end justify-between">
+                      <span className="text-lg font-semibold text-zinc-100">1.2k</span>
+                      <span className="flex items-center gap-0.5 text-[11px] text-emerald-400">+12%<ArrowRight size={10} className="rotate-[-45deg]" /></span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live logs */}
+                <div className="rounded-xl border border-zinc-800/50 bg-zinc-950/60 overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-zinc-800/40 px-3 py-1.5">
+                    <span className="text-[11px] font-medium text-zinc-400">{t('landing.demo.liveLogs')}</span>
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-[10px] text-emerald-400">{t('landing.demo.streaming')}</span>
+                    </div>
+                  </div>
+                  <div className="px-3 py-2 font-mono text-[10px] leading-[18px] space-y-0.5 h-[88px] overflow-hidden">
+                    {logLines.slice(0, logIndex).map((line, i) => (
+                      <p key={`${line.text}-${i}`} className={`${line.color} animate-[fadeSlideIn_0.2s_ease-out]`} style={{ animationFillMode: 'both' }}>
+                        <span className="text-zinc-700">{String(i + 1).padStart(2, '0')}</span> {line.text}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
