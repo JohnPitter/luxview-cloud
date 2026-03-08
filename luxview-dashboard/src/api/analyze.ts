@@ -11,6 +11,22 @@ export interface EnvHint {
   required: boolean;
 }
 
+export interface ServiceRecommendation {
+  currentService: string;
+  currentEvidence: string;
+  recommendedService: 'postgres' | 'redis' | 'mongodb' | 'rabbitmq' | 's3';
+  reason: string;
+  manualSteps: string[];
+  codeChanges?: CodeChange[];
+}
+
+export interface CodeChange {
+  file: string;
+  action: 'modify' | 'create' | 'delete';
+  description: string;
+  content: string;
+}
+
 export interface AnalysisResult {
   suggestions: Suggestion[];
   dockerfile: string;
@@ -18,6 +34,7 @@ export interface AnalysisResult {
   stack: string;
   envHints: EnvHint[];
   diagnosis?: string;
+  serviceRecommendations?: ServiceRecommendation[];
 }
 
 export interface AISettings {
