@@ -14,6 +14,8 @@ import { S3Explorer } from './pages/S3Explorer';
 import { Logs } from './pages/Logs';
 import { Settings } from './pages/Settings';
 import { Profile } from './pages/Profile';
+import { Status } from './pages/Status';
+import { Docs } from './pages/Docs';
 import { MainLayout } from './components/layout/MainLayout';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -33,6 +35,8 @@ export function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
+      <Route path="/status" element={<Status />} />
+      <Route path="/docs" element={<Docs />} />
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<Login />} />
       <Route

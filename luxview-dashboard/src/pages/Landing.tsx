@@ -438,9 +438,9 @@ export function Landing() {
 
   const pricingVisible = plansLoading || plans.length > 0;
   const footerLinks = [
-    { href: 'https://github.com/JohnPitter/luxview-cloud', label: t('landing.footer.source'), icon: Github },
-    { href: 'https://github.com/JohnPitter/luxview-cloud/tree/main/docs', label: t('landing.footer.docs'), icon: ExternalLink },
-    { href: 'https://github.com/JohnPitter/luxview-cloud/actions', label: t('landing.footer.status'), icon: Activity },
+    { href: 'https://github.com/JohnPitter/luxview-cloud', label: t('landing.footer.source'), icon: Github, external: true },
+    { href: '/docs', label: t('landing.footer.docs'), icon: ExternalLink, external: false },
+    { href: '/status', label: t('landing.footer.status'), icon: Activity, external: false },
   ];
 
   return (
@@ -811,19 +811,19 @@ export function Landing() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               {footerLinks.map((link) => {
                 const Icon = link.icon;
-                return (
-                  <a
-                    key={link.label}
-                    href={link.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm transition-all duration-200 ${
-                      isDark ? 'border border-zinc-800 bg-zinc-900/70 text-zinc-300 hover:text-zinc-100' : 'border border-zinc-200 bg-white/80 text-zinc-700 hover:text-zinc-950'
-                    }`}
-                  >
+                const cls = `inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm transition-all duration-200 ${
+                  isDark ? 'border border-zinc-800 bg-zinc-900/70 text-zinc-300 hover:text-zinc-100' : 'border border-zinc-200 bg-white/80 text-zinc-700 hover:text-zinc-950'
+                }`;
+                return link.external ? (
+                  <a key={link.label} href={link.href} target="_blank" rel="noopener noreferrer" className={cls}>
                     <Icon size={14} />
                     {link.label}
                   </a>
+                ) : (
+                  <button key={link.label} onClick={() => navigate(link.href)} className={cls}>
+                    <Icon size={14} />
+                    {link.label}
+                  </button>
                 );
               })}
             </div>
