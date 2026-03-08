@@ -45,6 +45,12 @@ export const analyzeApi = {
   },
 };
 
+export interface AITestResult {
+  success: boolean;
+  model?: string;
+  error?: string;
+}
+
 export const aiSettingsApi = {
   async get(): Promise<AISettings> {
     const { data } = await api.get<AISettings>('/admin/settings/ai');
@@ -52,5 +58,9 @@ export const aiSettingsApi = {
   },
   async update(settings: Partial<AISettings>): Promise<void> {
     await api.put('/admin/settings/ai', settings);
+  },
+  async testConnection(apiKey?: string, model?: string): Promise<AITestResult> {
+    const { data } = await api.post<AITestResult>('/admin/settings/ai/test', { apiKey, model });
+    return data;
   },
 };

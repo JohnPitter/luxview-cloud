@@ -795,5 +795,10 @@
   "admin.ai.clientSecret": "Claude Client Secret",
   "admin.ai.clientSecretPlaceholder": "Client Secret (opcional)",
   "admin.ai.model": "Modelo",
-  "admin.ai.saved": "Configuración de IA guardada"
+  "admin.ai.saved": "Configuración de IA guardada",
+  "admin.ai.testConnection": "Probar Conexión",
+  "admin.ai.testing": "Probando...",
+  "admin.ai.testSuccess": "Conexión exitosa ({{model}})",
+  "admin.ai.testFailed": "Error de conexión",
+  "admin.ai.testError": "Error al probar la conexión"
 }

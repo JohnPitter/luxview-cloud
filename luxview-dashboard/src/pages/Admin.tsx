@@ -25,6 +25,9 @@ import {
   ToggleLeft,
   ToggleRight,
   Bot,
+  Zap,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
@@ -35,7 +38,7 @@ import { useThemeStore } from '../stores/theme.store';
 import { useNotificationsStore } from '../stores/notifications.store';
 import { adminApi, type AdminStats, type AdminUser, type AdminApp, type VPSInfo } from '../api/admin';
 import { plansApi, type Plan, type CreatePlanPayload } from '../api/plans';
-import { aiSettingsApi, type AISettings } from '../api/analyze';
+import { aiSettingsApi, type AISettings, type AITestResult } from '../api/analyze';
 import { formatRelativeTime } from '../lib/format';
 
 type Tab = 'overview' | 'users' | 'apps' | 'plans' | 'ai';
@@ -126,6 +129,8 @@ export function Admin() {
   const [aiSettings, setAiSettings] = useState<AISettings | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSaving, setAiSaving] = useState(false);
+  const [aiTesting, setAiTesting] = useState(false);
+  const [aiTestResult, setAiTestResult] = useState<AITestResult | null>(null);
   const [aiForm, setAiForm] = useState({
     anthropicApiKey: '',
     claudeClientId: '',
@@ -200,6 +205,22 @@ export function Admin() {
       addNotification({ type: 'error', title: t('admin.failedToLoad') });
     } finally {
       setAiSaving(false);
+    }
+  };
+
+  const handleTestAIConnection = async () => {
+    setAiTesting(true);
+    setAiTestResult(null);
+    try {
+      const result = await aiSettingsApi.testConnection(
+        aiForm.anthropicApiKey || undefined,
+        aiForm.aiModel || undefined,
+      );
+      setAiTestResult(result);
+    } catch {
+      setAiTestResult({ success: false, error: t('admin.ai.testError') });
+    } finally {
+      setAiTesting(false);
     }
   };
 
@@ -906,8 +927,31 @@ export function Admin() {
                       </select>
                     </div>
 
-                    {/* Save button */}
-                    <div className="pt-2">
+                    {/* Test Connection result */}
+                    {aiTestResult && (
+                      <div
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                          aiTestResult.success
+                            ? isDark ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-800/50' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : isDark ? 'bg-red-900/30 text-red-400 border border-red-800/50' : 'bg-red-50 text-red-700 border border-red-200'
+                        }`}
+                      >
+                        {aiTestResult.success ? (
+                          <>
+                            <CheckCircle2 size={16} />
+                            <span>{t('admin.ai.testSuccess', { model: aiTestResult.model })}</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle size={16} />
+                            <span>{aiTestResult.error || t('admin.ai.testFailed')}</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-2 pt-2">
                       <PillButton
                         variant="primary"
                         size="sm"
@@ -916,6 +960,15 @@ export function Admin() {
                         icon={aiSaving ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
                       >
                         {aiSaving ? t('common.saving') : t('common.save')}
+                      </PillButton>
+                      <PillButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleTestAIConnection}
+                        disabled={aiTesting}
+                        icon={aiTesting ? <RefreshCw size={14} className="animate-spin" /> : <Zap size={14} />}
+                      >
+                        {aiTesting ? t('admin.ai.testing') : t('admin.ai.testConnection')}
                       </PillButton>
                     </div>
                   </div>

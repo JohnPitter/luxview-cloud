@@ -177,6 +177,7 @@ func NewRouter(deps Deps) *chi.Mux {
 				r.Patch("/admin/users/{id}/plan", planHandler.AssignUserPlan)
 				r.Get("/admin/settings/ai", settingsHandler.GetAISettings)
 				r.Put("/admin/settings/ai", settingsHandler.UpdateAISettings)
+				r.Post("/admin/settings/ai/test", settingsHandler.TestAIConnection)
 			})
 		})
 	})

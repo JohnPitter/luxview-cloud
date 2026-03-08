@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/luxview/engine/internal/agent"
 	"github.com/luxview/engine/internal/repository"
 	"github.com/luxview/engine/pkg/logger"
 )
@@ -130,4 +131,58 @@ func (h *SettingsHandler) UpdateAISettings(w http.ResponseWriter, r *http.Reques
 
 	log.Info().Msg("AI settings updated")
 	writeJSON(w, http.StatusOK, map[string]string{"message": "settings updated"})
+}
+
+// TestAIConnection tests the Anthropic API key by sending a minimal request.
+func (h *SettingsHandler) TestAIConnection(w http.ResponseWriter, r *http.Request) {
+	log := logger.With("settings")
+	ctx := r.Context()
+
+	// Get the API key — either from the request body (if user is testing a new key)
+	// or from the stored settings
+	var req struct {
+		APIKey string `json:"apiKey"`
+		Model  string `json:"model"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	apiKey := req.APIKey
+	if apiKey == "" {
+		// Fall back to stored key
+		stored, err := h.settingsRepo.Get(ctx, "ai_anthropic_api_key")
+		if err != nil || stored == "" {
+			writeError(w, http.StatusBadRequest, "no API key provided and none stored")
+			return
+		}
+		apiKey = stored
+	}
+
+	model := req.Model
+	if model == "" {
+		stored, _ := h.settingsRepo.Get(ctx, "ai_model")
+		if stored != "" {
+			model = stored
+		}
+	}
+
+	// Test connection
+	da := agent.NewDeployAgent()
+	usedModel, err := da.TestConnection(ctx, apiKey, model)
+	if err != nil {
+		log.Warn().Err(err).Msg("AI connection test failed")
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	log.Info().Str("model", usedModel).Msg("AI connection test successful")
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"model":   usedModel,
+	})
 }

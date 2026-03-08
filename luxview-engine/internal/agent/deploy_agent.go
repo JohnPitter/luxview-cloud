@@ -75,6 +75,65 @@ func (a *DeployAgent) AnalyzeFailure(ctx context.Context, apiKey, model, repoDir
 	return result, nil
 }
 
+// TestConnection sends a minimal request to the Anthropic API to verify the key is valid.
+// Returns the model name on success or an error describing the failure.
+func (a *DeployAgent) TestConnection(ctx context.Context, apiKey, model string) (string, error) {
+	if model == "" {
+		model = defaultModel
+	}
+
+	reqBody := anthropicRequest{
+		Model:       model,
+		MaxTokens:   10,
+		Temperature: 0,
+		System:      "Reply with only: ok",
+		Messages: []anthropicMessage{
+			{Role: "user", Content: "test"},
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, anthropicAPIURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("anthropic-version", anthropicVersion)
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("connection failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode == 401 {
+		return "", fmt.Errorf("invalid API key")
+	}
+	if resp.StatusCode == 403 {
+		return "", fmt.Errorf("API key does not have access to this model")
+	}
+	if resp.StatusCode != http.StatusOK {
+		var apiResp anthropicResponse
+		if json.Unmarshal(respBody, &apiResp) == nil && apiResp.Error != nil {
+			return "", fmt.Errorf("%s: %s", apiResp.Error.Type, apiResp.Error.Message)
+		}
+		return "", fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	return model, nil
+}
+
 // anthropicRequest represents the request body for the Anthropic Messages API.
 type anthropicRequest struct {
 	Model       string             `json:"model"`
