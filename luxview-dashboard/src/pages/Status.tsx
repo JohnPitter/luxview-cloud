@@ -20,7 +20,7 @@ import axios from 'axios';
 
 interface ServiceStatus {
   name: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ size?: string | number; className?: string }>;
   status: 'operational' | 'checking' | 'down';
   responseTime?: number;
 }
