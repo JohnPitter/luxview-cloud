@@ -93,8 +93,11 @@ export function NewApp() {
     try {
       const result = await analyzeApi.analyze(appId);
       setAnalysisResult(result);
-    } catch {
-      setAnalysisError(t('analyze.aiNotConfigured'));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
+      const isAxios = typeof err === 'object' && err !== null && 'response' in err;
+      const apiMsg = isAxios ? (err as { response?: { data?: { error?: string } } }).response?.data?.error : undefined;
+      setAnalysisError(apiMsg || msg || t('analyze.aiNotConfigured'));
     } finally {
       setAnalyzing(false);
     }
@@ -108,6 +111,7 @@ export function NewApp() {
         repoUrl: config.repo.htmlUrl,
         repoBranch: config.branch,
         envVars: config.envVars,
+        autoDeploy: false,
       });
       createdAppIdRef.current = app.id;
       wizardEnvVarsRef.current = config.envVars;

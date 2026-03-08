@@ -36,6 +36,7 @@ export interface CreateAppPayload {
   repoUrl: string;
   repoBranch: string;
   envVars?: Record<string, string>;
+  autoDeploy?: boolean;
 }
 
 export const appsApi = {
