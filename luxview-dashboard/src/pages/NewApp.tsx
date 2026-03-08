@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft } from 'lucide-react';
@@ -9,6 +9,8 @@ import { useAppsStore } from '../stores/apps.store';
 import { useNotificationsStore } from '../stores/notifications.store';
 import { useThemeStore } from '../stores/theme.store';
 import { githubApi, type GithubRepo } from '../api/github';
+import { analyzeApi, type AnalysisResult } from '../api/analyze';
+import { appsApi } from '../api/apps';
 import { newAppTourSteps } from '../tours/newApp';
 
 export function NewApp() {
@@ -24,6 +26,13 @@ export function NewApp() {
   const [loadingRepos, setLoadingRepos] = useState(true);
   const [branches, setBranches] = useState<string[]>([]);
   const [deploying, setDeploying] = useState(false);
+
+  // AI Analysis state
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [showAnalysis, setShowAnalysis] = useState(false);
+  const createdAppIdRef = useRef<string | null>(null);
+  const wizardEnvVarsRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     fetchApps();
@@ -58,9 +67,28 @@ export function NewApp() {
     [],
   );
 
+  const deployAndNavigate = async (appId: string, appName: string) => {
+    try {
+      await appsApi.deploy(appId);
+      addNotification({
+        type: 'success',
+        title: t('app.notifications.deploymentStarted'),
+        message: t('app.notifications.deploymentStartedMessage', { name: appName }),
+      });
+    } catch {
+      addNotification({
+        type: 'error',
+        title: t('app.notifications.deploymentFailed'),
+        message: t('app.notifications.deploymentFailedMessage'),
+      });
+    }
+    navigate(`/dashboard/apps/${appId}`);
+  };
+
   const handleDeploy = async (config: DeployConfig) => {
     setDeploying(true);
     try {
+      // Step 1: Create the app
       const app = await createApp({
         name: config.repo.name,
         subdomain: config.subdomain,
@@ -68,21 +96,67 @@ export function NewApp() {
         repoBranch: config.branch,
         envVars: config.envVars,
       });
-      addNotification({
-        type: 'success',
-        title: t('app.notifications.deploymentStarted'),
-        message: t('app.notifications.deploymentStartedMessage', { name: app.name }),
-      });
-      navigate(`/dashboard/apps/${app.id}`);
+      createdAppIdRef.current = app.id;
+      wizardEnvVarsRef.current = config.envVars;
+
+      // Step 2: Trigger AI analysis
+      setDeploying(false);
+      setAnalyzing(true);
+      setShowAnalysis(true);
+
+      try {
+        const result = await analyzeApi.analyze(app.id);
+        setAnalysisResult(result);
+        setAnalyzing(false);
+      } catch {
+        // AI not configured or failed — skip analysis silently and deploy normally
+        setShowAnalysis(false);
+        setAnalyzing(false);
+        setAnalysisResult(null);
+        await deployAndNavigate(app.id, app.name);
+      }
     } catch {
       addNotification({
         type: 'error',
         title: t('app.notifications.deploymentFailed'),
         message: t('app.notifications.deploymentFailedMessage'),
       });
-    } finally {
       setDeploying(false);
     }
+  };
+
+  const handleApproveAnalysis = async (dockerfile: string, envVars: Record<string, string>) => {
+    const appId = createdAppIdRef.current;
+    if (!appId) return;
+
+    try {
+      // Save the AI-generated dockerfile
+      if (dockerfile) {
+        await analyzeApi.saveDockerfile(appId, dockerfile);
+      }
+
+      // Merge wizard env vars with AI-suggested env vars
+      const mergedEnvVars = { ...wizardEnvVarsRef.current, ...envVars };
+      const hasNewEnvVars = Object.keys(envVars).some((k) => envVars[k]);
+      if (hasNewEnvVars) {
+        await appsApi.updateEnvVars(appId, mergedEnvVars);
+      }
+
+      // Deploy
+      await deployAndNavigate(appId, '');
+    } catch {
+      addNotification({
+        type: 'error',
+        title: t('app.notifications.deploymentFailed'),
+        message: t('app.notifications.deploymentFailedMessage'),
+      });
+    }
+  };
+
+  const handleSkipAnalysis = async () => {
+    const appId = createdAppIdRef.current;
+    if (!appId) return;
+    await deployAndNavigate(appId, '');
   };
 
   return (
@@ -117,6 +191,11 @@ export function NewApp() {
         onRepoSelect={handleRepoSelect}
         onDeploy={handleDeploy}
         deploying={deploying}
+        analysisResult={analysisResult}
+        analyzing={analyzing}
+        showAnalysis={showAnalysis}
+        onApproveAnalysis={handleApproveAnalysis}
+        onSkipAnalysis={handleSkipAnalysis}
       />
     </div>
   );

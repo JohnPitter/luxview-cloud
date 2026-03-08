@@ -5,8 +5,10 @@ import { GlassCard } from '../common/GlassCard';
 import { PillButton } from '../common/PillButton';
 import { RepoSelector } from '../apps/RepoSelector';
 import { SubdomainInput } from '../apps/SubdomainInput';
+import { DeployAnalysis } from './DeployAnalysis';
 import { useThemeStore } from '../../stores/theme.store';
 import type { GithubRepo } from '../../api/github';
+import type { AnalysisResult } from '../../api/analyze';
 
 interface DeployWizardProps {
   repos: GithubRepo[];
@@ -15,6 +17,12 @@ interface DeployWizardProps {
   onRepoSelect: (repo: GithubRepo) => void;
   onDeploy: (config: DeployConfig) => void;
   deploying: boolean;
+  /** AI analysis state — set by parent after app creation */
+  analysisResult?: AnalysisResult | null;
+  analyzing?: boolean;
+  showAnalysis?: boolean;
+  onApproveAnalysis?: (dockerfile: string, envVars: Record<string, string>) => void;
+  onSkipAnalysis?: () => void;
 }
 
 export interface DeployConfig {
@@ -31,6 +39,11 @@ export function DeployWizard({
   onRepoSelect,
   onDeploy,
   deploying,
+  analysisResult,
+  analyzing = false,
+  showAnalysis = false,
+  onApproveAnalysis,
+  onSkipAnalysis,
 }: DeployWizardProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
@@ -90,6 +103,31 @@ export function DeployWizard({
     focus:outline-none focus:ring-2 focus:ring-amber-400/30
     ${isDark ? 'bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder-zinc-600' : 'bg-white border-zinc-200 text-zinc-900 placeholder-zinc-400'}
   `;
+
+  // When analysis is active, show the analysis view instead of normal wizard
+  if (showAnalysis) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        {analysisResult ? (
+          <DeployAnalysis
+            result={analysisResult}
+            loading={false}
+            mode="first-deploy"
+            onApprove={(dockerfile, envVars) => onApproveAnalysis?.(dockerfile, envVars)}
+            onSkip={() => onSkipAnalysis?.()}
+          />
+        ) : (
+          <DeployAnalysis
+            result={{ suggestions: [], dockerfile: '', port: 0, stack: '', envHints: [] }}
+            loading={analyzing}
+            mode="first-deploy"
+            onApprove={() => {}}
+            onSkip={() => onSkipAnalysis?.()}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto">
