@@ -31,6 +31,8 @@ export function NewApp() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [prUrls, setPrUrls] = useState<Array<{ service: string; url: string }>>([]);
+  const [provisioningDone, setProvisioningDone] = useState(false);
   const createdAppIdRef = useRef<string | null>(null);
   const wizardEnvVarsRef = useRef<Record<string, string>>({});
 
@@ -132,11 +134,12 @@ export function NewApp() {
     }
   };
 
-  const handleDeploy = async (dockerfile: string, envVars: Record<string, string>, serviceModes?: Record<string, string>) => {
+  const handleApproveAndProvision = async (dockerfile: string, envVars: Record<string, string>, serviceModes?: Record<string, string>) => {
     const appId = createdAppIdRef.current;
     if (!appId) return;
 
     setDeploying(true);
+    const collectedPrUrls: Array<{ service: string; url: string }> = [];
     try {
       if (dockerfile) {
         await analyzeApi.saveDockerfile(appId, dockerfile);
@@ -156,7 +159,7 @@ export function NewApp() {
                 : result.message,
             });
             if (result.prUrl) {
-              window.open(result.prUrl, '_blank');
+              collectedPrUrls.push({ service: serviceType, url: result.prUrl });
             }
           } catch {
             addNotification({
@@ -173,6 +176,15 @@ export function NewApp() {
         await appsApi.updateEnvVars(appId, mergedEnvVars);
       }
 
+      // If PRs were created, show summary step instead of deploying immediately
+      if (collectedPrUrls.length > 0) {
+        setPrUrls(collectedPrUrls);
+        setProvisioningDone(true);
+        setDeploying(false);
+        return;
+      }
+
+      // No PRs — deploy directly
       await deployAndNavigate(appId);
     } catch {
       setDeploying(false);
@@ -182,6 +194,12 @@ export function NewApp() {
         message: t('app.notifications.deploymentFailedMessage'),
       });
     }
+  };
+
+  const handleFinalDeploy = async () => {
+    const appId = createdAppIdRef.current;
+    if (!appId) return;
+    await deployAndNavigate(appId);
   };
 
   const handleDeployWithoutAnalysis = async () => {
@@ -222,12 +240,15 @@ export function NewApp() {
         onRepoSelect={handleRepoSelect}
         onCreateAndAnalyze={handleCreateAndAnalyze}
         onRetryAnalysis={handleRetryAnalysis}
-        onDeploy={handleDeploy}
+        onDeploy={handleApproveAndProvision}
+        onFinalDeploy={handleFinalDeploy}
         onDeployWithoutAnalysis={handleDeployWithoutAnalysis}
         deploying={deploying}
         analysisResult={analysisResult}
         analyzing={analyzing}
         analysisError={analysisError}
+        prUrls={prUrls}
+        provisioningDone={provisioningDone}
       />
     </div>
   );

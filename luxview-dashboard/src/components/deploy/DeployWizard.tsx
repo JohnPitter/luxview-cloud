@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronRight, ChevronLeft, Rocket, Plus, Trash2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Check, ChevronRight, ChevronLeft, Rocket, Plus, Trash2, AlertCircle, RefreshCw, GitPullRequest, ExternalLink, AlertTriangle } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { PillButton } from '../common/PillButton';
 import { RepoSelector } from '../apps/RepoSelector';
@@ -18,11 +18,14 @@ interface DeployWizardProps {
   onCreateAndAnalyze: (config: DeployConfig) => void;
   onRetryAnalysis: () => void;
   onDeploy: (dockerfile: string, envVars: Record<string, string>, serviceModes?: Record<string, string>) => void;
+  onFinalDeploy: () => void;
   onDeployWithoutAnalysis: () => void;
   deploying: boolean;
   analysisResult?: AnalysisResult | null;
   analyzing?: boolean;
   analysisError?: string | null;
+  prUrls?: Array<{ service: string; url: string }>;
+  provisioningDone?: boolean;
 }
 
 export interface DeployConfig {
@@ -40,11 +43,14 @@ export function DeployWizard({
   onCreateAndAnalyze,
   onRetryAnalysis,
   onDeploy,
+  onFinalDeploy,
   onDeployWithoutAnalysis,
   deploying,
   analysisResult,
   analyzing = false,
   analysisError,
+  prUrls = [],
+  provisioningDone = false,
 }: DeployWizardProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
@@ -56,13 +62,31 @@ export function DeployWizard({
   const [appCreated, setAppCreated] = useState(false);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
-  const steps = [
-    t('deploy.wizard.steps.selectRepository'),
-    t('deploy.wizard.steps.configure'),
-    t('deploy.wizard.steps.environment'),
-    t('deploy.wizard.steps.aiAnalysis'),
-    t('deploy.wizard.steps.reviewDeploy'),
-  ];
+  const hasPRs = prUrls.length > 0;
+
+  const steps = hasPRs
+    ? [
+        t('deploy.wizard.steps.selectRepository'),
+        t('deploy.wizard.steps.configure'),
+        t('deploy.wizard.steps.environment'),
+        t('deploy.wizard.steps.aiAnalysis'),
+        t('deploy.wizard.steps.prSummary'),
+        t('deploy.wizard.steps.reviewDeploy'),
+      ]
+    : [
+        t('deploy.wizard.steps.selectRepository'),
+        t('deploy.wizard.steps.configure'),
+        t('deploy.wizard.steps.environment'),
+        t('deploy.wizard.steps.aiAnalysis'),
+        t('deploy.wizard.steps.reviewDeploy'),
+      ];
+
+  // Auto-advance to PR summary step when provisioning completes with PRs
+  useEffect(() => {
+    if (provisioningDone && hasPRs && step === 3) {
+      setStep(4);
+    }
+  }, [provisioningDone, hasPRs, step]);
 
   const handleRepoSelect = useCallback(
     (repo: GithubRepo) => {
@@ -82,14 +106,16 @@ export function DeployWizard({
   const updateEnvVar = (index: number, field: 'key' | 'value', val: string) =>
     setEnvVars(envVars.map((e, i) => (i === index ? { ...e, [field]: val } : e)));
 
+  const reviewStep = hasPRs ? 5 : 4;
+  const prSummaryStep = hasPRs ? 4 : -1;
+
   const canProceed = () => {
     switch (step) {
       case 0: return !!selectedRepo;
       case 1: return !!branch && !!subdomain && subdomainAvailable;
       case 2: return true;
       case 3: return !!analysisResult && !analyzing;
-      case 4: return true;
-      default: return false;
+      default: return true;
     }
   };
 
@@ -110,10 +136,11 @@ export function DeployWizard({
 
   const handleDeploy = () => {
     if (!selectedRepo) return;
-    // DeployAnalysis onApprove already handled the data — this just deploys with whatever was approved
-    // But we need to pass the final dockerfile/envVars from the analysis component
-    // Since we're now in step 4 (review), the analysis was already approved in step 3
-    onDeployWithoutAnalysis();
+    if (provisioningDone) {
+      onFinalDeploy();
+    } else {
+      onDeployWithoutAnalysis();
+    }
   };
 
   const inputClass = `
@@ -312,7 +339,76 @@ export function DeployWizard({
           </div>
         )}
 
-        {step === 4 && selectedRepo && (
+        {step === prSummaryStep && hasPRs && (
+          <div className="space-y-6">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/10">
+                <GitPullRequest size={20} className="text-emerald-400" />
+              </span>
+              <div>
+                <h2 className={`text-lg font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+                  {t('deploy.wizard.prSummary.title')}
+                </h2>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  {t('deploy.wizard.prSummary.subtitle')}
+                </p>
+              </div>
+            </div>
+
+            {/* Warning */}
+            <div className={`flex items-start gap-3 rounded-xl border p-4 ${
+              isDark ? 'border-amber-500/30 bg-amber-500/5' : 'border-amber-300 bg-amber-50'
+            }`}>
+              <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className={`text-sm font-medium ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+                  {t('deploy.wizard.prSummary.warning')}
+                </p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-amber-300/70' : 'text-amber-700/70'}`}>
+                  {t('deploy.wizard.prSummary.warningDetail')}
+                </p>
+              </div>
+            </div>
+
+            {/* PR Links */}
+            <div className="space-y-2">
+              {prUrls.map((pr) => (
+                <a
+                  key={pr.url}
+                  href={pr.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 hover:scale-[1.01] ${
+                    isDark
+                      ? 'border-zinc-800 bg-zinc-900/30 hover:bg-zinc-800/50'
+                      : 'border-zinc-200 bg-white hover:bg-zinc-50'
+                  }`}
+                >
+                  <GitPullRequest size={16} className="text-emerald-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                      {t('deploy.wizard.prSummary.prForService', { service: pr.service })}
+                    </span>
+                    <p className="text-xs text-zinc-500 truncate">{pr.url}</p>
+                  </div>
+                  <ExternalLink size={14} className="text-zinc-500 shrink-0" />
+                </a>
+              ))}
+            </div>
+
+            {/* Instructions */}
+            <div className={`text-sm space-y-2 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+              <p>{t('deploy.wizard.prSummary.instructions')}</p>
+              <ol className="list-decimal list-inside space-y-1 text-xs">
+                <li>{t('deploy.wizard.prSummary.step1')}</li>
+                <li>{t('deploy.wizard.prSummary.step2')}</li>
+                <li>{t('deploy.wizard.prSummary.step3')}</li>
+              </ol>
+            </div>
+          </div>
+        )}
+
+        {step === reviewStep && selectedRepo && (
           <div className="space-y-6">
             <h2
               className={`text-lg font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}
@@ -356,13 +452,22 @@ export function DeployWizard({
             variant="ghost"
             size="md"
             onClick={() => setStep(step - 1)}
-            disabled={step === 0 || (step > 3 && appCreated)}
+            disabled={step === 0 || (step >= 3 && appCreated)}
             icon={<ChevronLeft size={16} />}
           >
             {t('deploy.wizard.navigation.back')}
           </PillButton>
 
-          {step < steps.length - 1 ? (
+          {step === prSummaryStep ? (
+            <PillButton
+              variant="primary"
+              size="md"
+              onClick={() => setStep(reviewStep)}
+              icon={<ChevronRight size={16} />}
+            >
+              {t('deploy.wizard.navigation.continue')}
+            </PillButton>
+          ) : step < steps.length - 1 ? (
             <PillButton
               variant="primary"
               size="md"
