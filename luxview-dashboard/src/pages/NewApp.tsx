@@ -11,7 +11,6 @@ import { useThemeStore } from '../stores/theme.store';
 import { githubApi, type GithubRepo } from '../api/github';
 import { analyzeApi, type AnalysisResult } from '../api/analyze';
 import { appsApi } from '../api/apps';
-import { servicesApi, type ServiceType } from '../api/services';
 import { newAppTourSteps } from '../tours/newApp';
 
 export function NewApp() {
@@ -142,16 +141,22 @@ export function NewApp() {
         await analyzeApi.saveDockerfile(appId, dockerfile);
       }
 
-      // Provision services where mode is 'auto'
+      // Auto-migrate services: provision + generate code changes + create PR
       if (serviceModes) {
         const autoServices = Object.entries(serviceModes).filter(([, mode]) => mode === 'auto');
         for (const [serviceType] of autoServices) {
           try {
-            await servicesApi.create(appId, serviceType as ServiceType);
+            const result = await analyzeApi.autoMigrate(appId, serviceType);
             addNotification({
               type: 'success',
               title: t('analyze.serviceProvisioned', { service: serviceType }),
+              message: result.prUrl
+                ? t('analyze.prCreated')
+                : result.message,
             });
+            if (result.prUrl) {
+              window.open(result.prUrl, '_blank');
+            }
           } catch {
             addNotification({
               type: 'error',

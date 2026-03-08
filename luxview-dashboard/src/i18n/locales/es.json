@@ -802,6 +802,7 @@
   "analyze.serviceProvisioned": "{{service}} provisionado con éxito",
   "analyze.serviceProvisionFailed": "Error al provisionar {{service}}",
   "analyze.provisioningServices": "Provisionando servicios...",
+  "analyze.prCreated": "PR de migración creado y abierto en una nueva pestaña",
   "analyze.loading.cloningRepo": "Clonando repositorio...",
   "analyze.loading.scanningFiles": "Escaneando archivos del proyecto...",
   "analyze.loading.detectingServices": "Detectando servicios externos...",

@@ -58,7 +58,17 @@ export const analyzeApi = {
   async deleteDockerfile(appId: string): Promise<void> {
     await api.delete(`/apps/${appId}/dockerfile`);
   },
+  async autoMigrate(appId: string, serviceType: string): Promise<AutoMigrateResult> {
+    const { data } = await api.post<AutoMigrateResult>(`/apps/${appId}/auto-migrate`, { serviceType }, { timeout: 180000 });
+    return data;
+  },
 };
+
+export interface AutoMigrateResult {
+  serviceId: string;
+  prUrl?: string;
+  message: string;
+}
 
 export interface AITestResult {
   success: boolean;
