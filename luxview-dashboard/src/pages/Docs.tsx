@@ -19,7 +19,7 @@ import { useThemeStore } from '../stores/theme.store';
 
 interface DocSection {
   id: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ size?: string | number; className?: string }>;
   titleKey: string;
   descriptionKey: string;
   accent: string;
