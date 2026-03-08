@@ -10,16 +10,18 @@ import {
   Pencil,
   Check,
   Server,
+  Database,
 } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { useThemeStore } from '../../stores/theme.store';
 import type { AnalysisResult, Suggestion } from '../../api/analyze';
+import { ServiceRecommendationCard, type MigrationMode } from './ServiceRecommendationCard';
 
 interface DeployAnalysisProps {
   result: AnalysisResult;
   loading?: boolean;
   mode: 'first-deploy' | 'failure';
-  onApprove: (dockerfile: string, envVars: Record<string, string>) => void;
+  onApprove: (dockerfile: string, envVars: Record<string, string>, serviceModes?: Record<string, MigrationMode>) => void;
   onSkip: () => void;
 }
 
@@ -54,6 +56,16 @@ export function DeployAnalysis({
     }
     return initial;
   });
+
+  const [serviceModes, setServiceModes] = useState<Record<string, MigrationMode>>(() => {
+    const initial: Record<string, MigrationMode> = {};
+    for (const rec of result.serviceRecommendations ?? []) {
+      initial[rec.recommendedService] = 'manual';
+    }
+    return initial;
+  });
+
+  const hasRecommendations = (result.serviceRecommendations ?? []).length > 0;
 
   const isFailure = mode === 'failure';
 
@@ -295,6 +307,37 @@ export function DeployAnalysis({
         </div>
       )}
 
+      {/* Service Recommendations */}
+      {!isFailure && hasRecommendations && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Database size={16} className="text-primary" />
+            <h4
+              className={`text-sm font-semibold ${
+                isDark ? 'text-zinc-300' : 'text-zinc-700'
+              }`}
+            >
+              {t('analyze.serviceRecommendations')}
+            </h4>
+          </div>
+          <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>
+            {t('analyze.serviceRecommendationsDescription')}
+          </p>
+          <div className="space-y-3">
+            {(result.serviceRecommendations ?? []).map((rec) => (
+              <ServiceRecommendationCard
+                key={rec.recommendedService}
+                recommendation={rec}
+                mode={serviceModes[rec.recommendedService] ?? 'manual'}
+                onModeChange={(m) =>
+                  setServiceModes((prev) => ({ ...prev, [rec.recommendedService]: m }))
+                }
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex items-center justify-end gap-3 pt-2">
         <button
@@ -306,7 +349,7 @@ export function DeployAnalysis({
         </button>
         <button
           type="button"
-          onClick={() => onApprove(dockerfile, envValues)}
+          onClick={() => onApprove(dockerfile, envValues, hasRecommendations ? serviceModes : undefined)}
           className="bg-primary text-white rounded-lg px-4 py-2 hover:brightness-110 active:scale-[0.98] transition-all text-sm font-medium"
         >
           {isFailure
