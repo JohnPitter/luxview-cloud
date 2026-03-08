@@ -38,9 +38,10 @@ type App struct {
 	EnvVars        json.RawMessage `json:"-"`        // encrypted, never directly exposed
 	EnvVarsPlain   map[string]string `json:"env_vars"` // decrypted for API responses
 	ResourceLimits ResourceLimits  `json:"resource_limits"`
-	AutoDeploy     bool            `json:"auto_deploy"`
-	CreatedAt      time.Time       `json:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at"`
+	AutoDeploy       bool            `json:"auto_deploy"`
+	CustomDockerfile *string         `json:"custom_dockerfile,omitempty"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
 }
 
 type CreateAppRequest struct {
