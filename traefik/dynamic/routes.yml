@@ -50,7 +50,7 @@ http:
   services:
     engine-svc:
       loadBalancer:
-        serversTransport: engine-transport
+        serversTransport: engine-transport@file
         servers:
           - url: "http://luxview-engine:8080"
         responseForwarding:
