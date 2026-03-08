@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/luxview/engine/internal/config"
@@ -165,28 +167,37 @@ func (p *Provisioner) Provision(ctx context.Context, appID uuid.UUID, serviceTyp
 }
 
 func (p *Provisioner) provisionPostgres(ctx context.Context, dbName, userName, password string) error {
+	log := logger.With("provisioner")
+
+	// Use dedicated timeout so provisioning isn't cancelled by HTTP request timeout
+	provCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
 	adminConnStr := fmt.Sprintf("postgres://%s:%s@%s:%d/postgres?sslmode=disable",
 		p.cfg.SharedPGUser, p.cfg.SharedPGPassword, p.cfg.SharedPGHost, p.cfg.SharedPGPort)
 
-	conn, err := pgx.Connect(ctx, adminConnStr)
+	conn, err := pgx.Connect(provCtx, adminConnStr)
 	if err != nil {
 		return fmt.Errorf("connect to shared pg: %w", err)
 	}
-	defer conn.Close(ctx)
+	defer conn.Close(provCtx)
 
 	// Create user first (needed before OWNER assignment)
-	_, err = conn.Exec(ctx, fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", quoteIdent(userName), password))
-	if err != nil && !isDuplicateRole(err) {
+	log.Debug().Str("user", userName).Msg("creating postgres user")
+	_, err = conn.Exec(provCtx, fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", quoteIdent(userName), password))
+	if err != nil && !isPgError(err, "42710") { // 42710 = duplicate_object
 		return fmt.Errorf("create user: %w", err)
 	}
 
 	// Create database owned by the app user — ensures full isolation
-	_, err = conn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s OWNER %s", quoteIdent(dbName), quoteIdent(userName)))
-	if err != nil && !isDuplicateDB(err) {
+	log.Debug().Str("db", dbName).Msg("creating postgres database")
+	_, err = conn.Exec(provCtx, fmt.Sprintf("CREATE DATABASE %s OWNER %s", quoteIdent(dbName), quoteIdent(userName)))
+	if err != nil && !isPgError(err, "42P04") { // 42P04 = duplicate_database
 		return fmt.Errorf("create database: %w", err)
 	}
 
-	_, err = conn.Exec(ctx, fmt.Sprintf("GRANT ALL PRIVILEGES ON DATABASE %s TO %s", quoteIdent(dbName), quoteIdent(userName)))
+	log.Debug().Str("db", dbName).Msg("granting database privileges")
+	_, err = conn.Exec(provCtx, fmt.Sprintf("GRANT ALL PRIVILEGES ON DATABASE %s TO %s", quoteIdent(dbName), quoteIdent(userName)))
 	if err != nil {
 		return fmt.Errorf("grant privileges: %w", err)
 	}
@@ -194,18 +205,27 @@ func (p *Provisioner) provisionPostgres(ctx context.Context, dbName, userName, p
 	// Connect to the new database to grant schema permissions (PG 15+ requirement)
 	dbConnStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
 		p.cfg.SharedPGUser, p.cfg.SharedPGPassword, p.cfg.SharedPGHost, p.cfg.SharedPGPort, dbName)
-	dbConn, err := pgx.Connect(ctx, dbConnStr)
+	dbConn, err := pgx.Connect(provCtx, dbConnStr)
 	if err != nil {
 		return fmt.Errorf("connect to new db: %w", err)
 	}
-	defer dbConn.Close(ctx)
+	defer dbConn.Close(provCtx)
 
 	// Grant schema permissions and set ownership so the app user can create tables
-	_, _ = dbConn.Exec(ctx, fmt.Sprintf("ALTER SCHEMA public OWNER TO %s", quoteIdent(userName)))
-	_, _ = dbConn.Exec(ctx, fmt.Sprintf("GRANT ALL ON SCHEMA public TO %s", quoteIdent(userName)))
+	log.Debug().Str("db", dbName).Msg("configuring schema permissions")
+	if _, err := dbConn.Exec(provCtx, fmt.Sprintf("ALTER SCHEMA public OWNER TO %s", quoteIdent(userName))); err != nil {
+		log.Warn().Err(err).Str("db", dbName).Msg("failed to alter schema owner")
+	}
+	if _, err := dbConn.Exec(provCtx, fmt.Sprintf("GRANT ALL ON SCHEMA public TO %s", quoteIdent(userName))); err != nil {
+		log.Warn().Err(err).Str("db", dbName).Msg("failed to grant schema privileges")
+	}
 	// Revoke public access so other app users cannot access this database
-	_, _ = dbConn.Exec(ctx, "REVOKE ALL ON SCHEMA public FROM PUBLIC")
-	_, _ = dbConn.Exec(ctx, fmt.Sprintf("GRANT ALL ON SCHEMA public TO %s", quoteIdent(userName)))
+	if _, err := dbConn.Exec(provCtx, "REVOKE ALL ON SCHEMA public FROM PUBLIC"); err != nil {
+		log.Warn().Err(err).Str("db", dbName).Msg("failed to revoke public schema access")
+	}
+	if _, err := dbConn.Exec(provCtx, fmt.Sprintf("GRANT ALL ON SCHEMA public TO %s", quoteIdent(userName))); err != nil {
+		log.Warn().Err(err).Str("db", dbName).Msg("failed to re-grant schema privileges")
+	}
 
 	return nil
 }
@@ -495,15 +515,22 @@ func quoteIdent(s string) string {
 }
 
 func generatePassword(length int) string {
-	b := make([]byte, length)
-	_, _ = rand.Read(b)
+	// length/2 bytes → hex encodes to exactly length characters
+	b := make([]byte, (length+1)/2)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback: should never happen with crypto/rand
+		panic("crypto/rand failed: " + err.Error())
+	}
 	return hex.EncodeToString(b)[:length]
 }
 
-func isDuplicateDB(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "already exists")
-}
-
-func isDuplicateRole(err error) bool {
+// isPgError checks if the error is a PostgreSQL error with the given SQLSTATE code.
+// Common codes: 42710=duplicate_object, 42P04=duplicate_database
+func isPgError(err error, code string) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == code
+	}
+	// Fallback to string matching for wrapped errors
 	return err != nil && strings.Contains(err.Error(), "already exists")
 }
