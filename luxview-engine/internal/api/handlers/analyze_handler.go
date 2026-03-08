@@ -1,0 +1,303 @@
+package handlers
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/luxview/engine/internal/agent"
+	"github.com/luxview/engine/internal/api/middleware"
+	"github.com/luxview/engine/internal/repository"
+	"github.com/luxview/engine/pkg/crypto"
+	"github.com/luxview/engine/pkg/logger"
+)
+
+type AnalyzeHandler struct {
+	appRepo      *repository.AppRepo
+	userRepo     *repository.UserRepo
+	deployRepo   *repository.DeploymentRepo
+	settingsRepo *repository.SettingsRepo
+	agent        *agent.DeployAgent
+	encryptKey   []byte
+}
+
+func NewAnalyzeHandler(
+	appRepo *repository.AppRepo,
+	userRepo *repository.UserRepo,
+	deployRepo *repository.DeploymentRepo,
+	settingsRepo *repository.SettingsRepo,
+	encryptKey []byte,
+) *AnalyzeHandler {
+	return &AnalyzeHandler{
+		appRepo:      appRepo,
+		userRepo:     userRepo,
+		deployRepo:   deployRepo,
+		settingsRepo: settingsRepo,
+		agent:        agent.NewDeployAgent(),
+		encryptKey:   encryptKey,
+	}
+}
+
+// aiConfig holds the resolved AI configuration from platform settings.
+type aiConfig struct {
+	apiKey string
+	model  string
+}
+
+// getAIConfig reads and validates AI settings from the settings repo.
+func (h *AnalyzeHandler) getAIConfig(ctx context.Context) (*aiConfig, error) {
+	settings, err := h.settingsRepo.GetAll(ctx, "ai_")
+	if err != nil {
+		return nil, fmt.Errorf("get AI settings: %w", err)
+	}
+
+	if settings["enabled"] != "true" {
+		return nil, fmt.Errorf("AI features are disabled")
+	}
+
+	apiKey := settings["anthropic_api_key"]
+	if apiKey == "" {
+		return nil, fmt.Errorf("Anthropic API key not configured")
+	}
+
+	model := settings["model"]
+	if model == "" {
+		model = "claude-sonnet-4-20250514"
+	}
+
+	return &aiConfig{apiKey: apiKey, model: model}, nil
+}
+
+// cloneRepo clones the app repository to a temporary directory using the user's GitHub token.
+func (h *AnalyzeHandler) cloneRepo(ctx context.Context, appID uuid.UUID, repoURL, branch string) (string, error) {
+	// Get the app owner's user to access their GitHub token
+	app, err := h.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		return "", fmt.Errorf("find app: %w", err)
+	}
+
+	user, err := h.userRepo.FindByID(ctx, app.UserID)
+	if err != nil || user == nil {
+		return "", fmt.Errorf("find user: %w", err)
+	}
+
+	token := user.GitHubToken
+	if decrypted, err := crypto.Decrypt(token, h.encryptKey); err == nil {
+		token = decrypted
+	}
+
+	// Inject token into clone URL: https://TOKEN@github.com/...
+	cloneURL := repoURL
+	if strings.HasPrefix(cloneURL, "https://github.com/") {
+		cloneURL = "https://" + token + "@" + strings.TrimPrefix(cloneURL, "https://")
+	}
+
+	destDir := filepath.Join(os.TempDir(), "luxview-analyze", appID.String())
+	// Clean up any previous clone
+	_ = os.RemoveAll(destDir)
+	if err := os.MkdirAll(filepath.Dir(destDir), 0o755); err != nil {
+		return "", fmt.Errorf("create temp dir: %w", err)
+	}
+
+	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--branch", branch, cloneURL, destDir)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git clone failed: %s: %w", string(output), err)
+	}
+
+	return destDir, nil
+}
+
+// Analyze handles POST /apps/{id}/analyze — runs AI analysis on the app's repository.
+func (h *AnalyzeHandler) Analyze(w http.ResponseWriter, r *http.Request) {
+	log := logger.With("analyze")
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app ID")
+		return
+	}
+
+	app, err := h.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	if app.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	cfg, err := h.getAIConfig(ctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("AI config unavailable")
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	cloneDir, err := h.cloneRepo(ctx, appID, app.RepoURL, app.RepoBranch)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to clone repo")
+		writeError(w, http.StatusInternalServerError, "failed to clone repository")
+		return
+	}
+	defer os.RemoveAll(cloneDir)
+
+	result, err := h.agent.Analyze(ctx, cfg.apiKey, cfg.model, cloneDir)
+	if err != nil {
+		log.Error().Err(err).Str("app", app.Subdomain).Msg("analysis failed")
+		writeError(w, http.StatusInternalServerError, "analysis failed: "+err.Error())
+		return
+	}
+
+	log.Info().Str("app", app.Subdomain).Str("stack", result.Stack).Msg("analysis complete")
+	writeJSON(w, http.StatusOK, result)
+}
+
+// AnalyzeFailure handles POST /apps/{id}/analyze-failure — diagnoses a failed build.
+func (h *AnalyzeHandler) AnalyzeFailure(w http.ResponseWriter, r *http.Request) {
+	log := logger.With("analyze")
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app ID")
+		return
+	}
+
+	app, err := h.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	if app.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	cfg, err := h.getAIConfig(ctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("AI config unavailable")
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Get latest deployment's build log
+	deployments, _, err := h.deployRepo.ListByAppID(ctx, appID, 1, 0)
+	if err != nil || len(deployments) == 0 {
+		writeError(w, http.StatusNotFound, "no deployments found")
+		return
+	}
+
+	// ListByAppID doesn't include build_log, so fetch the full deployment
+	latestDeploy, err := h.deployRepo.FindByID(ctx, deployments[0].ID)
+	if err != nil || latestDeploy == nil {
+		writeError(w, http.StatusInternalServerError, "failed to get deployment details")
+		return
+	}
+
+	var dockerfile string
+	if app.CustomDockerfile != nil {
+		dockerfile = *app.CustomDockerfile
+	}
+
+	cloneDir, err := h.cloneRepo(ctx, appID, app.RepoURL, app.RepoBranch)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to clone repo")
+		writeError(w, http.StatusInternalServerError, "failed to clone repository")
+		return
+	}
+	defer os.RemoveAll(cloneDir)
+
+	result, err := h.agent.AnalyzeFailure(ctx, cfg.apiKey, cfg.model, cloneDir, latestDeploy.BuildLog, dockerfile)
+	if err != nil {
+		log.Error().Err(err).Str("app", app.Subdomain).Msg("failure analysis failed")
+		writeError(w, http.StatusInternalServerError, "failure analysis failed: "+err.Error())
+		return
+	}
+
+	log.Info().Str("app", app.Subdomain).Str("diagnosis", result.Diagnosis).Msg("failure analysis complete")
+	writeJSON(w, http.StatusOK, result)
+}
+
+// SaveDockerfile handles PUT /apps/{id}/dockerfile — saves a custom Dockerfile.
+func (h *AnalyzeHandler) SaveDockerfile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app ID")
+		return
+	}
+
+	app, err := h.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	if app.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	var body struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := h.appRepo.UpdateCustomDockerfile(ctx, appID, &body.Content); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save dockerfile")
+		return
+	}
+
+	log := logger.With("analyze")
+	log.Info().Str("app", app.Subdomain).Msg("custom dockerfile saved")
+	writeJSON(w, http.StatusOK, map[string]string{"message": "dockerfile saved"})
+}
+
+// DeleteDockerfile handles DELETE /apps/{id}/dockerfile — removes the custom Dockerfile.
+func (h *AnalyzeHandler) DeleteDockerfile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app ID")
+		return
+	}
+
+	app, err := h.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	if app.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	if err := h.appRepo.UpdateCustomDockerfile(ctx, appID, nil); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete dockerfile")
+		return
+	}
+
+	log := logger.With("analyze")
+	log.Info().Str("app", app.Subdomain).Msg("custom dockerfile deleted")
+	writeJSON(w, http.StatusOK, map[string]string{"message": "dockerfile deleted"})
+}
