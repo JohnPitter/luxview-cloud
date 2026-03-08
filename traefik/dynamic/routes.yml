@@ -40,9 +40,17 @@ http:
         - gzip-compress
       priority: 1
 
+  serversTransports:
+    engine-transport:
+      forwardingTimeouts:
+        dialTimeout: 30s
+        responseHeaderTimeout: 300s
+        idleConnTimeout: 300s
+
   services:
     engine-svc:
       loadBalancer:
+        serversTransport: engine-transport
         servers:
           - url: "http://luxview-engine:8080"
         responseForwarding:

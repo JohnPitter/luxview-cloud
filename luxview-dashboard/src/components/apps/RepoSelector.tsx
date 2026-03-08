@@ -30,11 +30,13 @@ export function RepoSelector({ repos, loading, selected, onSelect }: RepoSelecto
 
   const filtered = useMemo(
     () =>
-      repos.filter(
-        (r) =>
-          r.name.toLowerCase().includes(search.toLowerCase()) ||
-          r.fullName.toLowerCase().includes(search.toLowerCase()),
-      ),
+      repos
+        .filter(
+          (r) =>
+            r.name.toLowerCase().includes(search.toLowerCase()) ||
+            r.fullName.toLowerCase().includes(search.toLowerCase()),
+        )
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [repos, search],
   );
 
