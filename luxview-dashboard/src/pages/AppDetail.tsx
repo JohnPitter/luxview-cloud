@@ -16,6 +16,8 @@ import {
   Check,
   Rocket,
   Loader2,
+  Stethoscope,
+  X,
 } from 'lucide-react';
 import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
@@ -41,6 +43,8 @@ import { deploymentsApi, type Deployment } from '../api/deployments';
 import { servicesApi, type AppService, type ServiceType } from '../api/services';
 import { alertsApi, type Alert, type CreateAlertPayload } from '../api/alerts';
 import { appsApi } from '../api/apps';
+import { analyzeApi, type AnalysisResult } from '../api/analyze';
+import { DeployAnalysis } from '../components/deploy/DeployAnalysis';
 
 type Tab = 'overview' | 'deployments' | 'logs' | 'env' | 'services' | 'metrics' | 'alerts' | 'settings';
 
@@ -83,6 +87,11 @@ export function AppDetail() {
   const [settingsName, setSettingsName] = useState('');
   const [settingsBranch, setSettingsBranch] = useState('');
   const [settingsAutoDeploy, setSettingsAutoDeploy] = useState(true);
+
+  // Failure analysis state
+  const [analyzingFailure, setAnalyzingFailure] = useState(false);
+  const [failureAnalysisResult, setFailureAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [showAnalysisModal, setShowAnalysisModal] = useState(false);
 
   const { metrics } = useMetricsLive(appId || '');
 
@@ -199,6 +208,48 @@ export function AppDetail() {
     }
   };
 
+  const handleAnalyzeFailure = async () => {
+    if (!appId) return;
+    setAnalyzingFailure(true);
+    setShowAnalysisModal(true);
+    setFailureAnalysisResult(null);
+    try {
+      const result = await analyzeApi.analyzeFailure(appId);
+      setFailureAnalysisResult(result);
+    } catch {
+      addNotification({ type: 'error', title: t('app.notifications.analysisFailed') });
+      setShowAnalysisModal(false);
+    } finally {
+      setAnalyzingFailure(false);
+    }
+  };
+
+  const handleApproveFailureAnalysis = async (dockerfile: string, envVars: Record<string, string>) => {
+    if (!appId) return;
+    try {
+      if (dockerfile) {
+        await analyzeApi.saveDockerfile(appId, dockerfile);
+      }
+      const hasEnvVars = Object.keys(envVars).some((k) => envVars[k]);
+      if (hasEnvVars) {
+        const merged = { ...(app?.envVars || {}), ...envVars };
+        await appsApi.updateEnvVars(appId, merged);
+      }
+      setStatusWhenActionStarted(app?.status || null);
+      setActionPending(true);
+      await deployApp(appId);
+      setShowAnalysisModal(false);
+      setFailureAnalysisResult(null);
+    } catch {
+      addNotification({ type: 'error', title: t('app.notifications.deploymentFailed') });
+    }
+  };
+
+  const handleDismissFailureAnalysis = () => {
+    setShowAnalysisModal(false);
+    setFailureAnalysisResult(null);
+  };
+
   const latestMetric = metrics.length > 0 ? metrics[metrics.length - 1] : null;
   const currentCpu = latestMetric?.cpuPercent ?? 0;
   const currentMemory = latestMetric?.memoryBytes ?? 0;
@@ -301,6 +352,17 @@ export function AppDetail() {
                 {t('app.actions.stop')}
               </PillButton>
             </>
+          )}
+          {app.status === 'error' && (
+            <PillButton
+              variant="ghost"
+              size="sm"
+              disabled={analyzingFailure}
+              onClick={handleAnalyzeFailure}
+              icon={analyzingFailure ? <Loader2 size={14} className="animate-spin" /> : <Stethoscope size={14} />}
+            >
+              {t('app.actions.analyzeFailure')}
+            </PillButton>
           )}
           <PillButton
             variant="primary"
@@ -846,6 +908,30 @@ export function AppDetail() {
         onCancel={() => setShowDeleteDialog(false)}
         loading={deleting}
       />
+
+      {/* Failure Analysis Modal */}
+      {showAnalysisModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleDismissFailureAnalysis} />
+          <div className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
+            {!analyzingFailure && failureAnalysisResult && (
+              <button
+                onClick={handleDismissFailureAnalysis}
+                className="absolute top-4 right-4 z-20 text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            )}
+            <DeployAnalysis
+              result={failureAnalysisResult ?? { suggestions: [], dockerfile: '', port: 0, stack: '', envHints: [] }}
+              loading={analyzingFailure}
+              mode="failure"
+              onApprove={handleApproveFailureAnalysis}
+              onSkip={handleDismissFailureAnalysis}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
