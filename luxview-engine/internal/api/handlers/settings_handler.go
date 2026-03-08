@@ -18,29 +18,31 @@ func NewSettingsHandler(settingsRepo *repository.SettingsRepo) *SettingsHandler 
 }
 
 // aiSettingsResponse is the JSON shape returned by GetAISettings.
+// JSON tags use snake_case; the frontend axios interceptor converts to camelCase automatically.
 type aiSettingsResponse struct {
-	AuthMode           string `json:"authMode"` // "api_key" or "oauth"
-	AnthropicAPIKey    string `json:"anthropicApiKey"`
-	OAuthAccessToken   string `json:"oauthAccessToken"`
-	OAuthRefreshToken  string `json:"oauthRefreshToken"`
-	OAuthExpiresAt     string `json:"oauthExpiresAt"`
-	ClaudeClientID     string `json:"claudeClientId"`
-	ClaudeClientSecret string `json:"claudeClientSecret"`
-	AIEnabled          bool   `json:"aiEnabled"`
-	AIModel            string `json:"aiModel"`
+	AuthMode           string `json:"auth_mode"`
+	AnthropicAPIKey    string `json:"anthropic_api_key"`
+	OAuthAccessToken   string `json:"oauth_access_token"`
+	OAuthRefreshToken  string `json:"oauth_refresh_token"`
+	OAuthExpiresAt     string `json:"oauth_expires_at"`
+	ClaudeClientID     string `json:"claude_client_id"`
+	ClaudeClientSecret string `json:"claude_client_secret"`
+	AIEnabled          bool   `json:"ai_enabled"`
+	AIModel            string `json:"ai_model"`
 }
 
 // updateAISettingsRequest accepts partial updates (pointer fields).
+// JSON tags use snake_case because the frontend axios interceptor converts camelCase → snake_case.
 type updateAISettingsRequest struct {
-	AuthMode           *string `json:"authMode"`
-	AnthropicAPIKey    *string `json:"anthropicApiKey"`
-	OAuthAccessToken   *string `json:"oauthAccessToken"`
-	OAuthRefreshToken  *string `json:"oauthRefreshToken"`
-	OAuthExpiresAt     *string `json:"oauthExpiresAt"`
-	ClaudeClientID     *string `json:"claudeClientId"`
-	ClaudeClientSecret *string `json:"claudeClientSecret"`
-	AIEnabled          *bool   `json:"aiEnabled"`
-	AIModel            *string `json:"aiModel"`
+	AuthMode           *string `json:"auth_mode"`
+	AnthropicAPIKey    *string `json:"anthropic_api_key"`
+	OAuthAccessToken   *string `json:"oauth_access_token"`
+	OAuthRefreshToken  *string `json:"oauth_refresh_token"`
+	OAuthExpiresAt     *string `json:"oauth_expires_at"`
+	ClaudeClientID     *string `json:"claude_client_id"`
+	ClaudeClientSecret *string `json:"claude_client_secret"`
+	AIEnabled          *bool   `json:"ai_enabled"`
+	AIModel            *string `json:"ai_model"`
 }
 
 // maskSecret masks a string showing only the first 4 and last 4 characters.
@@ -196,25 +198,17 @@ func (h *SettingsHandler) TestAIConnection(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 
 	var req struct {
-		APIKey       string `json:"apiKey"`
-		AccessToken  string `json:"accessToken"`
-		RefreshToken string `json:"refreshToken"`
-		ExpiresAt    string `json:"expiresAt"`
-		AuthMode     string `json:"authMode"`
+		APIKey       string `json:"api_key"`
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresAt    string `json:"expires_at"`
+		AuthMode     string `json:"auth_mode"`
 		Model        string `json:"model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-
-	log.Info().
-		Str("authMode", req.AuthMode).
-		Bool("hasApiKey", req.APIKey != "").
-		Bool("hasAccessToken", req.AccessToken != "").
-		Bool("hasRefreshToken", req.RefreshToken != "").
-		Str("model", req.Model).
-		Msg("test connection request received")
 
 	da := agent.NewDeployAgent()
 
@@ -265,7 +259,6 @@ func (h *SettingsHandler) TestAIConnection(w http.ResponseWriter, r *http.Reques
 	}
 
 	if token == "" {
-		log.Warn().Str("resolvedAuthMode", authMode).Msg("no credentials found for test connection")
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"success": false,
 			"error":   "no credentials provided and none stored",
