@@ -208,6 +208,14 @@ func (h *SettingsHandler) TestAIConnection(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	log.Info().
+		Str("authMode", req.AuthMode).
+		Bool("hasApiKey", req.APIKey != "").
+		Bool("hasAccessToken", req.AccessToken != "").
+		Bool("hasRefreshToken", req.RefreshToken != "").
+		Str("model", req.Model).
+		Msg("test connection request received")
+
 	da := agent.NewDeployAgent()
 
 	// Resolve the token to use based on auth mode
@@ -257,6 +265,7 @@ func (h *SettingsHandler) TestAIConnection(w http.ResponseWriter, r *http.Reques
 	}
 
 	if token == "" {
+		log.Warn().Str("resolvedAuthMode", authMode).Msg("no credentials found for test connection")
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"success": false,
 			"error":   "no credentials provided and none stored",
