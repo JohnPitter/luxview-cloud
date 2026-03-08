@@ -15,17 +15,21 @@ Your app is live at `https://<subdomain>.luxview.cloud` within seconds.
 
 LuxView auto-detects your project stack based on files in the repository:
 
-| File Detected | Stack | Runtime |
-|---|---|---|
-| `package.json` | Node.js | Node 20 |
-| `requirements.txt` / `Pipfile` | Python | Python 3.12 |
-| `go.mod` | Go | Go 1.23 |
-| `Cargo.toml` | Rust | Rust (latest stable) |
-| `pom.xml` / `build.gradle` | Java | JDK 21 |
-| `Dockerfile` | Docker | Your Dockerfile |
-| `index.html` (no other markers) | Static | Nginx |
+| File Detected | Stack | Runtime | Key Requirement |
+|---|---|---|---|
+| `Dockerfile` | Custom | Your Dockerfile | Must have `EXPOSE` directive |
+| `package.json` + `next.config.*` | Next.js | Node 20 | `output: 'standalone'` in next.config |
+| `package.json` + `vite.config.*` | Vite | Nginx (static) | Build output in `dist/` |
+| `package.json` | Node.js | Node 20 | **Must have a `"start"` script** |
+| `requirements.txt` / `Pipfile` | Python | Python 3.12 | `gunicorn` in dependencies, entry point `app:app` |
+| `go.mod` | Go | Go 1.22 | Compiles with `go build ./...` |
+| `pom.xml` / `build.gradle` | Java | JDK 21 | Spring Boot with JAR output |
+| `Cargo.toml` | Rust | Rust 1.77 | Binary crate in `target/release/` |
+| `index.html` (no other markers) | Static | Nginx | All assets with relative paths |
 
 If your project has a `Dockerfile`, it takes priority over all other detection methods.
+
+> For detailed requirements per stack (common errors, tips, and examples), see [Deploying Apps → Supported Stacks](./deploying-apps.md#supported-stacks--requirements).
 
 ## Your First Deploy
 
