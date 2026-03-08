@@ -45,6 +45,8 @@ http:
       loadBalancer:
         servers:
           - url: "http://luxview-engine:8080"
+        responseForwarding:
+          flushInterval: 100ms
 
     dashboard-svc:
       loadBalancer:
