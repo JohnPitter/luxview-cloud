@@ -121,6 +121,16 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		return err
 	}
 
+	// If app has a custom Dockerfile (from AI agent or user), inject it into the build dir
+	if app.CustomDockerfile != nil && *app.CustomDockerfile != "" {
+		dockerfilePath := filepath.Join(buildDir, "Dockerfile")
+		if err := os.WriteFile(dockerfilePath, []byte(*app.CustomDockerfile), 0644); err != nil {
+			log.Warn().Err(err).Msg("failed to write custom Dockerfile, falling back to auto-detect")
+		} else {
+			log.Info().Str("app", app.Subdomain).Msg("using custom Dockerfile from AI agent")
+		}
+	}
+
 	// Detect stack
 	result := d.detector.Detect(buildDir)
 	if result == nil {
