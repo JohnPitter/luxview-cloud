@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { type Plan, plansApi } from '../api/plans';
 import {
@@ -27,33 +27,30 @@ import { useAuthStore } from '../stores/auth.store';
 import { useThemeStore } from '../stores/theme.store';
 import { GlassCard } from '../components/common/GlassCard';
 
-function AnimatedTerminal() {
+function AnimatedDashboard() {
   const { t } = useTranslation();
-  const [visibleLines, setVisibleLines] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [step, setStep] = useState(0);
 
-  const terminalLines = useMemo(
+  const steps = useMemo(
     () => [
-      { text: t('landing.terminal.line1'), delay: 0, type: 'command' as const },
-      { text: t('landing.terminal.line2'), delay: 800, type: 'info' as const },
-      { text: t('landing.terminal.line3'), delay: 1600, type: 'info' as const },
-      { text: t('landing.terminal.line4'), delay: 2600, type: 'success' as const },
-      { text: t('landing.terminal.line5'), delay: 3600, type: 'info' as const },
-      { text: t('landing.terminal.line6'), delay: 4400, type: 'info' as const },
-      { text: t('landing.terminal.line7'), delay: 5200, type: 'success' as const },
-      { text: t('landing.terminal.line8Suffix'), delay: 6200, type: 'final' as const },
+      { delay: 0 },
+      { delay: 1200 },
+      { delay: 2800 },
+      { delay: 4200 },
+      { delay: 5600 },
+      { delay: 7000 },
     ],
-    [t],
+    [],
   );
 
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
-    const duration = terminalLines[terminalLines.length - 1].delay + 2600;
+    const duration = steps[steps.length - 1].delay + 3000;
 
     const runSequence = () => {
-      setVisibleLines(0);
-      terminalLines.forEach((line, index) => {
-        timers.push(setTimeout(() => setVisibleLines(index + 1), line.delay));
+      setStep(0);
+      steps.forEach((s, i) => {
+        timers.push(setTimeout(() => setStep(i + 1), s.delay));
       });
     };
 
@@ -64,48 +61,123 @@ function AnimatedTerminal() {
       timers.forEach(clearTimeout);
       clearInterval(interval);
     };
-  }, [terminalLines]);
+  }, [steps]);
 
-  useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-    }
-  }, [visibleLines]);
+  const fade = 'animate-[fadeSlideIn_0.35s_ease-out]';
+  const surface = 'border-zinc-800/70 bg-zinc-900/80';
+  const dimText = 'text-zinc-500';
+  const brightText = 'text-zinc-100';
 
   return (
-    <div className="overflow-hidden rounded-[28px] border border-[#30363d] bg-[#0d1117] shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
-      <div className="flex items-center gap-2 border-b border-[#30363d] bg-[#161b22] px-4 py-3">
+    <div className="overflow-hidden rounded-[28px] border border-zinc-800/70 bg-zinc-950 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+      {/* Window chrome */}
+      <div className="flex items-center gap-2 border-b border-zinc-800/70 bg-zinc-900/60 px-4 py-3">
         <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
         <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
         <span className="h-3 w-3 rounded-full bg-[#28c840]" />
-        <span className="ml-3 text-xs font-mono text-[#8b949e]">{t('landing.terminal.title')}</span>
+        <span className="ml-3 text-xs text-zinc-500">LuxView Cloud</span>
       </div>
 
-      <div ref={containerRef} className="min-h-[280px] max-h-[320px] overflow-hidden px-5 py-5 font-mono text-sm leading-7">
-        {terminalLines.slice(0, visibleLines).map((line, index) => (
-          <div key={`${line.text}-${index}`} className="animate-[fadeSlideIn_0.28s_ease-out]" style={{ animationFillMode: 'both' }}>
-            {line.type === 'command' && <span className="text-[#e6edf3]">{line.text}</span>}
-            {line.type === 'info' && (
-              <span className="text-[#8b949e]">
-                <span className="text-[#f0883e]">{line.text.split(':')[0]}:</span>
-                {line.text.substring(line.text.indexOf(':') + 1)}
-              </span>
-            )}
-            {line.type === 'success' && (
-              <span className="text-[#3fb950]">
-                <span className="text-[#f0883e]">{line.text.split(':')[0]}:</span>
-                {line.text.substring(line.text.indexOf(':') + 1)} &#10003;
-              </span>
-            )}
-            {line.type === 'final' && (
-              <span className="text-[#3fb950]">
-                <span className="text-[#f0883e]">{t('landing.terminal.line8Prefix')}</span> {t('landing.terminal.liveAt')}{' '}
-                <span className="text-[#58a6ff] underline decoration-[#58a6ff]/30 underline-offset-2">{line.text}</span> &#10003;
-              </span>
-            )}
+      <div className="min-h-[340px] p-5 space-y-4">
+        {/* Step 1: Select repository */}
+        {step >= 1 && (
+          <div className={fade} style={{ animationFillMode: 'both' }}>
+            <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-400 mb-3`}>
+              {t('landing.demo.selectRepo')}
+            </p>
+            <div className={`rounded-2xl border ${surface} p-3`}>
+              <div className="flex items-center gap-3">
+                <Github size={16} className="text-zinc-400" />
+                <span className={`text-sm font-medium ${brightText}`}>JohnPitter/my-awesome-app</span>
+                <Check size={14} className="ml-auto text-amber-400" />
+              </div>
+            </div>
           </div>
-        ))}
-        {visibleLines < terminalLines.length && <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-[#58a6ff]" />}
+        )}
+
+        {/* Step 2: Configure */}
+        {step >= 2 && (
+          <div className={fade} style={{ animationFillMode: 'both' }}>
+            <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-400 mb-3`}>
+              {t('landing.demo.configure')}
+            </p>
+            <div className={`grid gap-2 sm:grid-cols-2`}>
+              <div className={`rounded-2xl border ${surface} px-3 py-2.5`}>
+                <p className={`text-[10px] uppercase tracking-wider ${dimText} mb-1`}>{t('landing.howItWorks.configure.branch')}</p>
+                <div className="flex items-center gap-2">
+                  <GitBranch size={13} className={dimText} />
+                  <span className={`text-sm ${brightText}`}>main</span>
+                </div>
+              </div>
+              <div className={`rounded-2xl border ${surface} px-3 py-2.5`}>
+                <p className={`text-[10px] uppercase tracking-wider ${dimText} mb-1`}>{t('landing.howItWorks.configure.subdomain')}</p>
+                <span className={`text-sm ${brightText}`}>my-app<span className={dimText}>.luxview.cloud</span></span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Building */}
+        {step >= 3 && (
+          <div className={fade} style={{ animationFillMode: 'both' }}>
+            <div className={`rounded-2xl border ${surface} p-3`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Box size={14} className={step >= 4 ? 'text-emerald-400' : 'text-amber-400'} />
+                  <span className={`text-sm font-medium ${brightText}`}>{t('landing.demo.building')}</span>
+                </div>
+                <span className={`text-xs font-mono ${step >= 4 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {step >= 4 ? '32s' : '...'}
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-1000 ease-out ${step >= 4 ? 'w-full bg-emerald-400' : 'w-[65%] bg-amber-400'}`}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Deploy checklist */}
+        {step >= 4 && (
+          <div className={fade} style={{ animationFillMode: 'both' }}>
+            <div className={`rounded-2xl border ${surface} p-3 space-y-2`}>
+              {[
+                { label: t('landing.demo.stackDetected'), value: 'Node.js', done: step >= 4 },
+                { label: t('landing.demo.sslProvisioned'), value: t('landing.demo.auto'), done: step >= 5 },
+                { label: t('landing.demo.healthCheck'), value: t('landing.demo.passed'), done: step >= 5 },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {item.done ? <Check size={13} className="text-emerald-400" /> : <div className="h-3.5 w-3.5 rounded-full border-2 border-zinc-700 animate-spin border-t-amber-400" />}
+                    <span className={`text-sm ${brightText}`}>{item.label}</span>
+                  </div>
+                  <span className={`text-xs font-mono ${item.done ? 'text-emerald-400' : dimText}`}>{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 5: Live */}
+        {step >= 6 && (
+          <div className={fade} style={{ animationFillMode: 'both' }}>
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(74,222,128,0.5)]" />
+                  <span className="text-sm font-semibold text-emerald-400">{t('landing.demo.liveNow')}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Globe size={13} className="text-sky-400" />
+                  <span className="text-sm text-sky-300">my-app.luxview.cloud</span>
+                  <ExternalLink size={11} className={dimText} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -410,7 +482,7 @@ export function Landing() {
 
           <div className="relative">
             <div className="absolute -right-12 top-8 h-48 w-48 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.16), transparent 70%)' }} />
-            <AnimatedTerminal />
+            <AnimatedDashboard />
           </div>
         </section>
 
