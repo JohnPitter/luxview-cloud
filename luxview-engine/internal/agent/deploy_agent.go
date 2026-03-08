@@ -18,7 +18,7 @@ const (
 	defaultModel       = "anthropic/claude-sonnet-4"
 	defaultMaxTokens   = 8192
 	defaultTemperature = 0
-	httpClientTimeout  = 60 * time.Second
+	httpClientTimeout  = 120 * time.Second
 )
 
 // DeployAgent calls the OpenRouter API to analyze repositories

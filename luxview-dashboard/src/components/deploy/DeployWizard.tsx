@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronRight, ChevronLeft, Rocket, Plus, Trash2 } from 'lucide-react';
+import { Check, ChevronRight, ChevronLeft, Rocket, Plus, Trash2, AlertCircle, RefreshCw } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { PillButton } from '../common/PillButton';
 import { RepoSelector } from '../apps/RepoSelector';
@@ -15,14 +15,14 @@ interface DeployWizardProps {
   loadingRepos: boolean;
   branches: string[];
   onRepoSelect: (repo: GithubRepo) => void;
-  onDeploy: (config: DeployConfig) => void;
+  onCreateAndAnalyze: (config: DeployConfig) => void;
+  onRetryAnalysis: () => void;
+  onDeploy: (dockerfile: string, envVars: Record<string, string>, serviceModes?: Record<string, string>) => void;
+  onDeployWithoutAnalysis: () => void;
   deploying: boolean;
-  /** AI analysis state — set by parent after app creation */
   analysisResult?: AnalysisResult | null;
   analyzing?: boolean;
-  showAnalysis?: boolean;
-  onApproveAnalysis?: (dockerfile: string, envVars: Record<string, string>, serviceModes?: Record<string, string>) => void;
-  onSkipAnalysis?: () => void;
+  analysisError?: string | null;
 }
 
 export interface DeployConfig {
@@ -37,13 +37,14 @@ export function DeployWizard({
   loadingRepos,
   branches,
   onRepoSelect,
+  onCreateAndAnalyze,
+  onRetryAnalysis,
   onDeploy,
+  onDeployWithoutAnalysis,
   deploying,
   analysisResult,
   analyzing = false,
-  showAnalysis = false,
-  onApproveAnalysis,
-  onSkipAnalysis,
+  analysisError,
 }: DeployWizardProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
@@ -52,12 +53,14 @@ export function DeployWizard({
   const [subdomain, setSubdomain] = useState('');
   const [subdomainAvailable, setSubdomainAvailable] = useState(false);
   const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>([]);
+  const [appCreated, setAppCreated] = useState(false);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
   const steps = [
     t('deploy.wizard.steps.selectRepository'),
     t('deploy.wizard.steps.configure'),
     t('deploy.wizard.steps.environment'),
+    t('deploy.wizard.steps.aiAnalysis'),
     t('deploy.wizard.steps.reviewDeploy'),
   ];
 
@@ -84,18 +87,33 @@ export function DeployWizard({
       case 0: return !!selectedRepo;
       case 1: return !!branch && !!subdomain && subdomainAvailable;
       case 2: return true;
-      case 3: return true;
+      case 3: return !!analysisResult && !analyzing;
+      case 4: return true;
       default: return false;
     }
   };
 
+  const handleNext = () => {
+    if (step === 2 && !appCreated && selectedRepo) {
+      // Moving to step 3 (AI Analysis) — create app and trigger analysis
+      const envRecord: Record<string, string> = {};
+      envVars.forEach((e) => {
+        if (e.key.trim()) envRecord[e.key.trim()] = e.value;
+      });
+      setAppCreated(true);
+      onCreateAndAnalyze({ repo: selectedRepo, branch, subdomain, envVars: envRecord });
+      setStep(3);
+      return;
+    }
+    setStep(step + 1);
+  };
+
   const handleDeploy = () => {
     if (!selectedRepo) return;
-    const envRecord: Record<string, string> = {};
-    envVars.forEach((e) => {
-      if (e.key.trim()) envRecord[e.key.trim()] = e.value;
-    });
-    onDeploy({ repo: selectedRepo, branch, subdomain, envVars: envRecord });
+    // DeployAnalysis onApprove already handled the data — this just deploys with whatever was approved
+    // But we need to pass the final dockerfile/envVars from the analysis component
+    // Since we're now in step 4 (review), the analysis was already approved in step 3
+    onDeployWithoutAnalysis();
   };
 
   const inputClass = `
@@ -103,31 +121,6 @@ export function DeployWizard({
     focus:outline-none focus:ring-2 focus:ring-amber-400/30
     ${isDark ? 'bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder-zinc-600' : 'bg-white border-zinc-200 text-zinc-900 placeholder-zinc-400'}
   `;
-
-  // When analysis is active, show the analysis view instead of normal wizard
-  if (showAnalysis) {
-    return (
-      <div className="max-w-2xl mx-auto">
-        {analysisResult ? (
-          <DeployAnalysis
-            result={analysisResult}
-            loading={false}
-            mode="first-deploy"
-            onApprove={(dockerfile, envVars, serviceModes) => onApproveAnalysis?.(dockerfile, envVars, serviceModes)}
-            onSkip={() => onSkipAnalysis?.()}
-          />
-        ) : (
-          <DeployAnalysis
-            result={{ suggestions: [], dockerfile: '', port: 0, stack: '', envHints: [] }}
-            loading={analyzing}
-            mode="first-deploy"
-            onApprove={() => {}}
-            onSkip={() => onSkipAnalysis?.()}
-          />
-        )}
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -163,7 +156,7 @@ export function DeployWizard({
             </div>
             {i < steps.length - 1 && (
               <div
-                className={`w-12 h-px mx-3 ${
+                className={`w-8 h-px mx-2 ${
                   i < step ? 'bg-amber-400' : isDark ? 'bg-zinc-800' : 'bg-zinc-200'
                 }`}
               />
@@ -277,7 +270,48 @@ export function DeployWizard({
           </div>
         )}
 
-        {step === 3 && selectedRepo && (
+        {step === 3 && (
+          <div>
+            {analysisError ? (
+              <div className="flex flex-col items-center gap-4 py-8">
+                <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-red-500/10">
+                  <AlertCircle size={24} className="text-red-400" />
+                </div>
+                <p className={`text-sm text-center ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                  {analysisError}
+                </p>
+                <div className="flex gap-3">
+                  <PillButton variant="ghost" size="sm" onClick={onRetryAnalysis} icon={<RefreshCw size={14} />}>
+                    {t('common.refresh')}
+                  </PillButton>
+                  <PillButton variant="ghost" size="sm" onClick={() => setStep(4)}>
+                    {t('analyze.skipAnalysis')}
+                  </PillButton>
+                </div>
+              </div>
+            ) : analysisResult ? (
+              <DeployAnalysis
+                result={analysisResult}
+                loading={false}
+                mode="first-deploy"
+                onApprove={(dockerfile, envVarsFromAnalysis, serviceModes) => {
+                  onDeploy(dockerfile, envVarsFromAnalysis, serviceModes);
+                }}
+                onSkip={() => setStep(4)}
+              />
+            ) : (
+              <DeployAnalysis
+                result={{ suggestions: [], dockerfile: '', port: 0, stack: '', envHints: [] }}
+                loading={analyzing}
+                mode="first-deploy"
+                onApprove={() => {}}
+                onSkip={() => setStep(4)}
+              />
+            )}
+          </div>
+        )}
+
+        {step === 4 && selectedRepo && (
           <div className="space-y-6">
             <h2
               className={`text-lg font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}
@@ -314,40 +348,42 @@ export function DeployWizard({
         )}
       </GlassCard>
 
-      {/* Navigation */}
-      <div className="flex items-center justify-between mt-6">
-        <PillButton
-          variant="ghost"
-          size="md"
-          onClick={() => setStep(step - 1)}
-          disabled={step === 0}
-          icon={<ChevronLeft size={16} />}
-        >
-          {t('deploy.wizard.navigation.back')}
-        </PillButton>
+      {/* Navigation — hidden on step 3 (analysis has its own buttons) */}
+      {step !== 3 && (
+        <div className="flex items-center justify-between mt-6">
+          <PillButton
+            variant="ghost"
+            size="md"
+            onClick={() => setStep(step - 1)}
+            disabled={step === 0 || (step > 3 && appCreated)}
+            icon={<ChevronLeft size={16} />}
+          >
+            {t('deploy.wizard.navigation.back')}
+          </PillButton>
 
-        {step < steps.length - 1 ? (
-          <PillButton
-            variant="primary"
-            size="md"
-            onClick={() => setStep(step + 1)}
-            disabled={!canProceed()}
-          >
-            {t('deploy.wizard.navigation.continue')}
-            <ChevronRight size={16} />
-          </PillButton>
-        ) : (
-          <PillButton
-            variant="primary"
-            size="md"
-            onClick={handleDeploy}
-            disabled={deploying}
-            icon={<Rocket size={16} />}
-          >
-            {deploying ? t('deploy.wizard.navigation.deploying') : t('deploy.wizard.navigation.deployNow')}
-          </PillButton>
-        )}
-      </div>
+          {step < steps.length - 1 ? (
+            <PillButton
+              variant="primary"
+              size="md"
+              onClick={handleNext}
+              disabled={!canProceed()}
+            >
+              {t('deploy.wizard.navigation.continue')}
+              <ChevronRight size={16} />
+            </PillButton>
+          ) : (
+            <PillButton
+              variant="primary"
+              size="md"
+              onClick={handleDeploy}
+              disabled={deploying}
+              icon={<Rocket size={16} />}
+            >
+              {deploying ? t('deploy.wizard.navigation.deploying') : t('deploy.wizard.navigation.deployNow')}
+            </PillButton>
+          )}
+        </div>
+      )}
     </div>
   );
 }

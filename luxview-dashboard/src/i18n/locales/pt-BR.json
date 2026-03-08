@@ -570,6 +570,7 @@
   "deploy.wizard.steps.selectRepository": "Selecionar repositório",
   "deploy.wizard.steps.configure": "Configurar",
   "deploy.wizard.steps.environment": "Ambiente",
+  "deploy.wizard.steps.aiAnalysis": "Análise IA",
   "deploy.wizard.steps.reviewDeploy": "Revisar e implantar",
   "deploy.wizard.selectRepo.title": "Selecione um repositório",
   "deploy.wizard.selectRepo.searchPlaceholder": "Buscar repositórios...",

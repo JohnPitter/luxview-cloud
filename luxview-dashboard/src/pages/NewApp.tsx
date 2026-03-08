@@ -30,7 +30,7 @@ export function NewApp() {
   // AI Analysis state
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-  const [showAnalysis, setShowAnalysis] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const createdAppIdRef = useRef<string | null>(null);
   const wizardEnvVarsRef = useRef<Record<string, string>>({});
 
@@ -67,13 +67,14 @@ export function NewApp() {
     [],
   );
 
-  const deployAndNavigate = async (appId: string, appName: string) => {
+  const deployAndNavigate = async (appId: string) => {
+    setDeploying(true);
     try {
       await appsApi.deploy(appId);
       addNotification({
         type: 'success',
         title: t('app.notifications.deploymentStarted'),
-        message: t('app.notifications.deploymentStartedMessage', { name: appName }),
+        message: t('app.notifications.deploymentStartedMessage', { name: '' }),
       });
     } catch {
       addNotification({
@@ -85,10 +86,22 @@ export function NewApp() {
     navigate(`/dashboard/apps/${appId}`);
   };
 
-  const handleDeploy = async (config: DeployConfig) => {
-    setDeploying(true);
+  const runAnalysis = async (appId: string) => {
+    setAnalyzing(true);
+    setAnalysisError(null);
+    setAnalysisResult(null);
     try {
-      // Step 1: Create the app
+      const result = await analyzeApi.analyze(appId);
+      setAnalysisResult(result);
+    } catch {
+      setAnalysisError(t('analyze.aiNotConfigured'));
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleCreateAndAnalyze = async (config: DeployConfig) => {
+    try {
       const app = await createApp({
         name: config.repo.name,
         subdomain: config.subdomain,
@@ -98,52 +111,39 @@ export function NewApp() {
       });
       createdAppIdRef.current = app.id;
       wizardEnvVarsRef.current = config.envVars;
-
-      // Step 2: Trigger AI analysis
-      setDeploying(false);
-      setAnalyzing(true);
-      setShowAnalysis(true);
-
-      try {
-        const result = await analyzeApi.analyze(app.id);
-        setAnalysisResult(result);
-        setAnalyzing(false);
-      } catch {
-        // AI not configured or failed — skip analysis silently and deploy normally
-        setShowAnalysis(false);
-        setAnalyzing(false);
-        setAnalysisResult(null);
-        await deployAndNavigate(app.id, app.name);
-      }
+      await runAnalysis(app.id);
     } catch {
       addNotification({
         type: 'error',
         title: t('app.notifications.deploymentFailed'),
         message: t('app.notifications.deploymentFailedMessage'),
       });
-      setDeploying(false);
     }
   };
 
-  const handleApproveAnalysis = async (dockerfile: string, envVars: Record<string, string>, _serviceModes?: Record<string, string>) => {
+  const handleRetryAnalysis = () => {
+    const appId = createdAppIdRef.current;
+    if (appId) {
+      runAnalysis(appId);
+    }
+  };
+
+  const handleDeploy = async (dockerfile: string, envVars: Record<string, string>, _serviceModes?: Record<string, string>) => {
     const appId = createdAppIdRef.current;
     if (!appId) return;
 
     try {
-      // Save the AI-generated dockerfile
       if (dockerfile) {
         await analyzeApi.saveDockerfile(appId, dockerfile);
       }
 
-      // Merge wizard env vars with AI-suggested env vars
       const mergedEnvVars = { ...wizardEnvVarsRef.current, ...envVars };
       const hasNewEnvVars = Object.keys(envVars).some((k) => envVars[k]);
       if (hasNewEnvVars) {
         await appsApi.updateEnvVars(appId, mergedEnvVars);
       }
 
-      // Deploy
-      await deployAndNavigate(appId, '');
+      await deployAndNavigate(appId);
     } catch {
       addNotification({
         type: 'error',
@@ -153,10 +153,10 @@ export function NewApp() {
     }
   };
 
-  const handleSkipAnalysis = async () => {
+  const handleDeployWithoutAnalysis = async () => {
     const appId = createdAppIdRef.current;
     if (!appId) return;
-    await deployAndNavigate(appId, '');
+    await deployAndNavigate(appId);
   };
 
   return (
@@ -189,13 +189,14 @@ export function NewApp() {
         loadingRepos={loadingRepos}
         branches={branches}
         onRepoSelect={handleRepoSelect}
+        onCreateAndAnalyze={handleCreateAndAnalyze}
+        onRetryAnalysis={handleRetryAnalysis}
         onDeploy={handleDeploy}
+        onDeployWithoutAnalysis={handleDeployWithoutAnalysis}
         deploying={deploying}
         analysisResult={analysisResult}
         analyzing={analyzing}
-        showAnalysis={showAnalysis}
-        onApproveAnalysis={handleApproveAnalysis}
-        onSkipAnalysis={handleSkipAnalysis}
+        analysisError={analysisError}
       />
     </div>
   );
