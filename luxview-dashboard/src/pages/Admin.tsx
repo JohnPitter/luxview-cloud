@@ -134,7 +134,7 @@ export function Admin() {
   const [aiForm, setAiForm] = useState({
     apiKey: '',
     aiEnabled: false,
-    aiModel: 'anthropic/claude-sonnet-4-20250514',
+    aiModel: 'anthropic/claude-sonnet-4',
   });
 
   const fetchData = useCallback(async () => {
@@ -171,7 +171,7 @@ export function Admin() {
       setAiForm({
         apiKey: '',
         aiEnabled: data.aiEnabled,
-        aiModel: data.aiModel || 'anthropic/claude-sonnet-4-20250514',
+        aiModel: data.aiModel || 'anthropic/claude-sonnet-4',
       });
     } catch {
       addNotification({ type: 'error', title: t('admin.failedToLoad') });
@@ -897,11 +897,30 @@ export function Admin() {
                             : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50'
                         }`}
                       >
-                        <option value="anthropic/claude-sonnet-4-20250514">Claude Sonnet 4 — recommended</option>
-                        <option value="anthropic/claude-haiku-4-5-20251001">Claude Haiku 4.5 — faster</option>
-                        <option value="anthropic/claude-opus-4-6">Claude Opus 4.6 — most capable</option>
-                        <option value="google/gemini-2.5-pro-preview">Gemini 2.5 Pro</option>
-                        <option value="openai/gpt-4o">GPT-4o</option>
+                        <optgroup label="Anthropic">
+                          <option value="anthropic/claude-sonnet-4">Claude Sonnet 4 — recommended</option>
+                          <option value="anthropic/claude-haiku-4.5">Claude Haiku 4.5 — fast &amp; cheap</option>
+                          <option value="anthropic/claude-opus-4">Claude Opus 4 — most capable</option>
+                        </optgroup>
+                        <optgroup label="Google">
+                          <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
+                          <option value="google/gemini-2.5-flash">Gemini 2.5 Flash — fast &amp; cheap</option>
+                        </optgroup>
+                        <optgroup label="OpenAI">
+                          <option value="openai/gpt-4o">GPT-4o</option>
+                          <option value="openai/gpt-4o-mini">GPT-4o Mini — fast &amp; cheap</option>
+                        </optgroup>
+                        <optgroup label="DeepSeek">
+                          <option value="deepseek/deepseek-chat-v3.1">DeepSeek V3.1 — best value</option>
+                          <option value="deepseek/deepseek-r1">DeepSeek R1 — reasoning</option>
+                        </optgroup>
+                        <optgroup label="Mistral">
+                          <option value="mistralai/codestral-2508">Codestral — code specialist</option>
+                          <option value="mistralai/devstral-medium">Devstral Medium — dev agent</option>
+                        </optgroup>
+                        <optgroup label="Qwen">
+                          <option value="qwen/qwen3-coder">Qwen3 Coder 480B — code specialist</option>
+                        </optgroup>
                       </select>
                     </div>
 

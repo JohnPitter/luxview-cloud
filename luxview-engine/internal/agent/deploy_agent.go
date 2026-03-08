@@ -15,7 +15,7 @@ import (
 
 const (
 	openRouterAPIURL   = "https://openrouter.ai/api/v1/chat/completions"
-	defaultModel       = "anthropic/claude-sonnet-4-20250514"
+	defaultModel       = "anthropic/claude-sonnet-4"
 	defaultMaxTokens   = 4096
 	defaultTemperature = 0
 	httpClientTimeout  = 60 * time.Second

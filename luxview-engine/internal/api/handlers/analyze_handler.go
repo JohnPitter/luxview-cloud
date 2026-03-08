@@ -69,7 +69,7 @@ func (h *AnalyzeHandler) getAIConfig(ctx context.Context) (*aiConfig, error) {
 
 	model := settings["model"]
 	if model == "" {
-		model = "anthropic/claude-sonnet-4-20250514"
+		model = "anthropic/claude-sonnet-4"
 	}
 
 	return &aiConfig{apiKey: apiKey, model: model}, nil

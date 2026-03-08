@@ -64,7 +64,7 @@ func (h *SettingsHandler) GetAISettings(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if resp.AIModel == "" {
-		resp.AIModel = "anthropic/claude-sonnet-4-20250514"
+		resp.AIModel = "anthropic/claude-sonnet-4"
 	}
 
 	writeJSON(w, http.StatusOK, resp)
