@@ -2,6 +2,19 @@ package buildpack
 
 import "fmt"
 
+// npmInstallCmd returns a shell command that uses `npm ci` when a lockfile
+// exists and falls back to `npm install` otherwise. This avoids build
+// failures for repos that do not commit a package-lock.json.
+func npmInstallCmd(flags string) string {
+	cmd := "npm ci"
+	fallback := "npm install"
+	if flags != "" {
+		cmd += " " + flags
+		fallback += " " + flags
+	}
+	return fmt.Sprintf(`if [ -f package-lock.json ]; then %s; else %s; fi`, cmd, fallback)
+}
+
 // NextJsPack detects Next.js projects.
 type NextJsPack struct{}
 
@@ -19,7 +32,7 @@ func (n *NextJsPack) Dockerfile(_ string) string {
 	return fmt.Sprintf(`FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN %s
 COPY . .
 RUN npm run build
 
@@ -31,7 +44,7 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 EXPOSE %d
 CMD ["node", "server.js"]
-`, n.DefaultPort())
+`, npmInstallCmd(""), n.DefaultPort())
 }
 
 func (n *NextJsPack) DefaultPort() int { return 3000 }
@@ -53,7 +66,7 @@ func (v *VitePack) Dockerfile(_ string) string {
 	return fmt.Sprintf(`FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN %s
 COPY . .
 RUN npx vite build --base=/
 
@@ -62,7 +75,7 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 RUN printf 'server {\n    listen %d;\n    root /usr/share/nginx/html;\n    index index.html;\n    location / {\n        try_files $uri $uri/ /index.html;\n    }\n}\n' > /etc/nginx/conf.d/default.conf
 EXPOSE %d
 CMD ["nginx", "-g", "daemon off;"]
-`, v.DefaultPort(), v.DefaultPort())
+`, npmInstallCmd(""), v.DefaultPort(), v.DefaultPort())
 }
 
 func (v *VitePack) DefaultPort() int { return 80 }
@@ -81,11 +94,11 @@ func (n *NodePack) Dockerfile(_ string) string {
 	return fmt.Sprintf(`FROM node:20-alpine
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --only=production
+RUN %s
 COPY . .
 EXPOSE %d
 CMD ["npm", "start"]
-`, n.DefaultPort())
+`, npmInstallCmd("--omit=dev"), n.DefaultPort())
 }
 
 func (n *NodePack) DefaultPort() int { return 3000 }
