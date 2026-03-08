@@ -8,7 +8,6 @@ import {
   BarChart3,
   Box,
   Check,
-  ChevronRight,
   Database,
   ExternalLink,
   Github,
@@ -191,13 +190,6 @@ export function Landing() {
     { icon: RefreshCcw, title: t('landing.features.autoDeploy.title'), description: t('landing.features.autoDeploy.description'), accent: 'from-cyan-400/20 via-cyan-400/10 to-transparent', iconColor: 'text-cyan-400', className: 'lg:col-span-2' },
   ];
 
-  const heroSignals = [
-    { icon: Zap, title: t('landing.features.autoDetect.title'), description: t('landing.features.autoDetect.description') },
-    { icon: ShieldCheck, title: t('landing.features.ssl.title'), description: t('landing.features.ssl.description') },
-    { icon: BarChart3, title: t('landing.features.monitoring.title'), description: t('landing.features.monitoring.description') },
-    { icon: RefreshCcw, title: t('landing.features.autoDeploy.title'), description: t('landing.features.autoDeploy.description') },
-  ];
-
   const steps = [
     { icon: Github, title: t('landing.howItWorks.connectGithub.title'), description: t('landing.howItWorks.connectGithub.description'), visual: 'github' as const },
     { icon: Box, title: t('landing.howItWorks.pickConfigure.title'), description: t('landing.howItWorks.pickConfigure.description'), visual: 'configure' as const },
@@ -367,7 +359,7 @@ export function Landing() {
       </div>
 
       <main className="relative z-10">
-        <section className="mx-auto grid max-w-[1240px] gap-14 px-6 pb-20 pt-32 sm:px-8 sm:pt-40 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
+        <section className="mx-auto grid max-w-[1240px] gap-14 px-6 pb-20 pt-32 sm:px-8 sm:pt-40 lg:grid-cols-2 lg:items-center">
           <div className="max-w-3xl">
             <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] ${isDark ? 'border border-amber-400/20 bg-amber-400/10 text-amber-300' : 'border border-amber-500/20 bg-amber-50 text-amber-700'}`}>
               <Sparkles size={14} />
@@ -414,84 +406,11 @@ export function Landing() {
               ))}
             </div>
 
-            <div className="mt-10 grid gap-4 sm:grid-cols-3">
-              {[
-                { value: 'git push', label: t('landing.features.autoDeploy.title') },
-                { value: 'HTTPS', label: t('landing.features.ssl.title') },
-                { value: '24/7', label: t('landing.features.monitoring.title') },
-              ].map((item) => (
-                <div key={item.label} className={`rounded-[24px] px-4 py-4 ${isDark ? 'border border-zinc-800/70 bg-zinc-900/60' : 'border border-zinc-200/80 bg-white/80'}`}>
-                  <p className={`text-2xl font-semibold tracking-tight ${isDark ? 'text-zinc-50' : 'text-zinc-950'}`}>{item.value}</p>
-                  <p className={`mt-1 text-sm ${isDark ? 'text-zinc-500' : 'text-zinc-600'}`}>{item.label}</p>
-                </div>
-              ))}
-            </div>
           </div>
 
           <div className="relative">
             <div className="absolute -right-12 top-8 h-48 w-48 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.16), transparent 70%)' }} />
-            <GlassCard padding="none" className="relative overflow-hidden shadow-[0_30px_120px_rgba(0,0,0,0.28)]">
-              <div
-                className="absolute inset-0 opacity-80"
-                style={{
-                  background: isDark
-                    ? 'linear-gradient(180deg, rgba(255,255,255,0.02), transparent 45%), radial-gradient(circle at top right, rgba(245,158,11,0.12), transparent 30%)'
-                    : 'linear-gradient(180deg, rgba(255,255,255,0.52), transparent 45%), radial-gradient(circle at top right, rgba(245,158,11,0.12), transparent 30%)',
-                }}
-              />
-              <div className="relative space-y-5 p-5 sm:p-6">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-400">{t('landing.terminal.title')}</p>
-                    <h2 className={`mt-3 text-2xl font-semibold tracking-tight ${isDark ? 'text-zinc-50' : 'text-zinc-950'}`}>{t('landing.hero.surfaceTitle')}</h2>
-                    <p className={`mt-2 max-w-xl text-sm leading-6 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>{t('landing.hero.surfaceSubtitle')}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {[t('landing.hero.noCreditCard'), t('landing.hero.oauth'), t('landing.features.monitoring.title')].map((tag) => (
-                      <span key={tag} className={`rounded-full px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] ${isDark ? 'border border-zinc-800 bg-zinc-950/70 text-zinc-300' : 'border border-zinc-200 bg-white/80 text-zinc-600'}`}>
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-                  <AnimatedTerminal />
-
-                  <div className="space-y-4">
-                    <div className={`rounded-[26px] border p-5 ${isDark ? 'border-zinc-800/70 bg-zinc-950/70' : 'border-zinc-200/80 bg-white/85'}`}>
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <Globe size={16} className="text-sky-400" />
-                          <span className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>{t('landing.features.subdomains.title')}</span>
-                        </div>
-                        <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-400">
-                          {t('common.status.live')}
-                        </span>
-                      </div>
-                      <div className="mt-4 rounded-2xl border border-zinc-700/60 bg-zinc-950/80 px-4 py-3 text-sm text-zinc-200">app.luxview.cloud</div>
-                      <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
-                        <span>{t('landing.features.ssl.title')}</span>
-                        <span>{t('landing.howItWorks.deploy.healthCheck')}</span>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {heroSignals.map((signal) => {
-                        const Icon = signal.icon;
-                        return (
-                          <div key={signal.title} className={`rounded-[24px] border p-4 ${isDark ? 'border-zinc-800/70 bg-zinc-950/70' : 'border-zinc-200/80 bg-white/85'}`}>
-                            <Icon size={18} className="text-amber-400" />
-                            <p className={`mt-4 text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>{signal.title}</p>
-                            <p className={`mt-2 text-sm leading-6 ${isDark ? 'text-zinc-500' : 'text-zinc-600'}`}>{signal.description}</p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </GlassCard>
+            <AnimatedTerminal />
           </div>
         </section>
 
