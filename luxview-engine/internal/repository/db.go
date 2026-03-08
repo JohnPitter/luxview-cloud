@@ -166,6 +166,15 @@ func (db *DB) migrate(ctx context.Context) error {
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES plans(id)`,
 
 		`CREATE INDEX IF NOT EXISTS idx_plans_active_order ON plans(is_active, sort_order)`,
+
+		`CREATE TABLE IF NOT EXISTS platform_settings (
+			key VARCHAR(100) PRIMARY KEY,
+			value TEXT NOT NULL DEFAULT '',
+			encrypted BOOLEAN NOT NULL DEFAULT false,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+
+		`ALTER TABLE apps ADD COLUMN IF NOT EXISTS custom_dockerfile TEXT DEFAULT NULL`,
 	}
 
 	for i, m := range migrations {
