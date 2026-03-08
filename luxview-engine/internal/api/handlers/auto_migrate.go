@@ -113,15 +113,27 @@ func (h *AutoMigrateHandler) AutoMigrate(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Step 1: Provision the service
+	// Step 1: Provision the service (or reuse existing)
 	log.Info().Str("app", app.Subdomain).Str("service", req.ServiceType).Msg("provisioning service")
 	svc, err := h.provisioner.Provision(ctx, appID, serviceType)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to provision service")
-		writeError(w, http.StatusInternalServerError, "failed to provision service: "+err.Error())
-		return
+		// If already provisioned, find existing and continue
+		if strings.Contains(err.Error(), "already provisioned") {
+			existing, findErr := h.serviceRepo.FindByAppAndType(ctx, appID, serviceType)
+			if findErr != nil || existing == nil {
+				writeError(w, http.StatusInternalServerError, "failed to find existing service")
+				return
+			}
+			svc = existing
+			log.Info().Str("service_id", svc.ID.String()).Msg("reusing existing service")
+		} else {
+			log.Error().Err(err).Msg("failed to provision service")
+			writeError(w, http.StatusInternalServerError, "failed to provision service: "+err.Error())
+			return
+		}
+	} else {
+		log.Info().Str("service_id", svc.ID.String()).Msg("service provisioned")
 	}
-	log.Info().Str("service_id", svc.ID.String()).Msg("service provisioned")
 
 	// Step 2: Get AI config
 	cfg, err := h.getAIConfig(ctx)
