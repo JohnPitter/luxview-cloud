@@ -293,6 +293,7 @@ export function DeployWizard({
               <DeployAnalysis
                 result={analysisResult}
                 loading={false}
+                deploying={deploying}
                 mode="first-deploy"
                 onApprove={(dockerfile, envVarsFromAnalysis, serviceModes) => {
                   onDeploy(dockerfile, envVarsFromAnalysis, serviceModes);

@@ -24,6 +24,7 @@ import { ServiceRecommendationCard, type MigrationMode } from './ServiceRecommen
 interface DeployAnalysisProps {
   result: AnalysisResult;
   loading?: boolean;
+  deploying?: boolean;
   mode: 'first-deploy' | 'failure';
   onApprove: (dockerfile: string, envVars: Record<string, string>, serviceModes?: Record<string, MigrationMode>) => void;
   onSkip: () => void;
@@ -127,6 +128,7 @@ function AnalysisLoadingAnimation({ isDark, isFailure }: { isDark: boolean; isFa
 export function DeployAnalysis({
   result,
   loading = false,
+  deploying = false,
   mode,
   onApprove,
   onSkip,
@@ -422,18 +424,23 @@ export function DeployAnalysis({
         <button
           type="button"
           onClick={onSkip}
-          className="text-muted-foreground hover:bg-muted rounded-lg px-4 py-2 transition-colors text-sm"
+          disabled={deploying}
+          className="text-muted-foreground hover:bg-muted rounded-lg px-4 py-2 transition-colors text-sm disabled:opacity-50"
         >
           {isFailure ? t('analyze.dismiss') : t('analyze.skipAnalysis')}
         </button>
         <button
           type="button"
           onClick={() => onApprove(dockerfile, envValues, hasRecommendations ? serviceModes : undefined)}
-          className="bg-primary text-white rounded-lg px-4 py-2 hover:brightness-110 active:scale-[0.98] transition-all text-sm font-medium"
+          disabled={deploying}
+          className="bg-primary text-white rounded-lg px-4 py-2 hover:brightness-110 active:scale-[0.98] transition-all text-sm font-medium disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
         >
-          {isFailure
-            ? t('analyze.applyAndRedeploy')
-            : t('analyze.approveAndDeploy')}
+          {deploying && <Loader2 size={14} className="animate-spin" />}
+          {deploying
+            ? t('analyze.deploying')
+            : isFailure
+              ? t('analyze.applyAndRedeploy')
+              : t('analyze.approveAndDeploy')}
         </button>
       </div>
     </GlassCard>

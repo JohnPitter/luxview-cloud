@@ -136,6 +136,7 @@ export function NewApp() {
     const appId = createdAppIdRef.current;
     if (!appId) return;
 
+    setDeploying(true);
     try {
       if (dockerfile) {
         await analyzeApi.saveDockerfile(appId, dockerfile);
@@ -174,6 +175,7 @@ export function NewApp() {
 
       await deployAndNavigate(appId);
     } catch {
+      setDeploying(false);
       addNotification({
         type: 'error',
         title: t('app.notifications.deploymentFailed'),

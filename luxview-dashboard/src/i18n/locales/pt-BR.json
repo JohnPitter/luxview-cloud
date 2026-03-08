@@ -782,6 +782,7 @@
   "analyze.skipAnalysis": "Pular Análise",
   "analyze.dismiss": "Dispensar",
   "analyze.approveAndDeploy": "Aprovar e Implantar",
+  "analyze.deploying": "Implantando...",
   "analyze.applyAndRedeploy": "Aplicar Correção e Reimplantar",
   "analyze.serviceRecommendations": "Recomendações de Serviços",
   "analyze.serviceRecommendationsDescription": "Detectamos serviços externos que podem ser substituídos por alternativas gerenciadas no LuxView Cloud.",

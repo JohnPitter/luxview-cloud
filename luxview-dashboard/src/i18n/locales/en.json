@@ -782,6 +782,7 @@
   "analyze.skipAnalysis": "Skip Analysis",
   "analyze.dismiss": "Dismiss",
   "analyze.approveAndDeploy": "Approve & Deploy",
+  "analyze.deploying": "Deploying...",
   "analyze.applyAndRedeploy": "Apply Fix & Redeploy",
   "analyze.serviceRecommendations": "Service Recommendations",
   "analyze.serviceRecommendationsDescription": "We detected external services that can be replaced with managed alternatives on LuxView Cloud.",
