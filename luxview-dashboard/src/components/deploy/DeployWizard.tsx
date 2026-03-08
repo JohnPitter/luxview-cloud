@@ -21,7 +21,7 @@ interface DeployWizardProps {
   analysisResult?: AnalysisResult | null;
   analyzing?: boolean;
   showAnalysis?: boolean;
-  onApproveAnalysis?: (dockerfile: string, envVars: Record<string, string>) => void;
+  onApproveAnalysis?: (dockerfile: string, envVars: Record<string, string>, serviceModes?: Record<string, string>) => void;
   onSkipAnalysis?: () => void;
 }
 
@@ -113,7 +113,7 @@ export function DeployWizard({
             result={analysisResult}
             loading={false}
             mode="first-deploy"
-            onApprove={(dockerfile, envVars) => onApproveAnalysis?.(dockerfile, envVars)}
+            onApprove={(dockerfile, envVars, serviceModes) => onApproveAnalysis?.(dockerfile, envVars, serviceModes)}
             onSkip={() => onSkipAnalysis?.()}
           />
         ) : (

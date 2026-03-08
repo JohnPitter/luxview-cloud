@@ -125,7 +125,7 @@ export function NewApp() {
     }
   };
 
-  const handleApproveAnalysis = async (dockerfile: string, envVars: Record<string, string>) => {
+  const handleApproveAnalysis = async (dockerfile: string, envVars: Record<string, string>, _serviceModes?: Record<string, string>) => {
     const appId = createdAppIdRef.current;
     if (!appId) return;
 
