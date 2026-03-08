@@ -231,7 +231,7 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		if oldContainerID != "" {
 			_ = d.container.Restart(ctx, oldContainerID)
 		}
-		d.failDeploy(ctx, deployment, app, "container start failed: "+err.Error(), start)
+		d.failDeploy(ctx, deployment, app, buildLog+"\n\n--- DEPLOY FAILED ---\ncontainer start failed: "+err.Error(), start)
 		return fmt.Errorf("start container: %w", err)
 	}
 
@@ -250,9 +250,15 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 			logBytes, _ := io.ReadAll(containerLogs)
 			containerLogs.Close()
 			if len(logBytes) > 0 {
-				failReason = fmt.Sprintf("health check failed — container logs:\n%s", string(logBytes))
+				cleaned := stripDockerHeaders(logBytes)
+				if len(cleaned) > 0 {
+					failReason = fmt.Sprintf("health check failed — container logs:\n%s", cleaned)
+				}
 			}
 		}
+
+		// Append failure reason to build log so the user sees both
+		fullLog := buildLog + "\n\n--- DEPLOY FAILED ---\n" + failReason
 
 		// Rollback: stop new, restart old
 		_ = d.container.Stop(ctx, containerID)
@@ -261,7 +267,7 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 			_ = d.container.Restart(ctx, oldContainerID)
 			_ = d.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusRunning, oldContainerID)
 		}
-		d.failDeploy(ctx, deployment, app, failReason, start)
+		d.failDeploy(ctx, deployment, app, fullLog, start)
 		return fmt.Errorf("health check failed for app %s", app.Subdomain)
 	}
 
@@ -376,6 +382,47 @@ func injectTokenInURL(repoURL, token string) string {
 		return "https://" + token + "@" + repoURL[8:]
 	}
 	return repoURL
+}
+
+// stripDockerHeaders removes Docker multiplexed stream headers (8-byte framing)
+// from container log output, returning clean text lines.
+func stripDockerHeaders(data []byte) string {
+	var result []byte
+	i := 0
+	for i < len(data) {
+		// Docker header: [stream_type(1), 0(3), size_be32(4)]
+		if i+8 <= len(data) && (data[i] == 1 || data[i] == 2) && data[i+1] == 0 && data[i+2] == 0 && data[i+3] == 0 {
+			size := int(data[i+4])<<24 | int(data[i+5])<<16 | int(data[i+6])<<8 | int(data[i+7])
+			i += 8
+			end := i + size
+			if end > len(data) {
+				end = len(data)
+			}
+			// Extract the payload, skip the timestamp prefix (e.g. "2026-03-08T04:04:38.649Z ")
+			chunk := data[i:end]
+			for len(chunk) > 30 && chunk[0] >= '0' && chunk[0] <= '9' {
+				// Skip "YYYY-MM-DDThh:mm:ss.nnnnnnnnnZ " timestamp
+				spaceIdx := -1
+				for j := 0; j < min(35, len(chunk)); j++ {
+					if chunk[j] == ' ' {
+						spaceIdx = j
+						break
+					}
+				}
+				if spaceIdx > 0 && spaceIdx < 35 {
+					chunk = chunk[spaceIdx+1:]
+				}
+				break
+			}
+			result = append(result, chunk...)
+			i = end
+		} else {
+			// Not a Docker header — append raw byte
+			result = append(result, data[i])
+			i++
+		}
+	}
+	return string(result)
 }
 
 func min(a, b int) int {
