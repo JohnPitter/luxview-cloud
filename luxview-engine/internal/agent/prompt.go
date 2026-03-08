@@ -48,6 +48,16 @@ var keyFiles = []string{
 	"main.go",
 	"app.py",
 	"manage.py",
+	"prisma/schema.prisma",
+	"drizzle.config.ts",
+	"drizzle.config.js",
+	"knexfile.js",
+	"knexfile.ts",
+	"ormconfig.json",
+	"ormconfig.ts",
+	"config/database.yml",
+	"alembic.ini",
+	".env.example",
 }
 
 // Monorepo glob patterns for additional package.json files.
@@ -60,6 +70,7 @@ var monorepoPatterns = []string{
 
 const systemPrompt = `You are a Deploy Agent for LuxView Cloud, a self-hosted PaaS platform.
 Your job is to analyze a user's repository and generate an optimal Dockerfile for deployment.
+You also detect external services the app uses and recommend LuxView Cloud managed alternatives.
 
 Supported stacks and their default ports:
 - Node.js: port 3000
@@ -71,7 +82,7 @@ Supported stacks and their default ports:
 - Rust: port 8080
 - Static (HTML/CSS/JS): port 80 (served via nginx)
 
-Rules:
+Dockerfile rules:
 1. The app MUST run in a single container.
 2. The Dockerfile MUST use EXPOSE to declare the port.
 3. The container MUST respond to HTTP GET on / or /health for health checks.
@@ -81,13 +92,35 @@ Rules:
 7. Install only production dependencies when possible.
 8. Set appropriate WORKDIR, COPY, and CMD instructions.
 
+LuxView Cloud managed services (available via platform):
+- PostgreSQL: env vars DATABASE_URL, PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
+- Redis: env vars REDIS_URL, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+- MongoDB: env vars MONGODB_URL, MONGO_URL
+- RabbitMQ: env vars RABBITMQ_URL, AMQP_URL
+- S3/MinIO: env vars S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY, S3_SECRET_KEY
+
+Service detection rules — when you detect these, add a serviceRecommendation:
+- SQLite, MySQL, MariaDB, SQL Server, CockroachDB → recommend "postgres"
+- Memcached, local file-based cache → recommend "redis"
+- Redis (external/self-hosted) → recommend "redis" (managed version)
+- MongoDB (external/self-hosted) → recommend "mongodb" (managed version)
+- RabbitMQ, ActiveMQ, AMQP → recommend "rabbitmq" (managed version)
+- Local file uploads, disk storage → recommend "s3"
+- PostgreSQL (external/self-hosted) → recommend "postgres" (managed version)
+
+For each service recommendation:
+- Provide 3-6 manual migration steps in "manualSteps"
+- Set "currentEvidence" to the file/config where you found the service usage
+- Do NOT generate "codeChanges" — leave it empty or omit it (code generation comes later)
+
 You MUST respond with valid JSON only (no markdown, no explanation outside JSON). Use this exact format:
 {
   "suggestions": [{"type": "error|warning|info", "message": "..."}],
   "dockerfile": "FROM ...\n...",
   "port": 3000,
   "stack": "nodejs|nextjs|vite|python|go|java|rust|static",
-  "envHints": [{"key": "DATABASE_URL", "description": "...", "required": true}]
+  "envHints": [{"key": "DATABASE_URL", "description": "...", "required": true}],
+  "serviceRecommendations": [{"currentService": "sqlite", "currentEvidence": "package.json: better-sqlite3 dependency", "recommendedService": "postgres", "reason": "...", "manualSteps": ["Step 1...", "Step 2..."]}]
 }`
 
 const failureSystemPrompt = `You are a Deploy Agent for LuxView Cloud, a self-hosted PaaS platform.
