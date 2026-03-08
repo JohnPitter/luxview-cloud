@@ -84,12 +84,10 @@ export function ServiceRecommendationCard({
           type="button"
           onClick={() => onModeChange('auto')}
           className={radioClass('auto')}
-          disabled
-          title={t('analyze.autoComingSoon')}
         >
-          <Zap size={12} className="inline mr-1 opacity-50" />
+          <Zap size={12} className="inline mr-1" />
           {t('analyze.migrationMode.auto')}
-          <span className="block text-[10px] opacity-60 mt-0.5">{t('analyze.autoComingSoon')}</span>
+          <span className="block text-[10px] opacity-60 mt-0.5">{t('analyze.autoDescription')}</span>
         </button>
         <button
           type="button"
