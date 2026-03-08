@@ -193,16 +193,10 @@ func (a *DeployAgent) TestConnection(ctx context.Context, apiKey, model string) 
 		return "", fmt.Errorf("read response: %w", err)
 	}
 
-	if resp.StatusCode == 401 {
-		return "", fmt.Errorf("invalid API key")
-	}
-	if resp.StatusCode == 403 {
-		return "", fmt.Errorf("API key does not have access to this model")
-	}
 	if resp.StatusCode != http.StatusOK {
 		var apiResp anthropicResponse
 		if json.Unmarshal(respBody, &apiResp) == nil && apiResp.Error != nil {
-			return "", fmt.Errorf("%s: %s", apiResp.Error.Type, apiResp.Error.Message)
+			return "", fmt.Errorf("%s", apiResp.Error.Message)
 		}
 		return "", fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
