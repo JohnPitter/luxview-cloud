@@ -59,6 +59,7 @@ func main() {
 	metricRepo := repository.NewMetricRepo(db)
 	alertRepo := repository.NewAlertRepo(db)
 	planRepo := repository.NewPlanRepo(db)
+	settingsRepo := repository.NewSettingsRepo(db, encryptionKey)
 
 	// Services
 	portManager := service.NewPortManager(appRepo, cfg.PortRangeStart, cfg.PortRangeEnd)
@@ -103,7 +104,8 @@ func main() {
 		Router:      routerSvc,
 		WebhookSvc:  webhookSvc,
 		BuildQueue:  buildQueue,
-		EncryptKey:  encryptionKey,
+		EncryptKey:   encryptionKey,
+		SettingsRepo: settingsRepo,
 	})
 
 	// HTTP server

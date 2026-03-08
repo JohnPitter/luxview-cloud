@@ -28,7 +28,8 @@ type Deps struct {
 	WebhookSvc  *service.WebhookService
 	BuildQueue  chan<- service.DeployRequest
 	EncryptKey  []byte
-	PlanRepo    *repository.PlanRepo
+	PlanRepo     *repository.PlanRepo
+	SettingsRepo *repository.SettingsRepo
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -70,6 +71,8 @@ func NewRouter(deps Deps) *chi.Mux {
 	traefikHandler := handlers.NewTraefikHandler(deps.Router)
 	webhookHandler := handlers.NewWebhookHandler(deps.WebhookSvc, deps.Config.InternalToken)
 	planHandler := handlers.NewPlanHandler(deps.PlanRepo, deps.UserRepo, deps.AppRepo)
+	settingsHandler := handlers.NewSettingsHandler(deps.SettingsRepo)
+	analyzeHandler := handlers.NewAnalyzeHandler(deps.AppRepo, deps.UserRepo, deps.DeployRepo, deps.SettingsRepo, deps.EncryptKey)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 
@@ -120,6 +123,12 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Get("/apps/{id}/logs", appHandler.ContainerLogs)
 			r.Get("/apps/{id}/logs/stream", appHandler.ContainerLogsStream)
 
+			// AI Analyze
+			r.Post("/apps/{id}/analyze", analyzeHandler.Analyze)
+			r.Post("/apps/{id}/analyze-failure", analyzeHandler.AnalyzeFailure)
+			r.Put("/apps/{id}/dockerfile", analyzeHandler.SaveDockerfile)
+			r.Delete("/apps/{id}/dockerfile", analyzeHandler.DeleteDockerfile)
+
 			// Deployments
 			r.Get("/apps/{id}/deployments", deployHandler.List)
 			r.Get("/deployments/{id}/logs", deployHandler.GetLogs)
@@ -166,6 +175,8 @@ func NewRouter(deps Deps) *chi.Mux {
 				r.Delete("/admin/plans/{id}", planHandler.Delete)
 				r.Patch("/admin/plans/{id}/default", planHandler.SetDefault)
 				r.Patch("/admin/users/{id}/plan", planHandler.AssignUserPlan)
+				r.Get("/admin/settings/ai", settingsHandler.GetAISettings)
+				r.Put("/admin/settings/ai", settingsHandler.UpdateAISettings)
 			})
 		})
 	})
