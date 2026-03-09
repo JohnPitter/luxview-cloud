@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -75,6 +75,7 @@ export function AppDetail() {
   const [showServiceDialog, setShowServiceDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [selectedBuildLog, setSelectedBuildLog] = useState<string>('');
+  const [selectedDeployId, setSelectedDeployId] = useState<string>('');
   const [actionPending, setActionPending] = useState(false);
   const [logType, setLogType] = useState<'runtime' | 'build'>('runtime');
 
@@ -104,23 +105,41 @@ export function AppDetail() {
   // Track the status at the moment the user clicked an action
   const [statusWhenActionStarted, setStatusWhenActionStarted] = useState<string | null>(null);
 
-  // Poll app status + deployments every 3s when in a transitional state or after user action
+  // Track previous status to detect transitions
+  const prevStatusRef = useRef(app?.status);
+
+  // Poll app status + deployments + build logs every 3s during transitional states
   useEffect(() => {
     if (!appId || !app) return;
     const transitional = ['building', 'deploying'];
     const shouldPoll = actionPending || transitional.includes(app.status);
     if (!shouldPoll) return;
 
-    const poll = () => {
+    const poll = async () => {
       fetchApp(appId);
-      deploymentsApi.list(appId, 5, 0).then(setDeployments).catch(() => {});
+      try {
+        const deps = await deploymentsApi.list(appId, 5, 0);
+        setDeployments(deps);
+
+        // Auto-select the active deployment (building/deploying) and poll its logs
+        const activeDeploy = deps.find((d) => transitional.includes(d.status));
+        if (activeDeploy) {
+          setSelectedDeployId(activeDeploy.id);
+          const res = await deploymentsApi.getLogs(activeDeploy.id);
+          setSelectedBuildLog(res.buildLog || '');
+        } else if (deps.length > 0 && (!selectedDeployId || selectedDeployId !== deps[0].id)) {
+          // Build finished — load final logs from latest deployment
+          setSelectedDeployId(deps[0].id);
+          const res = await deploymentsApi.getLogs(deps[0].id);
+          setSelectedBuildLog(res.buildLog || '');
+        }
+      } catch { /* ignore */ }
     };
     poll(); // immediate first poll
     const interval = setInterval(poll, 3000);
 
     // Stop actionPending only after the status has actually changed from when the action started
     if (actionPending && statusWhenActionStarted && app.status !== statusWhenActionStarted) {
-      // Status changed — if it's now in a final state, stop pending
       if (!transitional.includes(app.status)) {
         setActionPending(false);
         setStatusWhenActionStarted(null);
@@ -129,6 +148,34 @@ export function AppDetail() {
 
     return () => clearInterval(interval);
   }, [appId, app?.status, actionPending, statusWhenActionStarted, fetchApp]);
+
+  // Detect status transitions and notify user
+  useEffect(() => {
+    if (!app) return;
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = app.status;
+    if (!prev || prev === app.status) return;
+
+    const transitional = ['building', 'deploying'];
+    // Transitioned from building/deploying to a final state
+    if (transitional.includes(prev) && !transitional.includes(app.status)) {
+      if (app.status === 'running') {
+        addNotification({ type: 'success', title: t('app.notifications.deploySuccess') });
+      } else if (app.status === 'error') {
+        addNotification({ type: 'error', title: t('app.notifications.deployFailed') });
+      }
+    }
+  }, [app?.status]);
+
+  // Clear old build logs when a new deploy is triggered
+  useEffect(() => {
+    if (app && ['building', 'deploying'].includes(app.status)) {
+      // Auto-switch to build logs view so user sees progress
+      if (activeTab === 'logs') {
+        setLogType('build');
+      }
+    }
+  }, [app?.status]);
 
   useEffect(() => {
     if (app) {
@@ -146,8 +193,10 @@ export function AppDetail() {
       deploymentsApi.list(appId).then((deps) => {
         setDeployments(deps);
         // Auto-load build log from latest deployment for Logs tab
-        if (activeTab === 'logs' && deps.length > 0 && !selectedBuildLog) {
-          deploymentsApi.getLogs(deps[0].id).then((res) => {
+        if (activeTab === 'logs' && deps.length > 0 && !selectedDeployId) {
+          const target = deps[0];
+          setSelectedDeployId(target.id);
+          deploymentsApi.getLogs(target.id).then((res) => {
             setSelectedBuildLog(res.buildLog || '');
           }).catch(() => {});
         }
@@ -564,10 +613,11 @@ export function AppDetail() {
                   <div className="flex items-center gap-3">
                     <label className="text-xs text-zinc-500">{t('app.logs.deployment')}:</label>
                     <select
-                      value={deployments.find((d: Deployment) => selectedBuildLog && d.buildLog === selectedBuildLog)?.id || deployments[0]?.id || ''}
+                      value={selectedDeployId || deployments[0]?.id || ''}
                       onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                         const deployId = e.target.value;
                         if (deployId) {
+                          setSelectedDeployId(deployId);
                           deploymentsApi.getLogs(deployId).then((res: { buildLog: string }) => {
                             setSelectedBuildLog(res.buildLog || '');
                           }).catch(() => {});
@@ -585,9 +635,22 @@ export function AppDetail() {
                         </option>
                       ))}
                     </select>
+                    {/* Live indicator when actively building */}
+                    {deployments.some((d) => ['building', 'deploying'].includes(d.status)) && (
+                      <span className="flex items-center gap-1.5 text-[11px] text-amber-400 font-medium">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
+                        </span>
+                        {t('app.logs.streaming')}
+                      </span>
+                    )}
                   </div>
                 )}
-                <BuildLogViewer log={selectedBuildLog} />
+                <BuildLogViewer
+                  log={selectedBuildLog}
+                  streaming={deployments.some((d) => ['building', 'deploying'].includes(d.status))}
+                />
                 {!selectedBuildLog && deployments.length === 0 && (
                   <div className="text-center py-12 text-zinc-500 text-sm">
                     {t('app.logs.noBuildLogs')}
