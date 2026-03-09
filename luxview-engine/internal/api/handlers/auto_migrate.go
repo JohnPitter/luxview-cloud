@@ -424,15 +424,16 @@ func verifyBuild(ctx context.Context, cloneDir string) (string, error) {
 		installCmd []string
 		buildCmd   []string
 		lintCmd    []string // optional lint/typecheck command
+		testCmd    []string // optional test command
 	}
 
 	configs := []buildConfig{
-		{"pnpm", "pnpm-lock.yaml", []string{"pnpm", "install", "--no-frozen-lockfile"}, []string{"pnpm", "run", "build"}, []string{"pnpm", "run", "lint"}},
-		{"yarn", "yarn.lock", []string{"yarn", "install", "--no-immutable"}, []string{"yarn", "run", "build"}, []string{"yarn", "run", "lint"}},
-		{"npm", "package-lock.json", []string{"npm", "install", "--no-package-lock"}, []string{"npm", "run", "build"}, []string{"npm", "run", "lint"}},
-		{"npm-fallback", "package.json", []string{"npm", "install", "--no-package-lock"}, []string{"npm", "run", "build"}, []string{"npm", "run", "lint"}},
-		{"go", "go.mod", nil, []string{"go", "build", "./..."}, []string{"go", "vet", "./..."}},
-		{"cargo", "Cargo.toml", nil, []string{"cargo", "build"}, []string{"cargo", "clippy"}},
+		{"pnpm", "pnpm-lock.yaml", []string{"pnpm", "install", "--no-frozen-lockfile"}, []string{"pnpm", "run", "build"}, []string{"pnpm", "run", "lint"}, []string{"pnpm", "run", "test"}},
+		{"yarn", "yarn.lock", []string{"yarn", "install", "--no-immutable"}, []string{"yarn", "run", "build"}, []string{"yarn", "run", "lint"}, []string{"yarn", "run", "test"}},
+		{"npm", "package-lock.json", []string{"npm", "install", "--no-package-lock"}, []string{"npm", "run", "build"}, []string{"npm", "run", "lint"}, []string{"npm", "run", "test"}},
+		{"npm-fallback", "package.json", []string{"npm", "install", "--no-package-lock"}, []string{"npm", "run", "build"}, []string{"npm", "run", "lint"}, []string{"npm", "run", "test"}},
+		{"go", "go.mod", nil, []string{"go", "build", "./..."}, []string{"go", "vet", "./..."}, []string{"go", "test", "./..."}},
+		{"cargo", "Cargo.toml", nil, []string{"cargo", "build"}, []string{"cargo", "clippy"}, []string{"cargo", "test"}},
 	}
 
 	var selected *buildConfig
@@ -483,7 +484,7 @@ func verifyBuild(ctx context.Context, cloneDir string) (string, error) {
 		return allOutput.String(), fmt.Errorf("%s build failed: %w", selected.name, err)
 	}
 
-	// Run lint command if available (non-fatal if the script doesn't exist)
+	// Run lint command if available (skip gracefully if script doesn't exist)
 	if selected.lintCmd != nil {
 		lintCtx, lintCancel := context.WithTimeout(ctx, buildTimeout)
 		defer lintCancel()
@@ -494,19 +495,37 @@ func verifyBuild(ctx context.Context, cloneDir string) (string, error) {
 		lintOutput, lintErr := lintExec.CombinedOutput()
 		allOutput.WriteString("\n")
 		allOutput.WriteString(string(lintOutput))
-		if lintErr != nil {
-			// Check if the lint script simply doesn't exist (exit code from "missing script")
-			lintStr := string(lintOutput)
-			if strings.Contains(lintStr, "Missing script") || strings.Contains(lintStr, "missing script") ||
-				strings.Contains(lintStr, "command not found") || strings.Contains(lintStr, "No such command") {
-				log.Debug().Msg("lint script not found, skipping")
-			} else {
-				return allOutput.String(), fmt.Errorf("%s lint failed: %w", selected.name, lintErr)
-			}
+		if lintErr != nil && !isMissingScript(string(lintOutput)) {
+			return allOutput.String(), fmt.Errorf("%s lint failed: %w", selected.name, lintErr)
+		}
+	}
+
+	// Run test command if available (skip gracefully if script doesn't exist)
+	if selected.testCmd != nil {
+		testCtx, testCancel := context.WithTimeout(ctx, buildTimeout)
+		defer testCancel()
+
+		testExec := exec.CommandContext(testCtx, selected.testCmd[0], selected.testCmd[1:]...)
+		testExec.Dir = cloneDir
+		testExec.Env = append(os.Environ(), "CI=true")
+		testOutput, testErr := testExec.CombinedOutput()
+		allOutput.WriteString("\n")
+		allOutput.WriteString(string(testOutput))
+		if testErr != nil && !isMissingScript(string(testOutput)) {
+			return allOutput.String(), fmt.Errorf("%s tests failed: %w", selected.name, testErr)
 		}
 	}
 
 	return allOutput.String(), nil
+}
+
+// isMissingScript checks if command output indicates the script/command doesn't exist.
+func isMissingScript(output string) bool {
+	return strings.Contains(output, "Missing script") ||
+		strings.Contains(output, "missing script") ||
+		strings.Contains(output, "command not found") ||
+		strings.Contains(output, "No such command") ||
+		strings.Contains(output, "no test files")
 }
 
 // truncateString truncates a string to maxLen, adding an ellipsis if truncated.
