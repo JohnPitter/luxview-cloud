@@ -223,6 +223,37 @@ The service has ALREADY been provisioned. Environment variables are automaticall
 7. Files must end with a newline character.
 8. The output file MUST have approximately the same number of lines as the input file (±20%). If your change reduces a file by more than 20%, you are almost certainly destroying code.
 
+## BUILD & RUNTIME RULES (CRITICAL — violations cause runtime crashes):
+
+### Node.js ESM Resolution:
+1. If the project uses "type": "module" in package.json, Node.js ESM does NOT auto-resolve directory imports (e.g., import from './schema' will NOT find ./schema/index.js). You MUST either:
+   a. Use a bundler like tsup that resolves these automatically, OR
+   b. Add explicit /index.js extensions to all directory imports
+2. If a package's package.json has "main" or "exports" pointing to ./src/index.ts (source TypeScript), it WILL FAIL at runtime because Node.js cannot import .ts files. Change them to point to ./dist/index.js (compiled output).
+3. When changing a package to use a different build tool (e.g., tsc → tsup), update the "build" script AND add the new tool to devDependencies.
+
+### Package Exports & Named Exports:
+1. If a module uses 'import * as X from "./subdir"' internally but consumers import '{ X }' as a named export, you MUST add 'export { X }' explicitly.
+2. 'export * from "./subdir"' re-exports individual symbols, NOT the namespace. If consumers use the namespace (e.g., { schema }), add an explicit namespace export.
+3. When switching database drivers (e.g., libsql → postgres-js), the Drizzle ORM API changes:
+   - libsql uses .all(), .get(), .values() methods
+   - postgres-js uses direct await (no .all()/.get()/.values())
+   - You MUST grep the entire codebase for .all(), .get(), .values() calls on db queries and remove them
+
+### Monorepo Build Order:
+1. In monorepos (pnpm workspaces, turborepo), packages MUST be built in dependency order: shared → database → app
+2. If the Dockerfile only builds the app package, add build steps for dependency packages BEFORE the app build.
+3. In the Dockerfile runtime stage, copy workspace packages from the 'builder' stage (which has compiled dist/), NOT from the 'deps' stage (which only has node_modules/).
+
+### Drizzle ORM Migration Specifics (SQLite → PostgreSQL):
+1. Replace 'drizzle-orm/libsql' or 'drizzle-orm/better-sqlite3' with 'drizzle-orm/postgres-js'
+2. Replace '@libsql/client' or 'better-sqlite3' with 'postgres' (postgres.js driver)
+3. Replace ALL 'sqliteTable' with 'pgTable' in schema files
+4. Replace 'integer' type (SQLite) with 'serial' or 'integer' (PostgreSQL) for auto-increment primary keys
+5. Replace 'text' mode: 'json' with 'jsonb()' for JSON columns
+6. Update drizzle.config.ts: driver/dialect from 'sqlite'/'libsql' to 'postgresql', connection from file path to DATABASE_URL env var
+7. Remove .all(), .get(), .values() from ALL query calls — postgres-js driver returns results directly with await
+
 ## DOCKERFILE RULES:
 1. Do NOT add garbage lines or duplicate existing instructions.
 2. Only modify Dockerfile lines that are directly related to the service change (e.g., removing SQLite directory setup).
@@ -256,6 +287,11 @@ the current state of the code, and generate ADDITIONAL code changes to fix the b
    - Missing peer dependencies in package.json
    - Incorrect module paths after package name changes
    - Schema files using the wrong DB-specific types
+   - package.json "main"/"exports" pointing to ./src/*.ts instead of ./dist/*.js (crashes at runtime)
+   - ESM directory imports without /index.js (ERR_UNSUPPORTED_DIR_IMPORT in Node.js)
+   - Missing namespace exports (e.g., 'import * as schema' used internally but not re-exported as 'export { schema }')
+   - Drizzle ORM .all()/.get()/.values() calls that don't exist in postgres-js driver (remove them, use direct await)
+   - Monorepo Dockerfile not building dependency packages before the app package
 4. If a file was not included in the original migration but imports a changed module, provide the updated file.
 5. Preserve existing exports — if a file exported symbols, the new version must export the same symbols.
 6. Do NOT introduce new exports that reference non-existent modules.
