@@ -14,7 +14,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/luxview/engine/internal/agent"
 	"github.com/luxview/engine/internal/api/middleware"
+	"github.com/luxview/engine/internal/detector"
+	"github.com/luxview/engine/internal/model"
 	"github.com/luxview/engine/internal/repository"
+	"github.com/luxview/engine/internal/service"
 	"github.com/luxview/engine/pkg/crypto"
 	"github.com/luxview/engine/pkg/logger"
 )
@@ -24,6 +27,8 @@ type AnalyzeHandler struct {
 	userRepo     *repository.UserRepo
 	deployRepo   *repository.DeploymentRepo
 	settingsRepo *repository.SettingsRepo
+	serviceRepo  *repository.ServiceRepo
+	provisioner  *service.Provisioner
 	agent        *agent.DeployAgent
 	encryptKey   []byte
 }
@@ -33,6 +38,8 @@ func NewAnalyzeHandler(
 	userRepo *repository.UserRepo,
 	deployRepo *repository.DeploymentRepo,
 	settingsRepo *repository.SettingsRepo,
+	serviceRepo *repository.ServiceRepo,
+	provisioner *service.Provisioner,
 	encryptKey []byte,
 ) *AnalyzeHandler {
 	return &AnalyzeHandler{
@@ -40,6 +47,8 @@ func NewAnalyzeHandler(
 		userRepo:     userRepo,
 		deployRepo:   deployRepo,
 		settingsRepo: settingsRepo,
+		serviceRepo:  serviceRepo,
+		provisioner:  provisioner,
 		agent:        agent.NewDeployAgent(),
 		encryptKey:   encryptKey,
 	}
@@ -118,6 +127,7 @@ func (h *AnalyzeHandler) cloneRepo(ctx context.Context, appID uuid.UUID, repoURL
 }
 
 // Analyze handles POST /apps/{id}/analyze — runs AI analysis on the app's repository.
+// Falls back to deterministic detection if AI is unavailable.
 func (h *AnalyzeHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 	log := logger.With("analyze")
 	ctx := r.Context()
@@ -139,12 +149,7 @@ func (h *AnalyzeHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg, err := h.getAIConfig(ctx)
-	if err != nil {
-		log.Warn().Err(err).Msg("AI config unavailable")
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
+	cfg, aiErr := h.getAIConfig(ctx)
 
 	lang := r.Header.Get("Accept-Language")
 	if lang == "" {
@@ -159,6 +164,15 @@ func (h *AnalyzeHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.RemoveAll(cloneDir)
 
+	if aiErr != nil {
+		// AI disabled — use deterministic detection
+		log.Info().Msg("AI unavailable, using deterministic analysis")
+		result := detector.Analyze(cloneDir)
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
+
+	// AI enabled — existing flow
 	result, err := h.agent.Analyze(ctx, cfg.apiKey, cfg.model, cloneDir, lang)
 	if err != nil {
 		log.Error().Err(err).Str("app", app.Subdomain).Msg("analysis failed")
@@ -310,4 +324,75 @@ func (h *AnalyzeHandler) DeleteDockerfile(w http.ResponseWriter, r *http.Request
 	log := logger.With("analyze")
 	log.Info().Str("app", app.Subdomain).Msg("custom dockerfile deleted")
 	writeJSON(w, http.StatusOK, map[string]string{"message": "dockerfile deleted"})
+}
+
+type applyAnalysisRequest struct {
+	Dockerfile string   `json:"dockerfile"`
+	Services   []string `json:"services"`
+}
+
+type applyAnalysisResponse struct {
+	Message string `json:"message"`
+}
+
+// ApplyAnalysis handles POST /apps/{id}/apply-analysis — saves the Dockerfile and provisions services.
+func (h *AnalyzeHandler) ApplyAnalysis(w http.ResponseWriter, r *http.Request) {
+	log := logger.With("analyze")
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app ID")
+		return
+	}
+
+	app, err := h.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	if app.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	var req applyAnalysisRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// Save Dockerfile
+	if req.Dockerfile != "" {
+		if err := h.appRepo.UpdateCustomDockerfile(ctx, appID, &req.Dockerfile); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to save dockerfile")
+			return
+		}
+		log.Info().Str("app", app.Subdomain).Msg("dockerfile saved via apply-analysis")
+	}
+
+	// Provision selected services
+	for _, svcType := range req.Services {
+		serviceType := model.ServiceType(svcType)
+		svc, provErr := h.provisioner.Provision(ctx, appID, serviceType)
+		if provErr != nil {
+			if strings.Contains(provErr.Error(), "already provisioned") {
+				existing, findErr := h.serviceRepo.FindByAppAndType(ctx, appID, serviceType)
+				if findErr != nil || existing == nil {
+					log.Warn().Str("service", svcType).Err(provErr).Msg("failed to find existing service")
+					continue
+				}
+				svc = existing
+			} else {
+				log.Error().Str("service", svcType).Err(provErr).Msg("failed to provision service")
+				continue
+			}
+		}
+		log.Info().Str("service", svcType).Str("id", svc.ID.String()).Msg("service provisioned via apply-analysis")
+	}
+
+	writeJSON(w, http.StatusOK, applyAnalysisResponse{
+		Message: "Analysis applied successfully",
+	})
 }

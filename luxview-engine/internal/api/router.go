@@ -72,8 +72,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	webhookHandler := handlers.NewWebhookHandler(deps.WebhookSvc, deps.Config.InternalToken)
 	planHandler := handlers.NewPlanHandler(deps.PlanRepo, deps.UserRepo, deps.AppRepo)
 	settingsHandler := handlers.NewSettingsHandler(deps.SettingsRepo)
-	analyzeHandler := handlers.NewAnalyzeHandler(deps.AppRepo, deps.UserRepo, deps.DeployRepo, deps.SettingsRepo, deps.EncryptKey)
-	autoMigrateHandler := handlers.NewAutoMigrateHandler(deps.AppRepo, deps.UserRepo, deps.ServiceRepo, deps.SettingsRepo, deps.Provisioner, deps.EncryptKey)
+	analyzeHandler := handlers.NewAnalyzeHandler(deps.AppRepo, deps.UserRepo, deps.DeployRepo, deps.SettingsRepo, deps.ServiceRepo, deps.Provisioner, deps.EncryptKey)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 
@@ -129,7 +128,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Post("/apps/{id}/analyze-failure", analyzeHandler.AnalyzeFailure)
 			r.Put("/apps/{id}/dockerfile", analyzeHandler.SaveDockerfile)
 			r.Delete("/apps/{id}/dockerfile", analyzeHandler.DeleteDockerfile)
-			r.Post("/apps/{id}/auto-migrate", autoMigrateHandler.AutoMigrate)
+			r.Post("/apps/{id}/apply-analysis", analyzeHandler.ApplyAnalysis)
 
 			// Deployments
 			r.Get("/apps/{id}/deployments", deployHandler.List)

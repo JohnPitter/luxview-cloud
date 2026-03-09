@@ -9,7 +9,7 @@ import { useAppsStore } from '../stores/apps.store';
 import { useNotificationsStore } from '../stores/notifications.store';
 import { useThemeStore } from '../stores/theme.store';
 import { githubApi, type GithubRepo } from '../api/github';
-import { analyzeApi, type AnalysisResult } from '../api/analyze';
+import { analyzeApi, aiSettingsApi, type AnalysisResult } from '../api/analyze';
 import { appsApi } from '../api/apps';
 import { newAppTourSteps } from '../tours/newApp';
 
@@ -31,8 +31,8 @@ export function NewApp() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [prUrls, setPrUrls] = useState<Array<{ service: string; url: string }>>([]);
   const [provisioningDone, setProvisioningDone] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
   const createdAppIdRef = useRef<string | null>(null);
   const wizardEnvVarsRef = useRef<Record<string, string>>({});
 
@@ -46,6 +46,13 @@ export function NewApp() {
       })
       .finally(() => setLoadingRepos(false));
   }, [addNotification, fetchApps, t]);
+
+  useEffect(() => {
+    aiSettingsApi
+      .get()
+      .then((s) => setAiEnabled(s.aiEnabled))
+      .catch(() => setAiEnabled(false));
+  }, []);
 
   const deployedRepoUrls = useMemo(
     () => new Set(apps.map((a) => a.repoUrl.replace(/\.git$/, ''))),
@@ -117,7 +124,9 @@ export function NewApp() {
       });
       createdAppIdRef.current = app.id;
       wizardEnvVarsRef.current = config.envVars;
-      await runAnalysis(app.id);
+      if (aiEnabled) {
+        await runAnalysis(app.id);
+      }
     } catch {
       addNotification({
         type: 'error',
@@ -134,62 +143,35 @@ export function NewApp() {
     }
   };
 
-  const handleApproveAndProvision = async (dockerfile: string, envVars: Record<string, string>, serviceModes?: Record<string, string>) => {
+  const handleApproveAnalysis = async (dockerfile: string, envVars: Record<string, string>, services: string[]) => {
     const appId = createdAppIdRef.current;
     if (!appId) return;
 
     setDeploying(true);
-    const collectedPrUrls: Array<{ service: string; url: string }> = [];
     try {
-      if (dockerfile) {
-        await analyzeApi.saveDockerfile(appId, dockerfile);
-      }
+      // Apply analysis: save dockerfile + provision services
+      await analyzeApi.applyAnalysis(appId, { dockerfile, envVars, services });
 
-      // Auto-migrate services: provision + generate code changes + create PR
-      if (serviceModes) {
-        const autoServices = Object.entries(serviceModes).filter(([, mode]) => mode === 'auto');
-        for (const [serviceType] of autoServices) {
-          try {
-            const result = await analyzeApi.autoMigrate(appId, serviceType);
-            addNotification({
-              type: 'success',
-              title: t('analyze.serviceProvisioned', { service: serviceType }),
-              message: result.prUrl
-                ? t('analyze.prCreated')
-                : result.message,
-            });
-            if (result.prUrl) {
-              collectedPrUrls.push({ service: serviceType, url: result.prUrl });
-            }
-          } catch {
-            addNotification({
-              type: 'error',
-              title: t('analyze.serviceProvisionFailed', { service: serviceType }),
-            });
-          }
-        }
-      }
-
+      // Update env vars via the app endpoint
       const mergedEnvVars = { ...wizardEnvVarsRef.current, ...envVars };
       const hasNewEnvVars = Object.keys(envVars).some((k) => envVars[k]);
       if (hasNewEnvVars) {
         await appsApi.updateEnvVars(appId, mergedEnvVars);
       }
 
-      // Always go to review step — never deploy directly
-      if (collectedPrUrls.length > 0) {
-        setPrUrls(collectedPrUrls);
-      }
+      addNotification({
+        type: 'success',
+        title: t('analyze.analysisApplied'),
+      });
       setProvisioningDone(true);
-      setDeploying(false);
-      return;
     } catch {
-      setDeploying(false);
       addNotification({
         type: 'error',
         title: t('app.notifications.deploymentFailed'),
         message: t('app.notifications.deploymentFailedMessage'),
       });
+    } finally {
+      setDeploying(false);
     }
   };
 
@@ -237,15 +219,15 @@ export function NewApp() {
         onRepoSelect={handleRepoSelect}
         onCreateAndAnalyze={handleCreateAndAnalyze}
         onRetryAnalysis={handleRetryAnalysis}
-        onDeploy={handleApproveAndProvision}
+        onDeploy={handleApproveAnalysis}
         onFinalDeploy={handleFinalDeploy}
         onDeployWithoutAnalysis={handleDeployWithoutAnalysis}
         deploying={deploying}
         analysisResult={analysisResult}
         analyzing={analyzing}
         analysisError={analysisError}
-        prUrls={prUrls}
         provisioningDone={provisioningDone}
+        aiEnabled={aiEnabled ?? false}
       />
     </div>
   );

@@ -17,14 +17,6 @@ export interface ServiceRecommendation {
   recommendedService: 'postgres' | 'redis' | 'mongodb' | 'rabbitmq' | 's3';
   reason: string;
   manualSteps: string[];
-  codeChanges?: CodeChange[];
-}
-
-export interface CodeChange {
-  file: string;
-  action: 'modify' | 'create' | 'delete';
-  description: string;
-  content: string;
 }
 
 export interface AnalysisResult {
@@ -43,6 +35,17 @@ export interface AISettings {
   aiModel: string;
 }
 
+export interface ApplyAnalysisRequest {
+  dockerfile: string;
+  envVars: Record<string, string>;
+  services: string[];
+}
+
+export interface ApplyAnalysisResponse {
+  message: string;
+  provisionedEnvs?: Record<string, string>;
+}
+
 export const analyzeApi = {
   async analyze(appId: string): Promise<AnalysisResult> {
     const { data } = await api.post<AnalysisResult>(`/apps/${appId}/analyze`, null, { timeout: 300000 });
@@ -58,17 +61,11 @@ export const analyzeApi = {
   async deleteDockerfile(appId: string): Promise<void> {
     await api.delete(`/apps/${appId}/dockerfile`);
   },
-  async autoMigrate(appId: string, serviceType: string): Promise<AutoMigrateResult> {
-    const { data } = await api.post<AutoMigrateResult>(`/apps/${appId}/auto-migrate`, { serviceType }, { timeout: 180000 });
+  async applyAnalysis(appId: string, req: ApplyAnalysisRequest): Promise<ApplyAnalysisResponse> {
+    const { data } = await api.post<ApplyAnalysisResponse>(`/apps/${appId}/apply-analysis`, req);
     return data;
   },
 };
-
-export interface AutoMigrateResult {
-  serviceId: string;
-  prUrl?: string;
-  message: string;
-}
 
 export interface AITestResult {
   success: boolean;
