@@ -88,7 +88,7 @@ func (a *DeployAgent) GenerateCodeChanges(ctx context.Context, apiKey, model, re
 	log := logger.With("deploy-agent")
 	log.Info().Str("repo", repoDir).Str("service", serviceType).Msg("generating code changes for migration")
 
-	userPrompt, err := BuildContext(repoDir)
+	userPrompt, err := BuildMigrationContext(repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("build context: %w", err)
 	}
@@ -109,6 +109,50 @@ func (a *DeployAgent) GenerateCodeChanges(ctx context.Context, apiKey, model, re
 
 	log.Info().Int("changes", len(result.CodeChanges)).Msg("code changes generated")
 	return &result, nil
+}
+
+// BuildFixResult holds the additional code changes generated to fix build errors.
+type BuildFixResult struct {
+	CodeChanges []CodeChange `json:"codeChanges"`
+}
+
+// FixBuildErrors calls the AI to generate additional code changes that fix build errors
+// resulting from a prior migration.
+func (a *DeployAgent) FixBuildErrors(ctx context.Context, apiKey, model, repoDir, buildOutput, serviceType, lang string) ([]CodeChange, error) {
+	log := logger.With("deploy-agent")
+	log.Info().Str("repo", repoDir).Msg("generating build fix changes")
+
+	userPrompt, err := BuildMigrationContext(repoDir)
+	if err != nil {
+		return nil, fmt.Errorf("build context: %w", err)
+	}
+
+	// Truncate build output to last 8KB
+	const maxBuildOutput = 8 * 1024
+	if len(buildOutput) > maxBuildOutput {
+		buildOutput = buildOutput[len(buildOutput)-maxBuildOutput:]
+	}
+
+	userPrompt = userPrompt + "\n\n## Build Error Output\n```\n" + buildOutput + "\n```\n\n"
+	userPrompt = userPrompt + "The project was being migrated to use LuxView Cloud managed " + serviceType + ". "
+	userPrompt = userPrompt + "The migration code changes were already applied but the build failed with the errors above. "
+	userPrompt = userPrompt + "Generate ONLY the additional code changes needed to fix these build errors."
+
+	localizedPrompt := buildFixSystemPrompt + "\n\nIMPORTANT: Description fields MUST be written in " + lang + " language. JSON keys stay in English."
+
+	raw, err := a.callLLMRaw(ctx, apiKey, model, localizedPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("fix build errors: %w", err)
+	}
+
+	var result BuildFixResult
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		log.Error().Str("raw_text", raw).Err(err).Msg("failed to parse build fix response")
+		return nil, fmt.Errorf("parse build fix response: %w", err)
+	}
+
+	log.Info().Int("fixes", len(result.CodeChanges)).Msg("build fix changes generated")
+	return result.CodeChanges, nil
 }
 
 // TestConnection sends a minimal request to the OpenRouter API to verify the key is valid.

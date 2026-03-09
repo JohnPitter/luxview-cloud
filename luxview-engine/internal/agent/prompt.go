@@ -68,6 +68,28 @@ var monorepoPatterns = []string{
 	"packages/*/Dockerfile",
 }
 
+// Source file patterns to include for migration context (database/connection related).
+var migrationSourcePatterns = []string{
+	"**/connection.*",
+	"**/database.*",
+	"**/db.*",
+	"**/migrate.*",
+	"**/migration.*",
+	"**/seed.*",
+	"**/schema/*",
+	"**/drizzle.*",
+	"**/prisma/schema.prisma",
+	"**/knexfile.*",
+	"**/ormconfig.*",
+	"**/typeorm.*",
+	"packages/database/src/*",
+	"src/database/*",
+	"src/db/*",
+	"src/lib/db.*",
+	"src/lib/database.*",
+	"src/config/database.*",
+}
+
 const systemPrompt = `You are a Deploy Agent for LuxView Cloud, a self-hosted PaaS platform.
 Your job is to analyze a user's repository and generate an optimal Dockerfile for deployment.
 You also detect external services the app uses and recommend LuxView Cloud managed alternatives.
@@ -156,7 +178,7 @@ You MUST respond with valid JSON only (no markdown, no explanation outside JSON)
 }`
 
 const migrationSystemPrompt = `You are a Code Migration Agent for LuxView Cloud, a self-hosted PaaS platform.
-Your job is to generate minimal code changes to migrate an application to use a LuxView Cloud managed service.
+Your job is to generate code changes to migrate an application to use a LuxView Cloud managed service.
 
 The service has ALREADY been provisioned. Environment variables are automatically injected at runtime:
 - PostgreSQL: DATABASE_URL, PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
@@ -165,15 +187,39 @@ The service has ALREADY been provisioned. Environment variables are automaticall
 - RabbitMQ: RABBITMQ_URL, AMQP_URL
 - S3/MinIO: S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY, S3_SECRET_KEY, AWS_ENDPOINT_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 
-Rules:
-1. Generate ONLY the minimum changes needed. Do not refactor unrelated code.
-2. For each file change, provide the COMPLETE new file content (not a diff).
-3. The app should read connection details from environment variables (already injected).
-4. Remove or replace hardcoded connection strings, local file paths, or embedded databases.
-5. If the project uses an ORM (Prisma, Drizzle, TypeORM, SQLAlchemy, GORM), update the config to use env vars.
-6. Update package.json / requirements.txt / go.mod if dependencies change (e.g., remove sqlite3, add pg).
-7. For SQLite → PostgreSQL migrations, update the ORM schema/driver but do NOT generate SQL migrations (the app handles that).
-8. Keep changes minimal — only modify files that directly relate to the service connection.
+## SECURITY RULES (MANDATORY — violations are critical bugs):
+1. NEVER hardcode credentials, passwords, connection strings, or secrets in code. Use ONLY environment variables.
+2. NEVER add fallback values with real credentials (e.g., "postgres://user:pass@host/db"). Fallbacks must be empty string or throw an error.
+3. If a connection string env var is missing, the code MUST throw an error — NEVER silently connect to a default local service.
+4. Example of WRONG code: const url = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/mydb'
+5. Example of CORRECT code: const url = process.env.DATABASE_URL || ''; if (!url) throw new Error('DATABASE_URL is required');
+
+## COMPLETENESS RULES (MANDATORY — the build MUST pass after your changes):
+1. Search ALL files in the repository that import/require the old service module and update ALL of them.
+2. If you change a module's exports, update ALL files that import from that module.
+3. If you change package.json dependencies, update ALL source files that import the old dependency.
+4. For ORM migrations (e.g., SQLite → PostgreSQL with Drizzle):
+   - Update the driver import (e.g., drizzle-orm/libsql → drizzle-orm/postgres-js)
+   - Update ALL schema files if they use DB-specific types (e.g., sqliteTable → pgTable)
+   - Update ALL files that import the database connection (connection.ts, migrate.ts, seed.ts, etc.)
+   - Update drizzle.config.ts/js if it exists
+5. Do NOT leave orphan imports — if you remove a dependency, grep for all its usages.
+6. Do NOT introduce new exports that don't exist (e.g., don't add "export * from './drizzle'" if there is no drizzle.ts file).
+7. Preserve existing exports — if a file exported symbols, the new version must export the same symbols.
+
+## CODE QUALITY RULES:
+1. For each file change, provide the COMPLETE new file content (not a diff).
+2. Do not refactor unrelated code — only modify files that relate to the service connection.
+3. Do not add unnecessary configuration options or connection pool tuning unless the original code had them.
+4. Keep the same code style (semicolons, quotes, indentation) as the original file.
+5. Do not add comments like "// PostgreSQL is now managed by LuxView Cloud" — the code should be self-explanatory.
+6. Do not duplicate imports or code blocks — each import/statement should appear exactly once.
+7. Files must end with a newline character.
+
+## DOCKERFILE RULES:
+1. Do NOT add garbage lines or duplicate existing instructions.
+2. Only modify Dockerfile lines that are directly related to the service change (e.g., removing SQLite directory setup).
+3. Do NOT modify CMD, EXPOSE, or build stages unless directly required by the migration.
 
 You MUST respond with valid JSON only. Use this exact format:
 {
@@ -182,6 +228,38 @@ You MUST respond with valid JSON only. Use this exact format:
   ],
   "prTitle": "Short PR title describing the migration",
   "prBody": "Markdown body explaining what was changed and why"
+}`
+
+const buildFixSystemPrompt = `You are a Build Fix Agent for LuxView Cloud, a self-hosted PaaS platform.
+A code migration was applied to a project but the build FAILED. Your job is to analyze the build error output,
+the current state of the code, and generate ADDITIONAL code changes to fix the build errors.
+
+## SECURITY RULES (MANDATORY):
+1. NEVER hardcode credentials, passwords, connection strings, or secrets. Use ONLY environment variables.
+2. NEVER add fallback values with real credentials. Fallbacks must be empty string or throw an error.
+3. If an env var is required, the code MUST throw an error if it's missing.
+
+## FIX RULES:
+1. Generate ONLY the changes needed to fix the build errors. Do not refactor unrelated code.
+2. For each file change, provide the COMPLETE new file content (not a diff).
+3. Common issues to look for:
+   - Missing imports after a module/package was replaced
+   - Type mismatches after switching database drivers (e.g., sqliteTable vs pgTable in Drizzle ORM)
+   - Files that still import removed dependencies (grep ALL source files, not just the main entry)
+   - Missing peer dependencies in package.json
+   - Incorrect module paths after package name changes
+   - Schema files using the wrong DB-specific types
+4. If a file was not included in the original migration but imports a changed module, provide the updated file.
+5. Preserve existing exports — if a file exported symbols, the new version must export the same symbols.
+6. Do NOT introduce new exports that reference non-existent modules.
+7. Files must end with a newline character.
+8. Keep changes minimal — only fix what is broken.
+
+You MUST respond with valid JSON only. Use this exact format:
+{
+  "codeChanges": [
+    {"file": "relative/path/to/file", "action": "modify|create|delete", "description": "What was fixed", "content": "full file content..."}
+  ]
 }`
 
 // BuildContext scans the repository and builds a user prompt for first-deploy analysis.
@@ -211,6 +289,50 @@ func BuildContext(repoDir string) (string, error) {
 	}
 
 	sb.WriteString("Analyze this repository and generate an optimal Dockerfile for deployment on LuxView Cloud.")
+
+	return sb.String(), nil
+}
+
+// BuildMigrationContext builds a user prompt for migration, including database/connection source files.
+func BuildMigrationContext(repoDir string) (string, error) {
+	log := logger.With("deploy-agent")
+
+	tree, err := buildFileTree(repoDir)
+	if err != nil {
+		return "", fmt.Errorf("build file tree: %w", err)
+	}
+
+	files, err := readKeyFiles(repoDir)
+	if err != nil {
+		log.Warn().Err(err).Msg("partial error reading key files")
+	}
+
+	// Also read migration-related source files
+	totalSize := 0
+	for _, content := range files {
+		totalSize += len(content)
+	}
+	sourceFiles, err := readMigrationSourceFiles(repoDir, totalSize)
+	if err != nil {
+		log.Warn().Err(err).Msg("partial error reading migration source files")
+	}
+	for name, content := range sourceFiles {
+		if _, exists := files[name]; !exists {
+			files[name] = content
+		}
+	}
+
+	var sb strings.Builder
+	sb.WriteString("## Repository File Tree\n```\n")
+	sb.WriteString(tree)
+	sb.WriteString("```\n\n")
+
+	if len(files) > 0 {
+		sb.WriteString("## Key File Contents\n\n")
+		for name, content := range files {
+			sb.WriteString(fmt.Sprintf("### %s\n```\n%s\n```\n\n", name, content))
+		}
+	}
 
 	return sb.String(), nil
 }
@@ -389,6 +511,58 @@ func readFileLimited(path string) (string, error) {
 	}
 
 	return string(buf[:n]), nil
+}
+
+// readMigrationSourceFiles reads source files relevant to database/service migration.
+func readMigrationSourceFiles(repoDir string, currentSize int) (map[string]string, error) {
+	files := make(map[string]string)
+	totalSize := currentSize
+
+	for _, pattern := range migrationSourcePatterns {
+		if totalSize >= maxTotalContext {
+			break
+		}
+		// filepath.Glob doesn't support ** so we walk and match manually
+		err := filepath.Walk(repoDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return nil
+			}
+			if info.IsDir() && skipDirs[info.Name()] {
+				return filepath.SkipDir
+			}
+			if info.IsDir() || totalSize >= maxTotalContext {
+				return nil
+			}
+			rel, relErr := filepath.Rel(repoDir, path)
+			if relErr != nil {
+				return nil
+			}
+			rel = filepath.ToSlash(rel)
+			matched, matchErr := filepath.Match(pattern, rel)
+			if matchErr != nil || !matched {
+				// Also try matching just the filename for **/name.* patterns
+				if strings.HasPrefix(pattern, "**/") {
+					subPattern := pattern[3:]
+					matched, _ = filepath.Match(subPattern, filepath.Base(rel))
+				}
+			}
+			if !matched {
+				return nil
+			}
+			content, readErr := readFileLimited(path)
+			if readErr != nil || len(content) == 0 {
+				return nil
+			}
+			files[rel] = content
+			totalSize += len(content)
+			return nil
+		})
+		if err != nil {
+			continue
+		}
+	}
+
+	return files, nil
 }
 
 // min returns the smaller of two integers.

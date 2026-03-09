@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -183,7 +184,58 @@ func (h *AutoMigrateHandler) AutoMigrate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Step 4: Create PR via GitHub API
+	// Step 4: Apply changes to local clone and verify build
+	allChanges := migration.CodeChanges
+	if err := applyChangesToClone(cloneDir, allChanges); err != nil {
+		log.Error().Err(err).Msg("failed to apply code changes to clone")
+		writeJSON(w, http.StatusCreated, autoMigrateResponse{
+			ServiceID: svc.ID.String(),
+			Message:   "Service provisioned. Failed to apply code changes locally: " + err.Error(),
+		})
+		return
+	}
+
+	buildPassed := false
+	var lastBuildOutput string
+	const maxBuildRetries = 3
+
+	for attempt := 0; attempt < maxBuildRetries; attempt++ {
+		log.Info().Int("attempt", attempt+1).Msg("verifying build")
+		output, buildErr := verifyBuild(ctx, cloneDir)
+		if buildErr == nil {
+			buildPassed = true
+			log.Info().Int("attempt", attempt+1).Msg("build passed")
+			break
+		}
+
+		lastBuildOutput = output
+		log.Warn().Int("attempt", attempt+1).Str("output", truncateString(output, 500)).Msg("build failed, asking AI for fixes")
+
+		fixes, fixErr := h.agent.FixBuildErrors(ctx, cfg.apiKey, cfg.model, cloneDir, output, req.ServiceType, lang)
+		if fixErr != nil {
+			log.Error().Err(fixErr).Msg("AI failed to generate build fixes")
+			break
+		}
+		if len(fixes) == 0 {
+			log.Warn().Msg("AI returned no fixes for build errors")
+			break
+		}
+
+		if err := applyChangesToClone(cloneDir, fixes); err != nil {
+			log.Error().Err(err).Msg("failed to apply fix changes to clone")
+			break
+		}
+		allChanges = append(allChanges, fixes...)
+	}
+
+	// Update migration with all changes (original + fixes) for PR creation
+	migration.CodeChanges = allChanges
+	if !buildPassed && lastBuildOutput != "" {
+		buildNote := "\n\n---\n**⚠️ Build verification failed** — the generated changes may require manual adjustments.\n\n<details><summary>Build output</summary>\n\n```\n" + truncateString(lastBuildOutput, 2000) + "\n```\n</details>"
+		migration.PRBody += buildNote
+	}
+
+	// Step 5: Create PR via GitHub API
 	prURL, err := h.createPR(ctx, app, migration, cloneDir)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to create PR")
@@ -194,11 +246,16 @@ func (h *AutoMigrateHandler) AutoMigrate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	log.Info().Str("pr_url", prURL).Msg("migration PR created")
+	message := "Service provisioned and migration PR created."
+	if !buildPassed {
+		message = "Service provisioned and migration PR created. Build verification failed — PR may need manual fixes."
+	}
+
+	log.Info().Str("pr_url", prURL).Bool("build_passed", buildPassed).Msg("migration PR created")
 	writeJSON(w, http.StatusCreated, autoMigrateResponse{
 		ServiceID: svc.ID.String(),
 		PRURL:     prURL,
-		Message:   "Service provisioned and migration PR created.",
+		Message:   message,
 	})
 }
 
@@ -314,7 +371,7 @@ func (h *AutoMigrateHandler) createPR(ctx context.Context, app *model.App, migra
 
 	// If package.json was modified, regenerate and commit the lockfile
 	if hasPackageJSONChange {
-		if err := h.updateLockfile(ctx, token, owner, repo, branchName, baseBranch, cloneDir, migration.CodeChanges); err != nil {
+		if err := h.updateLockfile(ctx, token, owner, repo, branchName, baseBranch, cloneDir); err != nil {
 			log.Warn().Err(err).Msg("failed to update lockfile — PR will need manual lockfile update")
 		}
 	}
@@ -338,20 +395,14 @@ func (h *AutoMigrateHandler) createPR(ctx context.Context, app *model.App, migra
 	return prURL, nil
 }
 
-// updateLockfile applies code changes to the local clone, runs the package manager's
-// lockfile update command, and commits the updated lockfile to the branch via GitHub API.
-func (h *AutoMigrateHandler) updateLockfile(
-	ctx context.Context, token, owner, repo, branch, baseBranch, cloneDir string,
-	codeChanges []agent.CodeChange,
-) error {
-	log := logger.With("auto-migrate")
-
-	// Apply code changes to local clone so lockfile generation has the updated package.json
-	for _, change := range codeChanges {
+// applyChangesToClone writes code changes to the local clone directory.
+func applyChangesToClone(cloneDir string, changes []agent.CodeChange) error {
+	for _, change := range changes {
+		targetPath := filepath.Join(cloneDir, filepath.FromSlash(change.File))
 		if change.Action == "delete" {
+			_ = os.Remove(targetPath)
 			continue
 		}
-		targetPath := filepath.Join(cloneDir, filepath.FromSlash(change.File))
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 			return fmt.Errorf("mkdir for %s: %w", change.File, err)
 		}
@@ -359,6 +410,96 @@ func (h *AutoMigrateHandler) updateLockfile(
 			return fmt.Errorf("write %s: %w", change.File, err)
 		}
 	}
+	return nil
+}
+
+// verifyBuild detects the project's build system and runs a build command to verify
+// the code compiles. Returns the combined output and any error.
+func verifyBuild(ctx context.Context, cloneDir string) (string, error) {
+	log := logger.With("auto-migrate")
+
+	type buildConfig struct {
+		name       string
+		detectFile string
+		installCmd []string
+		buildCmd   []string
+	}
+
+	configs := []buildConfig{
+		{"pnpm", "pnpm-lock.yaml", []string{"pnpm", "install", "--no-frozen-lockfile"}, []string{"pnpm", "run", "build"}},
+		{"yarn", "yarn.lock", []string{"yarn", "install", "--no-immutable"}, []string{"yarn", "run", "build"}},
+		{"npm", "package-lock.json", []string{"npm", "install", "--no-package-lock"}, []string{"npm", "run", "build"}},
+		{"npm-fallback", "package.json", []string{"npm", "install", "--no-package-lock"}, []string{"npm", "run", "build"}},
+		{"go", "go.mod", nil, []string{"go", "build", "./..."}},
+		{"cargo", "Cargo.toml", nil, []string{"cargo", "build"}},
+	}
+
+	var selected *buildConfig
+	for i, cfg := range configs {
+		if _, err := os.Stat(filepath.Join(cloneDir, cfg.detectFile)); err == nil {
+			selected = &configs[i]
+			break
+		}
+	}
+
+	if selected == nil {
+		log.Info().Msg("no recognized build system found, skipping build verification")
+		return "", nil // no build system detected — treat as success
+	}
+
+	log.Info().Str("build_system", selected.name).Msg("running build verification")
+
+	const buildTimeout = 120 * time.Second
+	var allOutput strings.Builder
+
+	// Run install command if present (Node.js projects need deps installed)
+	if selected.installCmd != nil {
+		installCtx, installCancel := context.WithTimeout(ctx, buildTimeout)
+		defer installCancel()
+
+		cmd := exec.CommandContext(installCtx, selected.installCmd[0], selected.installCmd[1:]...)
+		cmd.Dir = cloneDir
+		cmd.Env = append(os.Environ(), "CI=true")
+		output, err := cmd.CombinedOutput()
+		allOutput.WriteString(string(output))
+		if err != nil {
+			allOutput.WriteString("\n\nInstall failed: " + err.Error())
+			return allOutput.String(), fmt.Errorf("%s install failed: %w", selected.name, err)
+		}
+	}
+
+	// Run build command
+	buildCtx, buildCancel := context.WithTimeout(ctx, buildTimeout)
+	defer buildCancel()
+
+	cmd := exec.CommandContext(buildCtx, selected.buildCmd[0], selected.buildCmd[1:]...)
+	cmd.Dir = cloneDir
+	cmd.Env = append(os.Environ(), "CI=true")
+	output, err := cmd.CombinedOutput()
+	allOutput.WriteString("\n")
+	allOutput.WriteString(string(output))
+	if err != nil {
+		return allOutput.String(), fmt.Errorf("%s build failed: %w", selected.name, err)
+	}
+
+	return allOutput.String(), nil
+}
+
+// truncateString truncates a string to maxLen, adding an ellipsis if truncated.
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[len(s)-maxLen:] + "\n... (truncated)"
+}
+
+// updateLockfile runs the package manager's lockfile update command and commits
+// the updated lockfile to the branch via GitHub API.
+// NOTE: code changes must already be applied to cloneDir before calling this.
+func (h *AutoMigrateHandler) updateLockfile(
+	ctx context.Context, token, owner, repo, branch, baseBranch, cloneDir string,
+) error {
+	log := logger.With("auto-migrate")
 
 	// Detect package manager by existing lockfile
 	type pmConfig struct {
