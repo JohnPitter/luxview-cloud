@@ -184,6 +184,17 @@ func (h *AutoMigrateHandler) AutoMigrate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Filter out non-code changes (e.g. .env.example, .gitignore) — these don't warrant a PR
+	significantChanges := filterSignificantChanges(migration.CodeChanges)
+	if len(significantChanges) == 0 {
+		log.Info().Int("total_changes", len(migration.CodeChanges)).Msg("all changes are non-code files (e.g. .env.example) — skipping PR creation")
+		writeJSON(w, http.StatusCreated, autoMigrateResponse{
+			ServiceID: svc.ID.String(),
+			Message:   "Service provisioned. No code changes needed.",
+		})
+		return
+	}
+
 	// Step 4: Validate and apply changes to local clone
 	// Filter out destructive changes (AI sometimes replaces real code with stubs)
 	allChanges := validateCodeChanges(cloneDir, migration.CodeChanges)
@@ -751,6 +762,52 @@ func validateCodeChanges(cloneDir string, changes []agent.CodeChange) []agent.Co
 	}
 
 	return valid
+}
+
+// filterSignificantChanges returns only code changes that warrant a PR.
+// Non-code files like .env.example, .gitignore, README, etc. are excluded.
+func filterSignificantChanges(changes []agent.CodeChange) []agent.CodeChange {
+	var significant []agent.CodeChange
+	for _, change := range changes {
+		if isNonCodeFile(change.File) {
+			continue
+		}
+		significant = append(significant, change)
+	}
+	return significant
+}
+
+// isNonCodeFile returns true for files that are configuration/documentation
+// and should not trigger a PR on their own.
+func isNonCodeFile(filename string) bool {
+	base := filepath.Base(filename)
+	lower := strings.ToLower(base)
+
+	// Exact matches
+	nonCodeFiles := []string{
+		".env.example", ".env.sample", ".env.template",
+		".gitignore", ".gitattributes", ".editorconfig",
+		".prettierrc", ".prettierignore", ".eslintignore",
+		"readme.md", "changelog.md", "license", "license.md",
+		".dockerignore",
+	}
+	for _, f := range nonCodeFiles {
+		if lower == f {
+			return true
+		}
+	}
+
+	// Suffix matches
+	nonCodeSuffixes := []string{
+		".example", ".sample", ".template",
+	}
+	for _, s := range nonCodeSuffixes {
+		if strings.HasSuffix(lower, s) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // containsPlaceholderStubs checks if content has stub implementations.
