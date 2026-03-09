@@ -154,10 +154,10 @@ export function DeployWizard({
   return (
     <div className="max-w-2xl mx-auto">
       {/* Progress */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center mb-8">
         {steps.map((label, i) => (
-          <div key={i} className="flex items-center">
-            <div className="flex items-center gap-2">
+          <div key={i} className={`flex items-center ${i < steps.length - 1 ? 'flex-1' : ''}`}>
+            <div className="flex flex-col items-center gap-1 shrink-0">
               <div
                 className={`
                   w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold
@@ -176,8 +176,12 @@ export function DeployWizard({
                 {i < step ? <Check size={14} /> : i + 1}
               </div>
               <span
-                className={`text-xs font-medium hidden sm:inline ${
-                  i <= step ? (isDark ? 'text-zinc-200' : 'text-zinc-800') : 'text-zinc-500'
+                className={`text-[10px] font-medium text-center leading-tight max-w-[80px] ${
+                  i === step
+                    ? (isDark ? 'text-zinc-200' : 'text-zinc-800')
+                    : i < step
+                      ? (isDark ? 'text-zinc-400' : 'text-zinc-500')
+                      : 'text-zinc-500 hidden sm:block'
                 }`}
               >
                 {label}
@@ -185,7 +189,7 @@ export function DeployWizard({
             </div>
             {i < steps.length - 1 && (
               <div
-                className={`w-8 h-px mx-2 ${
+                className={`flex-1 h-px mx-2 ${
                   i < step ? 'bg-amber-400' : isDark ? 'bg-zinc-800' : 'bg-zinc-200'
                 }`}
               />

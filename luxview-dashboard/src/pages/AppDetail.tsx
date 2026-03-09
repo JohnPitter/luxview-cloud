@@ -814,7 +814,7 @@ export function AppDetail() {
 
         {/* ==================== SETTINGS ==================== */}
         {activeTab === 'settings' && (
-          <div className="space-y-6 max-w-2xl">
+          <div className="space-y-6 max-w-2xl mx-auto">
             <GlassCard>
               <h3
                 className={`text-sm font-semibold mb-4 ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}
