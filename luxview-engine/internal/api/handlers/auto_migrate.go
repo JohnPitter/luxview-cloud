@@ -349,11 +349,18 @@ func (h *AutoMigrateHandler) createPR(ctx context.Context, app *model.App, migra
 			continue // TODO: implement file deletion via GitHub API
 		}
 
-		// Get existing file SHA if modifying
+		// Get existing file SHA — check branch first (may have been modified by earlier commits), then base
 		var fileSHA string
-		if change.Action == "modify" {
-			_, existingSHA, err := h.github.GetFileContent(ctx, token, owner, repo, change.File, baseBranch)
-			if err == nil {
+		if change.Action == "modify" || change.Action == "create" {
+			// Try the PR branch first (file may have been committed in a previous iteration)
+			_, existingSHA, err := h.github.GetFileContent(ctx, token, owner, repo, change.File, branchName)
+			if err != nil {
+				// Fallback to base branch
+				_, existingSHA, err = h.github.GetFileContent(ctx, token, owner, repo, change.File, baseBranch)
+				if err == nil {
+					fileSHA = existingSHA
+				}
+			} else {
 				fileSHA = existingSHA
 			}
 		}
@@ -461,6 +468,18 @@ func verifyBuild(ctx context.Context, cloneDir string) (string, error) {
 	if selected == nil {
 		log.Info().Msg("no recognized build system found, skipping build verification")
 		return "", nil // no build system detected — treat as success
+	}
+
+	// Check if the build tool is actually installed before attempting to run it
+	toolBin := selected.installCmd
+	if toolBin == nil {
+		toolBin = selected.buildCmd
+	}
+	if toolBin != nil {
+		if _, lookErr := exec.LookPath(toolBin[0]); lookErr != nil {
+			log.Info().Str("build_system", selected.name).Str("tool", toolBin[0]).Msg("build tool not installed, skipping build verification")
+			return "", nil
+		}
 	}
 
 	log.Info().Str("build_system", selected.name).Msg("running build verification")
