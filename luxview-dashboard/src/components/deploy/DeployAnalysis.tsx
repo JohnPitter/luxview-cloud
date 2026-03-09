@@ -242,7 +242,7 @@ export function DeployAnalysis({
   const [serviceModes, setServiceModes] = useState<Record<string, MigrationMode>>(() => {
     const initial: Record<string, MigrationMode> = {};
     for (const rec of result.serviceRecommendations ?? []) {
-      initial[rec.recommendedService] = 'manual';
+      initial[rec.recommendedService] = 'auto';
     }
     return initial;
   });

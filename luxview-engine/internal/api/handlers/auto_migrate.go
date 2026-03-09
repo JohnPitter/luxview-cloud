@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -183,7 +184,7 @@ func (h *AutoMigrateHandler) AutoMigrate(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Step 4: Create PR via GitHub API
-	prURL, err := h.createPR(ctx, app, migration)
+	prURL, err := h.createPR(ctx, app, migration, cloneDir)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to create PR")
 		writeJSON(w, http.StatusCreated, autoMigrateResponse{
@@ -252,7 +253,8 @@ func (h *AutoMigrateHandler) cloneRepo(ctx context.Context, app *model.App) (str
 	return destDir, nil
 }
 
-func (h *AutoMigrateHandler) createPR(ctx context.Context, app *model.App, migration *agent.MigrationResult) (string, error) {
+func (h *AutoMigrateHandler) createPR(ctx context.Context, app *model.App, migration *agent.MigrationResult, cloneDir string) (string, error) {
+	log := logger.With("auto-migrate")
 	user, err := h.userRepo.FindByID(ctx, app.UserID)
 	if err != nil || user == nil {
 		return "", fmt.Errorf("find user: %w", err)
@@ -283,7 +285,8 @@ func (h *AutoMigrateHandler) createPR(ctx context.Context, app *model.App, migra
 		return "", fmt.Errorf("create branch: %w", err)
 	}
 
-	// Commit each file change
+	// Commit each file change and track if any package.json was modified
+	hasPackageJSONChange := false
 	for _, change := range migration.CodeChanges {
 		if change.Action == "delete" {
 			continue // TODO: implement file deletion via GitHub API
@@ -302,6 +305,17 @@ func (h *AutoMigrateHandler) createPR(ctx context.Context, app *model.App, migra
 		commitMsg := fmt.Sprintf("chore(luxview): %s", change.Description)
 		if err := h.github.CreateOrUpdateFile(ctx, token, owner, repo, change.File, commitMsg, content, fileSHA, branchName); err != nil {
 			return "", fmt.Errorf("commit file %s: %w", change.File, err)
+		}
+
+		if strings.HasSuffix(change.File, "package.json") {
+			hasPackageJSONChange = true
+		}
+	}
+
+	// If package.json was modified, regenerate and commit the lockfile
+	if hasPackageJSONChange {
+		if err := h.updateLockfile(ctx, token, owner, repo, branchName, baseBranch, cloneDir, migration.CodeChanges); err != nil {
+			log.Warn().Err(err).Msg("failed to update lockfile — PR will need manual lockfile update")
 		}
 	}
 
@@ -322,6 +336,90 @@ func (h *AutoMigrateHandler) createPR(ctx context.Context, app *model.App, migra
 	}
 
 	return prURL, nil
+}
+
+// updateLockfile applies code changes to the local clone, runs the package manager's
+// lockfile update command, and commits the updated lockfile to the branch via GitHub API.
+func (h *AutoMigrateHandler) updateLockfile(
+	ctx context.Context, token, owner, repo, branch, baseBranch, cloneDir string,
+	codeChanges []agent.CodeChange,
+) error {
+	log := logger.With("auto-migrate")
+
+	// Apply code changes to local clone so lockfile generation has the updated package.json
+	for _, change := range codeChanges {
+		if change.Action == "delete" {
+			continue
+		}
+		targetPath := filepath.Join(cloneDir, filepath.FromSlash(change.File))
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+			return fmt.Errorf("mkdir for %s: %w", change.File, err)
+		}
+		if err := os.WriteFile(targetPath, []byte(change.Content), 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", change.File, err)
+		}
+	}
+
+	// Detect package manager by existing lockfile
+	type pmConfig struct {
+		lockfile   string
+		installCmd string
+		installArg []string
+	}
+	managers := []pmConfig{
+		{"pnpm-lock.yaml", "pnpm", []string{"install", "--lockfile-only"}},
+		{"yarn.lock", "yarn", []string{"install", "--mode", "update-lockfile"}},
+		{"package-lock.json", "npm", []string{"install", "--package-lock-only"}},
+	}
+
+	var pm *pmConfig
+	for i, m := range managers {
+		if _, err := os.Stat(filepath.Join(cloneDir, m.lockfile)); err == nil {
+			pm = &managers[i]
+			break
+		}
+	}
+	if pm == nil {
+		return fmt.Errorf("no lockfile found in repo")
+	}
+
+	log.Info().Str("pm", pm.installCmd).Str("lockfile", pm.lockfile).Msg("regenerating lockfile")
+
+	// Run the lockfile update command
+	cmd := exec.CommandContext(ctx, pm.installCmd, pm.installArg...)
+	cmd.Dir = cloneDir
+	cmd.Env = append(os.Environ(), "CI=true")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s install failed: %s: %w", pm.installCmd, string(output), err)
+	}
+
+	// Read the updated lockfile
+	lockfilePath := filepath.Join(cloneDir, pm.lockfile)
+	lockfileContent, err := os.ReadFile(lockfilePath)
+	if err != nil {
+		return fmt.Errorf("read updated lockfile: %w", err)
+	}
+
+	// Get existing lockfile SHA from the branch (it may have been updated by prior commits)
+	_, existingSHA, err := h.github.GetFileContent(ctx, token, owner, repo, pm.lockfile, branch)
+	if err != nil {
+		// Try base branch
+		_, existingSHA, err = h.github.GetFileContent(ctx, token, owner, repo, pm.lockfile, baseBranch)
+		if err != nil {
+			return fmt.Errorf("get lockfile SHA: %w", err)
+		}
+	}
+
+	// Commit the updated lockfile
+	content := base64.StdEncoding.EncodeToString(lockfileContent)
+	commitMsg := "chore(luxview): update lockfile after dependency changes"
+	if err := h.github.CreateOrUpdateFile(ctx, token, owner, repo, pm.lockfile, commitMsg, content, existingSHA, branch); err != nil {
+		return fmt.Errorf("commit lockfile: %w", err)
+	}
+
+	log.Info().Str("lockfile", pm.lockfile).Msg("lockfile updated in PR")
+	return nil
 }
 
 // parseOwnerRepo extracts "owner" and "repo" from a GitHub URL.
