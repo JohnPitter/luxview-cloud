@@ -161,6 +161,24 @@ export function Admin() {
 
   useEffect(() => {
     fetchData();
+    // Auto-refresh admin data every 30s
+    const interval = setInterval(async () => {
+      try {
+        const [statsData, vpsData, usersData, appsData, plansData] = await Promise.all([
+          adminApi.stats(),
+          adminApi.vpsInfo(),
+          adminApi.listUsers(100, 0),
+          adminApi.listApps(100, 0),
+          plansApi.listAll(),
+        ]);
+        setStats(statsData);
+        setVpsInfo(vpsData);
+        setUsers(usersData.users ?? []);
+        setApps(appsData.apps ?? []);
+        setPlans(plansData ?? []);
+      } catch { /* silent refresh */ }
+    }, 30000);
+    return () => clearInterval(interval);
   }, [fetchData]);
 
   const fetchAISettings = useCallback(async () => {

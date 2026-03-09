@@ -14,6 +14,9 @@ export function Profile() {
 
   useEffect(() => {
     fetchApps();
+    // Auto-refresh apps every 30s
+    const interval = setInterval(fetchApps, 30000);
+    return () => clearInterval(interval);
   }, [fetchApps]);
 
   const runningApps = apps.filter((a) => a.status === 'running').length;

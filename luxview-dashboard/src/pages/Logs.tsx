@@ -34,8 +34,8 @@ export function Logs() {
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [logContent, setLogContent] = useState<Record<string, string>>({});
 
-  const fetchAllDeployments = async () => {
-    setLoading(true);
+  const fetchAllDeployments = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const allDeps: DeploymentWithApp[] = [];
       for (const app of apps) {
@@ -53,7 +53,7 @@ export function Logs() {
     } catch {
       // ignore
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -66,6 +66,18 @@ export function Logs() {
       fetchAllDeployments();
     }
   }, [apps.length]);
+
+  // Auto-refresh deployments every 10s when there are active builds
+  useEffect(() => {
+    if (apps.length === 0) return;
+    const hasActive = deployments.some((d) => ['building', 'deploying', 'pending'].includes(d.status));
+    if (!hasActive) return;
+
+    const interval = setInterval(() => {
+      fetchAllDeployments(true);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [apps.length, deployments]);
 
   const toggleLog = async (deployId: string) => {
     if (expandedLog === deployId) {

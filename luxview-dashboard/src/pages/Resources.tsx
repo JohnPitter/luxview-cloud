@@ -110,6 +110,11 @@ export function Resources() {
 
   useEffect(() => {
     fetchServices();
+    // Auto-refresh services every 30s
+    const interval = setInterval(() => {
+      servicesApi.listAll().then(setServices).catch(() => {});
+    }, 30000);
+    return () => clearInterval(interval);
   }, [fetchServices]);
 
   const togglePassword = (id: string) =>
