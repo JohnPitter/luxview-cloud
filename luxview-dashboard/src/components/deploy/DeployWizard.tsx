@@ -81,12 +81,14 @@ export function DeployWizard({
         t('deploy.wizard.steps.reviewDeploy'),
       ];
 
-  // Auto-advance to PR summary step when provisioning completes with PRs
+  // Auto-advance when provisioning completes: to PR summary (4) if PRs exist, or review (4 without PRs / 5 with PRs)
   useEffect(() => {
-    if (provisioningDone && hasPRs && step === 3) {
+    if (provisioningDone && step === 3) {
+      // When no PRs: steps has 5 items, review is step 4
+      // When PRs: steps has 6 items, PR summary is step 4, review is step 5
       setStep(4);
     }
-  }, [provisioningDone, hasPRs, step]);
+  }, [provisioningDone, step]);
 
   const handleRepoSelect = useCallback(
     (repo: GithubRepo) => {

@@ -176,16 +176,13 @@ export function NewApp() {
         await appsApi.updateEnvVars(appId, mergedEnvVars);
       }
 
-      // If PRs were created, show summary step instead of deploying immediately
+      // Always go to review step — never deploy directly
       if (collectedPrUrls.length > 0) {
         setPrUrls(collectedPrUrls);
-        setProvisioningDone(true);
-        setDeploying(false);
-        return;
       }
-
-      // No PRs — deploy directly
-      await deployAndNavigate(appId);
+      setProvisioningDone(true);
+      setDeploying(false);
+      return;
     } catch {
       setDeploying(false);
       addNotification({

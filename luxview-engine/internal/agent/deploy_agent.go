@@ -84,6 +84,7 @@ type MigrationResult struct {
 }
 
 // GenerateCodeChanges calls the AI to generate code modifications for migrating a service.
+// Retries once if the AI response is not valid JSON.
 func (a *DeployAgent) GenerateCodeChanges(ctx context.Context, apiKey, model, repoDir, serviceType, lang string) (*MigrationResult, error) {
 	log := logger.With("deploy-agent")
 	log.Info().Str("repo", repoDir).Str("service", serviceType).Msg("generating code changes for migration")
@@ -93,22 +94,36 @@ func (a *DeployAgent) GenerateCodeChanges(ctx context.Context, apiKey, model, re
 		return nil, fmt.Errorf("build context: %w", err)
 	}
 
+	log.Info().Int("prompt_len", len(userPrompt)).Msg("migration context built")
+
 	localizedPrompt := migrationSystemPrompt + "\n\nIMPORTANT: prTitle and prBody MUST be written in " + lang + " language. JSON keys stay in English."
 	userPrompt = userPrompt + "\n\nMigrate this project to use LuxView Cloud managed " + serviceType + ". The service is already provisioned — environment variables will be injected at runtime. Generate the minimal code changes needed."
 
-	raw, err := a.callLLMRaw(ctx, apiKey, model, localizedPrompt, userPrompt)
-	if err != nil {
-		return nil, fmt.Errorf("generate code changes: %w", err)
-	}
+	const maxAttempts = 2
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		raw, err := a.callLLMRaw(ctx, apiKey, model, localizedPrompt, userPrompt)
+		if err != nil {
+			return nil, fmt.Errorf("generate code changes: %w", err)
+		}
 
-	var result MigrationResult
-	if err := json.Unmarshal([]byte(raw), &result); err != nil {
-		log.Error().Str("raw_text", raw).Err(err).Msg("failed to parse migration response")
-		return nil, fmt.Errorf("parse migration response: %w", err)
-	}
+		// Try to extract JSON from the response (AI may include text before/after)
+		raw = extractJSON(raw)
 
-	log.Info().Int("changes", len(result.CodeChanges)).Msg("code changes generated")
-	return &result, nil
+		var result MigrationResult
+		if err := json.Unmarshal([]byte(raw), &result); err != nil {
+			log.Error().Int("attempt", attempt).Str("raw_text", truncateForLog(raw, 500)).Err(err).Msg("failed to parse migration response")
+			if attempt < maxAttempts {
+				log.Info().Msg("retrying with stricter prompt")
+				localizedPrompt = localizedPrompt + "\n\nCRITICAL: Your previous response was NOT valid JSON. You MUST respond with ONLY a JSON object. No text before or after the JSON. Start your response with { and end with }."
+				continue
+			}
+			return nil, fmt.Errorf("parse migration response: %w", err)
+		}
+
+		log.Info().Int("changes", len(result.CodeChanges)).Msg("code changes generated")
+		return &result, nil
+	}
+	return nil, fmt.Errorf("unreachable")
 }
 
 // BuildFixResult holds the additional code changes generated to fix build errors.
@@ -145,9 +160,11 @@ func (a *DeployAgent) FixBuildErrors(ctx context.Context, apiKey, model, repoDir
 		return nil, fmt.Errorf("fix build errors: %w", err)
 	}
 
+	raw = extractJSON(raw)
+
 	var result BuildFixResult
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
-		log.Error().Str("raw_text", raw).Err(err).Msg("failed to parse build fix response")
+		log.Error().Str("raw_text", truncateForLog(raw, 500)).Err(err).Msg("failed to parse build fix response")
 		return nil, fmt.Errorf("parse build fix response: %w", err)
 	}
 
@@ -298,12 +315,12 @@ func (a *DeployAgent) callLLM(ctx context.Context, apiKey, model, system, userPr
 
 	text := apiResp.Choices[0].Message.Content
 
-	// Strip markdown code fences if present
-	text = stripCodeFences(text)
+	// Extract JSON from response (handles code fences and surrounding text)
+	text = extractJSON(text)
 
 	var result AnalysisResult
 	if err := json.Unmarshal([]byte(text), &result); err != nil {
-		log.Error().Str("raw_text", text).Err(err).Msg("failed to parse agent response")
+		log.Error().Str("raw_text", truncateForLog(text, 500)).Err(err).Msg("failed to parse agent response")
 		return nil, fmt.Errorf("parse agent response: %w", err)
 	}
 
@@ -373,6 +390,34 @@ func (a *DeployAgent) callLLMRaw(ctx context.Context, apiKey, model, system, use
 	}
 
 	return stripCodeFences(apiResp.Choices[0].Message.Content), nil
+}
+
+// extractJSON attempts to find a JSON object in a string that may contain surrounding text.
+// Looks for the first { and last } to extract the JSON object.
+func extractJSON(s string) string {
+	s = stripCodeFences(s)
+
+	// If it already starts with {, return as-is
+	if strings.HasPrefix(strings.TrimSpace(s), "{") {
+		return s
+	}
+
+	// Find the first { and last }
+	start := strings.Index(s, "{")
+	end := strings.LastIndex(s, "}")
+	if start != -1 && end != -1 && end > start {
+		return s[start : end+1]
+	}
+
+	return s
+}
+
+// truncateForLog truncates a string for logging, adding ... if truncated.
+func truncateForLog(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // stripCodeFences removes markdown code fences from a string.
