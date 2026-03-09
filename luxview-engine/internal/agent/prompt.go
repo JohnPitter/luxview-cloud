@@ -10,8 +10,9 @@ import (
 )
 
 const maxFilesInTree = 200
-const maxFileSize = 16 * 1024  // 16KB per file
-const maxTotalContext = 50 * 1024 // 50KB total context
+const maxFileSize = 16 * 1024   // 16KB per file
+const maxTotalContext = 50 * 1024  // 50KB total context for deploy analysis
+const maxMigrationContext = 256 * 1024 // 256KB total context for migration (needs full codebase)
 
 // Directories to skip when scanning the repo.
 var skipDirs = map[string]bool{
@@ -68,26 +69,23 @@ var monorepoPatterns = []string{
 	"packages/*/Dockerfile",
 }
 
-// Source file patterns to include for migration context (database/connection related).
-var migrationSourcePatterns = []string{
-	"**/connection.*",
-	"**/database.*",
-	"**/db.*",
-	"**/migrate.*",
-	"**/migration.*",
-	"**/seed.*",
-	"**/schema/*",
-	"**/drizzle.*",
-	"**/prisma/schema.prisma",
-	"**/knexfile.*",
-	"**/ormconfig.*",
-	"**/typeorm.*",
-	"packages/database/src/*",
-	"src/database/*",
-	"src/db/*",
-	"src/lib/db.*",
-	"src/lib/database.*",
-	"src/config/database.*",
+// Source code file extensions to include for full migration context.
+var sourceCodeExtensions = map[string]bool{
+	".ts": true, ".tsx": true, ".js": true, ".jsx": true, ".mjs": true, ".cjs": true,
+	".py": true, ".go": true, ".java": true, ".kt": true, ".rs": true,
+	".json": true, ".toml": true, ".yaml": true, ".yml": true,
+	".prisma": true, ".graphql": true, ".gql": true, ".sql": true,
+	".env.example": true, ".env.sample": true,
+}
+
+// Directories to skip when reading source code for migration.
+var skipSourceDirs = map[string]bool{
+	"node_modules": true, ".git": true, "dist": true, "build": true,
+	".next": true, "target": true, "__pycache__": true, ".turbo": true,
+	"coverage": true, ".cache": true, ".output": true, ".nuxt": true,
+	".vercel": true, ".svelte-kit": true, "vendor": true, "venv": true,
+	".venv": true, "env": true, ".tox": true, ".mypy_cache": true,
+	".pytest_cache": true, ".gradle": true, ".idea": true, ".vscode": true,
 }
 
 const systemPrompt = `You are a Deploy Agent for LuxView Cloud, a self-hosted PaaS platform.
@@ -195,9 +193,9 @@ The service has ALREADY been provisioned. Environment variables are automaticall
 5. Example of CORRECT code: const url = process.env.DATABASE_URL || ''; if (!url) throw new Error('DATABASE_URL is required');
 
 ## COMPLETENESS RULES (MANDATORY — the build MUST pass after your changes):
-1. Search ALL files in the repository that import/require the old service module and update ALL of them.
-2. If you change a module's exports, update ALL files that import from that module.
-3. If you change package.json dependencies, update ALL source files that import the old dependency.
+1. You are given the COMPLETE source code of the repository. You MUST read EVERY file to find ALL imports/requires of the old service module and update ALL of them.
+2. If you change a module's exports, check EVERY file in the codebase that imports from that module and update them.
+3. If you change package.json dependencies, grep through EVERY source file for imports of the old dependency and update them all.
 4. For ORM migrations (e.g., SQLite → PostgreSQL with Drizzle):
    - Update the driver import (e.g., drizzle-orm/libsql → drizzle-orm/postgres-js)
    - Update ALL schema files if they use DB-specific types (e.g., sqliteTable → pgTable)
@@ -293,7 +291,8 @@ func BuildContext(repoDir string) (string, error) {
 	return sb.String(), nil
 }
 
-// BuildMigrationContext builds a user prompt for migration, including database/connection source files.
+// BuildMigrationContext builds a user prompt for migration, reading ALL source code files
+// so the AI agent can see every import, every usage, and generate a complete migration.
 func BuildMigrationContext(repoDir string) (string, error) {
 	log := logger.With("deploy-agent")
 
@@ -302,25 +301,13 @@ func BuildMigrationContext(repoDir string) (string, error) {
 		return "", fmt.Errorf("build file tree: %w", err)
 	}
 
-	files, err := readKeyFiles(repoDir)
+	// Read ALL source code files (not just key files + migration patterns)
+	files, err := readAllSourceFiles(repoDir)
 	if err != nil {
-		log.Warn().Err(err).Msg("partial error reading key files")
+		log.Warn().Err(err).Msg("partial error reading source files")
 	}
 
-	// Also read migration-related source files
-	totalSize := 0
-	for _, content := range files {
-		totalSize += len(content)
-	}
-	sourceFiles, err := readMigrationSourceFiles(repoDir, totalSize)
-	if err != nil {
-		log.Warn().Err(err).Msg("partial error reading migration source files")
-	}
-	for name, content := range sourceFiles {
-		if _, exists := files[name]; !exists {
-			files[name] = content
-		}
-	}
+	log.Info().Int("files", len(files)).Msg("migration context: source files loaded")
 
 	var sb strings.Builder
 	sb.WriteString("## Repository File Tree\n```\n")
@@ -328,7 +315,7 @@ func BuildMigrationContext(repoDir string) (string, error) {
 	sb.WriteString("```\n\n")
 
 	if len(files) > 0 {
-		sb.WriteString("## Key File Contents\n\n")
+		sb.WriteString("## Source Code (ALL files — you MUST check every file for imports/usages that need updating)\n\n")
 		for name, content := range files {
 			sb.WriteString(fmt.Sprintf("### %s\n```\n%s\n```\n\n", name, content))
 		}
@@ -513,56 +500,85 @@ func readFileLimited(path string) (string, error) {
 	return string(buf[:n]), nil
 }
 
-// readMigrationSourceFiles reads source files relevant to database/service migration.
-func readMigrationSourceFiles(repoDir string, currentSize int) (map[string]string, error) {
+// readAllSourceFiles reads ALL source code files from the repo for full migration context.
+// Uses maxMigrationContext (256KB) limit to fit within LLM context windows.
+func readAllSourceFiles(repoDir string) (map[string]string, error) {
+	log := logger.With("deploy-agent")
 	files := make(map[string]string)
-	totalSize := currentSize
+	totalSize := 0
+	skippedCount := 0
 
-	for _, pattern := range migrationSourcePatterns {
-		if totalSize >= maxTotalContext {
-			break
-		}
-		// filepath.Glob doesn't support ** so we walk and match manually
-		err := filepath.Walk(repoDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return nil
-			}
-			if info.IsDir() && skipDirs[info.Name()] {
-				return filepath.SkipDir
-			}
-			if info.IsDir() || totalSize >= maxTotalContext {
-				return nil
-			}
-			rel, relErr := filepath.Rel(repoDir, path)
-			if relErr != nil {
-				return nil
-			}
-			rel = filepath.ToSlash(rel)
-			matched, matchErr := filepath.Match(pattern, rel)
-			if matchErr != nil || !matched {
-				// Also try matching just the filename for **/name.* patterns
-				if strings.HasPrefix(pattern, "**/") {
-					subPattern := pattern[3:]
-					matched, _ = filepath.Match(subPattern, filepath.Base(rel))
-				}
-			}
-			if !matched {
-				return nil
-			}
-			content, readErr := readFileLimited(path)
-			if readErr != nil || len(content) == 0 {
-				return nil
-			}
-			files[rel] = content
-			totalSize += len(content)
-			return nil
-		})
+	err := filepath.Walk(repoDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			continue
+			return nil
 		}
+		if info.IsDir() && skipSourceDirs[info.Name()] {
+			return filepath.SkipDir
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if totalSize >= maxMigrationContext {
+			skippedCount++
+			return nil
+		}
+
+		// Check if file extension is a source code file
+		ext := strings.ToLower(filepath.Ext(info.Name()))
+		fullName := strings.ToLower(info.Name())
+		if !sourceCodeExtensions[ext] && !sourceCodeExtensions[fullName] {
+			return nil
+		}
+
+		// Skip test files, lockfiles, and generated files to save context
+		rel, relErr := filepath.Rel(repoDir, path)
+		if relErr != nil {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+		if isSkippableForMigration(rel) {
+			return nil
+		}
+
+		content, readErr := readFileLimited(path)
+		if readErr != nil || len(content) == 0 {
+			return nil
+		}
+
+		files[rel] = content
+		totalSize += len(content)
+		return nil
+	})
+
+	if skippedCount > 0 {
+		log.Warn().Int("skipped", skippedCount).Int("total_kb", totalSize/1024).Msg("migration context limit reached, some files skipped")
 	}
 
-	return files, nil
+	return files, err
+}
+
+// isSkippableForMigration returns true for files that don't need to be in migration context.
+func isSkippableForMigration(rel string) bool {
+	lower := strings.ToLower(rel)
+	// Skip test files
+	if strings.Contains(lower, ".test.") || strings.Contains(lower, ".spec.") ||
+		strings.Contains(lower, "_test.go") || strings.HasPrefix(lower, "test/") ||
+		strings.HasPrefix(lower, "tests/") || strings.HasPrefix(lower, "__tests__/") {
+		return true
+	}
+	// Skip lockfiles (not source code)
+	base := filepath.Base(lower)
+	if base == "pnpm-lock.yaml" || base == "package-lock.json" || base == "yarn.lock" ||
+		base == "poetry.lock" || base == "pipfile.lock" || base == "cargo.lock" ||
+		base == "go.sum" {
+		return true
+	}
+	// Skip generated/config files that don't contain import statements
+	if base == "tsconfig.json" || base == "tsconfig.build.json" ||
+		strings.HasPrefix(base, ".eslint") || strings.HasPrefix(base, ".prettier") {
+		return true
+	}
+	return false
 }
 
 // min returns the smaller of two integers.
