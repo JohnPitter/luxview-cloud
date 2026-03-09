@@ -122,7 +122,7 @@ export function Logs() {
         <PillButton
           variant="secondary"
           size="sm"
-          onClick={fetchAllDeployments}
+          onClick={() => fetchAllDeployments()}
           icon={<RefreshCw size={14} />}
         >
           {t('common.refresh')}
