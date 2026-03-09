@@ -428,12 +428,26 @@ func verifyBuild(ctx context.Context, cloneDir string) (string, error) {
 	}
 
 	configs := []buildConfig{
+		// Node.js (pnpm/yarn/npm) — covers Node.js, Next.js, Vite stacks
 		{"pnpm", "pnpm-lock.yaml", []string{"pnpm", "install", "--no-frozen-lockfile"}, []string{"pnpm", "run", "build"}, []string{"pnpm", "run", "lint"}, []string{"pnpm", "run", "test"}},
 		{"yarn", "yarn.lock", []string{"yarn", "install", "--no-immutable"}, []string{"yarn", "run", "build"}, []string{"yarn", "run", "lint"}, []string{"yarn", "run", "test"}},
 		{"npm", "package-lock.json", []string{"npm", "install", "--no-package-lock"}, []string{"npm", "run", "build"}, []string{"npm", "run", "lint"}, []string{"npm", "run", "test"}},
 		{"npm-fallback", "package.json", []string{"npm", "install", "--no-package-lock"}, []string{"npm", "run", "build"}, []string{"npm", "run", "lint"}, []string{"npm", "run", "test"}},
+		// Go
 		{"go", "go.mod", nil, []string{"go", "build", "./..."}, []string{"go", "vet", "./..."}, []string{"go", "test", "./..."}},
+		// Rust
 		{"cargo", "Cargo.toml", nil, []string{"cargo", "build"}, []string{"cargo", "clippy"}, []string{"cargo", "test"}},
+		// Java — Maven
+		{"maven", "pom.xml", nil, []string{"mvn", "compile", "-q"}, []string{"mvn", "checkstyle:check", "-q"}, []string{"mvn", "test", "-q"}},
+		// Java — Gradle
+		{"gradle", "build.gradle", nil, []string{"gradle", "compileJava", "-q"}, []string{"gradle", "checkstyleMain", "-q"}, []string{"gradle", "test", "-q"}},
+		{"gradle-kts", "build.gradle.kts", nil, []string{"gradle", "compileJava", "-q"}, []string{"gradle", "checkstyleMain", "-q"}, []string{"gradle", "test", "-q"}},
+		// Python — pip with requirements.txt
+		{"pip", "requirements.txt", []string{"pip", "install", "-r", "requirements.txt"}, nil, []string{"python", "-m", "flake8", "."}, []string{"python", "-m", "pytest"}},
+		// Python — Poetry
+		{"poetry", "pyproject.toml", []string{"poetry", "install", "--no-interaction"}, nil, []string{"poetry", "run", "flake8", "."}, []string{"poetry", "run", "pytest"}},
+		// Python — Pipenv
+		{"pipenv", "Pipfile", []string{"pipenv", "install", "--dev"}, nil, []string{"pipenv", "run", "flake8", "."}, []string{"pipenv", "run", "pytest"}},
 	}
 
 	var selected *buildConfig
@@ -470,18 +484,20 @@ func verifyBuild(ctx context.Context, cloneDir string) (string, error) {
 		}
 	}
 
-	// Run build command
-	buildCtx, buildCancel := context.WithTimeout(ctx, buildTimeout)
-	defer buildCancel()
+	// Run build command (some stacks like Python don't have a compile step)
+	if selected.buildCmd != nil {
+		buildCtx, buildCancel := context.WithTimeout(ctx, buildTimeout)
+		defer buildCancel()
 
-	cmd := exec.CommandContext(buildCtx, selected.buildCmd[0], selected.buildCmd[1:]...)
-	cmd.Dir = cloneDir
-	cmd.Env = append(os.Environ(), "CI=true")
-	output, err := cmd.CombinedOutput()
-	allOutput.WriteString("\n")
-	allOutput.WriteString(string(output))
-	if err != nil {
-		return allOutput.String(), fmt.Errorf("%s build failed: %w", selected.name, err)
+		cmd := exec.CommandContext(buildCtx, selected.buildCmd[0], selected.buildCmd[1:]...)
+		cmd.Dir = cloneDir
+		cmd.Env = append(os.Environ(), "CI=true")
+		output, err := cmd.CombinedOutput()
+		allOutput.WriteString("\n")
+		allOutput.WriteString(string(output))
+		if err != nil {
+			return allOutput.String(), fmt.Errorf("%s build failed: %w", selected.name, err)
+		}
 	}
 
 	// Run lint command if available (skip gracefully if script doesn't exist)
@@ -521,11 +537,25 @@ func verifyBuild(ctx context.Context, cloneDir string) (string, error) {
 
 // isMissingScript checks if command output indicates the script/command doesn't exist.
 func isMissingScript(output string) bool {
-	return strings.Contains(output, "Missing script") ||
-		strings.Contains(output, "missing script") ||
-		strings.Contains(output, "command not found") ||
-		strings.Contains(output, "No such command") ||
-		strings.Contains(output, "no test files")
+	indicators := []string{
+		// Node.js (pnpm/yarn/npm)
+		"Missing script", "missing script", "No such command",
+		// General
+		"command not found", "not recognized as",
+		// Go
+		"no test files", "no Go files",
+		// Python
+		"No module named flake8", "No module named pytest",
+		// Maven/Gradle
+		"Could not find goal", "Task 'checkstyleMain' not found",
+		"plugin not found", "Unknown lifecycle phase",
+	}
+	for _, s := range indicators {
+		if strings.Contains(output, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // truncateString truncates a string to maxLen, adding an ellipsis if truncated.
