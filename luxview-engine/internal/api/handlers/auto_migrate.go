@@ -184,8 +184,17 @@ func (h *AutoMigrateHandler) AutoMigrate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Step 4: Apply changes to local clone and verify build
-	allChanges := migration.CodeChanges
+	// Step 4: Validate and apply changes to local clone
+	// Filter out destructive changes (AI sometimes replaces real code with stubs)
+	allChanges := validateCodeChanges(cloneDir, migration.CodeChanges)
+	if len(allChanges) == 0 {
+		log.Warn().Msg("all code changes were rejected by validation")
+		writeJSON(w, http.StatusCreated, autoMigrateResponse{
+			ServiceID: svc.ID.String(),
+			Message:   "Service provisioned. Code changes were rejected because they would destroy existing code.",
+		})
+		return
+	}
 	if err := applyChangesToClone(cloneDir, allChanges); err != nil {
 		log.Error().Err(err).Msg("failed to apply code changes to clone")
 		writeJSON(w, http.StatusCreated, autoMigrateResponse{
@@ -686,4 +695,76 @@ func sanitizeBranchName(name string) string {
 		result = result[:100]
 	}
 	return result
+}
+
+// validateCodeChanges filters out destructive changes where the AI replaced
+// real implementations with stubs or significantly reduced file content.
+func validateCodeChanges(cloneDir string, changes []agent.CodeChange) []agent.CodeChange {
+	log := logger.With("auto-migrate")
+	var valid []agent.CodeChange
+
+	for _, change := range changes {
+		if change.Action == "create" || change.Action == "delete" {
+			valid = append(valid, change)
+			continue
+		}
+
+		// For modifications, compare with original file
+		origPath := filepath.Join(cloneDir, filepath.FromSlash(change.File))
+		origData, err := os.ReadFile(origPath)
+		if err != nil {
+			// File doesn't exist — treat as create
+			valid = append(valid, change)
+			continue
+		}
+
+		origSize := len(origData)
+		newSize := len(change.Content)
+
+		// Reject if new content is less than 50% of original size (AI likely destroyed the file)
+		if origSize > 200 && newSize < origSize/2 {
+			log.Warn().
+				Str("file", change.File).
+				Int("original_size", origSize).
+				Int("new_size", newSize).
+				Msg("REJECTED: change would reduce file to less than 50% of original size — AI likely destroyed code")
+			continue
+		}
+
+		// Reject if content contains placeholder stubs
+		if containsPlaceholderStubs(change.Content) {
+			log.Warn().
+				Str("file", change.File).
+				Msg("REJECTED: change contains placeholder stubs (// Implementation would...)")
+			continue
+		}
+
+		valid = append(valid, change)
+	}
+
+	if len(valid) < len(changes) {
+		log.Warn().
+			Int("original", len(changes)).
+			Int("accepted", len(valid)).
+			Int("rejected", len(changes)-len(valid)).
+			Msg("some code changes were rejected by validation")
+	}
+
+	return valid
+}
+
+// containsPlaceholderStubs checks if content has stub implementations.
+func containsPlaceholderStubs(content string) bool {
+	stubs := []string{
+		"// Implementation would",
+		"// Placeholder",
+		"// TODO: implement",
+		"// implementation would",
+		"// placeholder",
+	}
+	count := 0
+	for _, stub := range stubs {
+		count += strings.Count(content, stub)
+	}
+	return count >= 2 // Two or more stubs = likely a destroyed file
 }

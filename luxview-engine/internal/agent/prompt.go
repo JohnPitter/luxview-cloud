@@ -205,14 +205,23 @@ The service has ALREADY been provisioned. Environment variables are automaticall
 6. Do NOT introduce new exports that don't exist (e.g., don't add "export * from './drizzle'" if there is no drizzle.ts file).
 7. Preserve existing exports — if a file exported symbols, the new version must export the same symbols.
 
+## SCOPE RULES (CRITICAL — violations destroy the codebase):
+1. ONLY modify files that DIRECTLY use the old database/service being migrated (e.g., files that import the old driver, connection module, or schema types).
+2. NEVER modify files that don't import or use the service being migrated. For example, if migrating SQLite→PostgreSQL, do NOT touch WhatsApp services, API routes, middleware, UI components, or any file that doesn't directly reference the database.
+3. NEVER replace real function implementations with placeholder stubs or "// Implementation would..." comments. Every function body in your output MUST be the COMPLETE, WORKING implementation.
+4. NEVER truncate or simplify existing code. If a file has 500 lines and you only need to change 3 lines, your output must contain ALL 500 lines with only those 3 lines changed.
+5. NEVER remove methods, classes, functions, or exports that exist in the original file unless they are DIRECTLY related to the old service being replaced.
+6. If you are unsure whether a file needs changes, DO NOT include it in codeChanges. It is far better to miss a file than to destroy one.
+
 ## CODE QUALITY RULES:
-1. For each file change, provide the COMPLETE new file content (not a diff).
-2. Do not refactor unrelated code — only modify files that relate to the service connection.
+1. For each file change, provide the COMPLETE new file content (not a diff). The content must be IDENTICAL to the original except for the specific lines that need to change for the migration.
+2. Do not refactor unrelated code — only modify the specific lines that relate to the service connection.
 3. Do not add unnecessary configuration options or connection pool tuning unless the original code had them.
 4. Keep the same code style (semicolons, quotes, indentation) as the original file.
 5. Do not add comments like "// PostgreSQL is now managed by LuxView Cloud" — the code should be self-explanatory.
 6. Do not duplicate imports or code blocks — each import/statement should appear exactly once.
 7. Files must end with a newline character.
+8. The output file MUST have approximately the same number of lines as the input file (±20%). If your change reduces a file by more than 20%, you are almost certainly destroying code.
 
 ## DOCKERFILE RULES:
 1. Do NOT add garbage lines or duplicate existing instructions.
