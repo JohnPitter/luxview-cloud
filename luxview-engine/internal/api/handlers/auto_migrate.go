@@ -423,15 +423,16 @@ func verifyBuild(ctx context.Context, cloneDir string) (string, error) {
 		detectFile string
 		installCmd []string
 		buildCmd   []string
+		lintCmd    []string // optional lint/typecheck command
 	}
 
 	configs := []buildConfig{
-		{"pnpm", "pnpm-lock.yaml", []string{"pnpm", "install", "--no-frozen-lockfile"}, []string{"pnpm", "run", "build"}},
-		{"yarn", "yarn.lock", []string{"yarn", "install", "--no-immutable"}, []string{"yarn", "run", "build"}},
-		{"npm", "package-lock.json", []string{"npm", "install", "--no-package-lock"}, []string{"npm", "run", "build"}},
-		{"npm-fallback", "package.json", []string{"npm", "install", "--no-package-lock"}, []string{"npm", "run", "build"}},
-		{"go", "go.mod", nil, []string{"go", "build", "./..."}},
-		{"cargo", "Cargo.toml", nil, []string{"cargo", "build"}},
+		{"pnpm", "pnpm-lock.yaml", []string{"pnpm", "install", "--no-frozen-lockfile"}, []string{"pnpm", "run", "build"}, []string{"pnpm", "run", "lint"}},
+		{"yarn", "yarn.lock", []string{"yarn", "install", "--no-immutable"}, []string{"yarn", "run", "build"}, []string{"yarn", "run", "lint"}},
+		{"npm", "package-lock.json", []string{"npm", "install", "--no-package-lock"}, []string{"npm", "run", "build"}, []string{"npm", "run", "lint"}},
+		{"npm-fallback", "package.json", []string{"npm", "install", "--no-package-lock"}, []string{"npm", "run", "build"}, []string{"npm", "run", "lint"}},
+		{"go", "go.mod", nil, []string{"go", "build", "./..."}, []string{"go", "vet", "./..."}},
+		{"cargo", "Cargo.toml", nil, []string{"cargo", "build"}, []string{"cargo", "clippy"}},
 	}
 
 	var selected *buildConfig
@@ -480,6 +481,29 @@ func verifyBuild(ctx context.Context, cloneDir string) (string, error) {
 	allOutput.WriteString(string(output))
 	if err != nil {
 		return allOutput.String(), fmt.Errorf("%s build failed: %w", selected.name, err)
+	}
+
+	// Run lint command if available (non-fatal if the script doesn't exist)
+	if selected.lintCmd != nil {
+		lintCtx, lintCancel := context.WithTimeout(ctx, buildTimeout)
+		defer lintCancel()
+
+		lintExec := exec.CommandContext(lintCtx, selected.lintCmd[0], selected.lintCmd[1:]...)
+		lintExec.Dir = cloneDir
+		lintExec.Env = append(os.Environ(), "CI=true")
+		lintOutput, lintErr := lintExec.CombinedOutput()
+		allOutput.WriteString("\n")
+		allOutput.WriteString(string(lintOutput))
+		if lintErr != nil {
+			// Check if the lint script simply doesn't exist (exit code from "missing script")
+			lintStr := string(lintOutput)
+			if strings.Contains(lintStr, "Missing script") || strings.Contains(lintStr, "missing script") ||
+				strings.Contains(lintStr, "command not found") || strings.Contains(lintStr, "No such command") {
+				log.Debug().Msg("lint script not found, skipping")
+			} else {
+				return allOutput.String(), fmt.Errorf("%s lint failed: %w", selected.name, lintErr)
+			}
+		}
 	}
 
 	return allOutput.String(), nil
