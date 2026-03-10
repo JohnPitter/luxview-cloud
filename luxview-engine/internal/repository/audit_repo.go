@@ -58,7 +58,7 @@ func (r *AuditLogRepo) List(ctx context.Context, filter AuditFilter, limit, offs
 	where, args := buildAuditWhere(filter)
 
 	query := fmt.Sprintf(
-		`SELECT id, actor_id, actor_username, action, resource_type, resource_id, resource_name, old_values, new_values, ip_address::TEXT, created_at
+		`SELECT id, actor_id, actor_username, action, resource_type, resource_id, resource_name, old_values, new_values, host(ip_address)::TEXT, created_at
 		 FROM audit_logs %s ORDER BY created_at DESC LIMIT %d OFFSET %d`,
 		where, limit, offset,
 	)
