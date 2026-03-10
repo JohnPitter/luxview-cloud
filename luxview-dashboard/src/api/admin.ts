@@ -91,3 +91,48 @@ export const adminApi = {
     await api.delete(`/admin/apps/${appId}`);
   },
 };
+
+export interface CleanupSettings {
+  enabled: boolean;
+  intervalHours: number;
+  thresholdPercent: number;
+}
+
+export interface CleanupResult {
+  imagesRemoved: number;
+  containersRemoved: number;
+  buildCacheReclaimed: number;
+  imagesReclaimed: number;
+  totalReclaimed: number;
+}
+
+export interface DiskUsage {
+  diskTotal: number;
+  diskUsed: number;
+  diskAvailable: number;
+  diskPercent: string;
+  docker?: Array<{ type: string; size: string; reclaimable: string }>;
+  imageCount?: number;
+  activeContainerCount?: number;
+}
+
+export const cleanupApi = {
+  async getSettings(): Promise<CleanupSettings> {
+    const { data } = await api.get<CleanupSettings>('/admin/settings/cleanup');
+    return data;
+  },
+
+  async updateSettings(settings: Partial<CleanupSettings>): Promise<void> {
+    await api.put('/admin/settings/cleanup', settings);
+  },
+
+  async trigger(): Promise<CleanupResult> {
+    const { data } = await api.post<CleanupResult>('/admin/cleanup/trigger');
+    return data;
+  },
+
+  async diskUsage(): Promise<DiskUsage> {
+    const { data } = await api.get<DiskUsage>('/admin/cleanup/disk-usage');
+    return data;
+  },
+};

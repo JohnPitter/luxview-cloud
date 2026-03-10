@@ -9,6 +9,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
@@ -170,6 +171,46 @@ func (c *Client) ContainerExec(ctx context.Context, containerID string, cmd []st
 	}
 
 	return buf.String(), nil
+}
+
+// PruneResult holds the result of a system-wide prune operation.
+type PruneResult struct {
+	ImagesRemoved      int   `json:"imagesRemoved"`
+	ContainersRemoved  int   `json:"containersRemoved"`
+	BuildCacheReclaimed int64 `json:"buildCacheReclaimed"`
+	ImagesReclaimed    int64 `json:"imagesReclaimed"`
+	TotalReclaimed     int64 `json:"totalReclaimed"`
+}
+
+// SystemPrune removes unused containers, dangling images, and build cache.
+func (c *Client) SystemPrune(ctx context.Context) (*PruneResult, error) {
+	result := &PruneResult{}
+
+	// Prune stopped containers
+	containerReport, err := c.cli.ContainersPrune(ctx, filters.Args{})
+	if err == nil {
+		result.ContainersRemoved = len(containerReport.ContainersDeleted)
+		result.TotalReclaimed += int64(containerReport.SpaceReclaimed)
+	}
+
+	// Prune all unused images (not just dangling)
+	pruneFilters := filters.NewArgs()
+	pruneFilters.Add("dangling", "false")
+	imageReport, err := c.cli.ImagesPrune(ctx, pruneFilters)
+	if err == nil {
+		result.ImagesRemoved = len(imageReport.ImagesDeleted)
+		result.ImagesReclaimed = int64(imageReport.SpaceReclaimed)
+		result.TotalReclaimed += int64(imageReport.SpaceReclaimed)
+	}
+
+	// Prune build cache
+	buildReport, err := c.cli.BuildCachePrune(ctx, types.BuildCachePruneOptions{All: true})
+	if err == nil {
+		result.BuildCacheReclaimed = int64(buildReport.SpaceReclaimed)
+		result.TotalReclaimed += int64(buildReport.SpaceReclaimed)
+	}
+
+	return result, nil
 }
 
 func intPtr(i int) *int {

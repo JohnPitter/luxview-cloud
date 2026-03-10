@@ -11,6 +11,7 @@ import (
 	"github.com/luxview/engine/internal/config"
 	"github.com/luxview/engine/internal/repository"
 	"github.com/luxview/engine/internal/service"
+	dockerclient "github.com/luxview/engine/pkg/docker"
 )
 
 // Deps holds all dependencies needed to set up the router.
@@ -30,6 +31,7 @@ type Deps struct {
 	EncryptKey  []byte
 	PlanRepo     *repository.PlanRepo
 	SettingsRepo *repository.SettingsRepo
+	Docker       *dockerclient.Client
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -73,6 +75,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	planHandler := handlers.NewPlanHandler(deps.PlanRepo, deps.UserRepo, deps.AppRepo)
 	settingsHandler := handlers.NewSettingsHandler(deps.SettingsRepo)
 	analyzeHandler := handlers.NewAnalyzeHandler(deps.AppRepo, deps.UserRepo, deps.DeployRepo, deps.SettingsRepo, deps.ServiceRepo, deps.Provisioner, deps.EncryptKey)
+	cleanupHandler := handlers.NewCleanupHandler(deps.SettingsRepo, deps.Docker)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 
@@ -179,6 +182,10 @@ func NewRouter(deps Deps) *chi.Mux {
 				r.Get("/admin/settings/ai", settingsHandler.GetAISettings)
 				r.Put("/admin/settings/ai", settingsHandler.UpdateAISettings)
 				r.Post("/admin/settings/ai/test", settingsHandler.TestAIConnection)
+				r.Get("/admin/settings/cleanup", cleanupHandler.GetCleanupSettings)
+				r.Put("/admin/settings/cleanup", cleanupHandler.UpdateCleanupSettings)
+				r.Post("/admin/cleanup/trigger", cleanupHandler.TriggerCleanup)
+				r.Get("/admin/cleanup/disk-usage", cleanupHandler.DiskUsage)
 			})
 		})
 	})

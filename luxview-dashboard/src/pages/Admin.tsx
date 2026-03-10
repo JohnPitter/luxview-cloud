@@ -36,12 +36,12 @@ import { AppStatusBadge } from '../components/apps/AppStatusBadge';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { useThemeStore } from '../stores/theme.store';
 import { useNotificationsStore } from '../stores/notifications.store';
-import { adminApi, type AdminStats, type AdminUser, type AdminApp, type VPSInfo } from '../api/admin';
+import { adminApi, cleanupApi, type AdminStats, type AdminUser, type AdminApp, type VPSInfo, type CleanupSettings, type CleanupResult, type DiskUsage } from '../api/admin';
 import { plansApi, type Plan, type CreatePlanPayload } from '../api/plans';
 import { aiSettingsApi, type AISettings, type AITestResult } from '../api/analyze';
 import { formatRelativeTime } from '../lib/format';
 
-type Tab = 'overview' | 'users' | 'apps' | 'plans' | 'ai';
+type Tab = 'overview' | 'users' | 'apps' | 'plans' | 'ai' | 'cleanup';
 
 function getDefaultPlanForm(): CreatePlanPayload {
   return {
@@ -100,6 +100,7 @@ export function Admin() {
     { id: 'apps', label: t('admin.tabs.applications'), icon: <Server size={14} /> },
     { id: 'plans', label: t('admin.tabs.plans'), icon: <CreditCard size={14} /> },
     { id: 'ai', label: t('admin.tabs.ai'), icon: <Bot size={14} /> },
+    { id: 'cleanup', label: t('admin.tabs.cleanup'), icon: <HardDrive size={14} /> },
   ];
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -135,6 +136,19 @@ export function Admin() {
     apiKey: '',
     aiEnabled: false,
     aiModel: 'anthropic/claude-sonnet-4',
+  });
+
+  // Cleanup state
+  const [cleanupSettings, setCleanupSettings] = useState<CleanupSettings | null>(null);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
+  const [cleanupSaving, setCleanupSaving] = useState(false);
+  const [cleanupRunning, setCleanupRunning] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<CleanupResult | null>(null);
+  const [diskUsage, setDiskUsage] = useState<DiskUsage | null>(null);
+  const [cleanupForm, setCleanupForm] = useState({
+    enabled: false,
+    intervalHours: 24,
+    thresholdPercent: 80,
   });
 
   const fetchData = useCallback(async () => {
@@ -250,6 +264,59 @@ export function Admin() {
       setAiTestResult({ success: false, error: t('admin.ai.testError') });
     } finally {
       setAiTesting(false);
+    }
+  };
+
+  // Cleanup fetch and handlers
+  const fetchCleanupSettings = useCallback(async () => {
+    setCleanupLoading(true);
+    try {
+      const [settings, disk] = await Promise.all([cleanupApi.getSettings(), cleanupApi.diskUsage()]);
+      setCleanupSettings(settings);
+      setCleanupForm({
+        enabled: settings.enabled,
+        intervalHours: settings.intervalHours,
+        thresholdPercent: settings.thresholdPercent,
+      });
+      setDiskUsage(disk);
+    } catch {
+      addNotification({ type: 'error', title: t('admin.failedToLoad') });
+    } finally {
+      setCleanupLoading(false);
+    }
+  }, [addNotification, t]);
+
+  useEffect(() => {
+    if (activeTab === 'cleanup') fetchCleanupSettings();
+  }, [activeTab, fetchCleanupSettings]);
+
+  const handleSaveCleanupSettings = async () => {
+    setCleanupSaving(true);
+    try {
+      await cleanupApi.updateSettings(cleanupForm);
+      addNotification({ type: 'success', title: t('admin.cleanup.saved') });
+      fetchCleanupSettings();
+    } catch {
+      addNotification({ type: 'error', title: t('admin.cleanup.failedToSave') });
+    } finally {
+      setCleanupSaving(false);
+    }
+  };
+
+  const handleTriggerCleanup = async () => {
+    setCleanupRunning(true);
+    setCleanupResult(null);
+    try {
+      const result = await cleanupApi.trigger();
+      setCleanupResult(result);
+      addNotification({ type: 'success', title: t('admin.cleanup.completed') });
+      // Refresh disk usage after cleanup
+      const disk = await cleanupApi.diskUsage();
+      setDiskUsage(disk);
+    } catch {
+      addNotification({ type: 'error', title: t('admin.cleanup.failed') });
+    } finally {
+      setCleanupRunning(false);
     }
   };
 
@@ -988,6 +1055,204 @@ export function Admin() {
                     </div>
                   </div>
                 </GlassCard>
+              )}
+            </div>
+          )}
+
+          {/* ==================== CLEANUP ==================== */}
+          {activeTab === 'cleanup' && (
+            <div className="space-y-4">
+              {cleanupLoading ? (
+                <div className="text-center py-16 text-sm text-zinc-500">{t('admin.loadingData')}</div>
+              ) : (
+                <>
+                  {/* Disk Usage Overview */}
+                  <GlassCard>
+                    <div className="flex items-center gap-2 mb-4">
+                      <HardDrive size={18} className="text-amber-400" />
+                      <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                        {t('admin.cleanup.diskUsage')}
+                      </h3>
+                      <PillButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={fetchCleanupSettings}
+                        icon={<RefreshCw size={12} />}
+                        className="ml-auto"
+                      >
+                        {t('common.refresh')}
+                      </PillButton>
+                    </div>
+
+                    {diskUsage && (
+                      <div className="space-y-4">
+                        {/* Disk bar */}
+                        <div>
+                          <div className="flex items-center justify-between text-xs text-zinc-500 mb-1.5">
+                            <span>{t('admin.cleanup.rootDisk')}</span>
+                            <span>{diskUsage.diskPercent}% {t('admin.cleanup.used')}</span>
+                          </div>
+                          <div className={`h-3 rounded-full overflow-hidden ${isDark ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                parseInt(diskUsage.diskPercent) > 90 ? 'bg-red-500' :
+                                parseInt(diskUsage.diskPercent) > 75 ? 'bg-amber-500' : 'bg-emerald-500'
+                              }`}
+                              style={{ width: `${diskUsage.diskPercent}%` }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-1">
+                            <span>{formatBytes(diskUsage.diskUsed)} / {formatBytes(diskUsage.diskTotal)}</span>
+                            <span>{formatBytes(diskUsage.diskAvailable)} {t('admin.cleanup.available')}</span>
+                          </div>
+                        </div>
+
+                        {/* Docker breakdown */}
+                        {diskUsage.docker && diskUsage.docker.length > 0 && (
+                          <div>
+                            <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">{t('admin.cleanup.dockerBreakdown')}</p>
+                            <div className="grid grid-cols-3 gap-3">
+                              {diskUsage.docker.map((item) => (
+                                <div
+                                  key={item.type}
+                                  className={`px-3 py-2 rounded-lg ${isDark ? 'bg-zinc-800/50' : 'bg-zinc-50'}`}
+                                >
+                                  <p className={`text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>{item.type}</p>
+                                  <p className={`text-sm font-semibold mt-0.5 ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>{item.size}</p>
+                                  <p className="text-[10px] text-zinc-500">{item.reclaimable} {t('admin.cleanup.reclaimable')}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Image & container count */}
+                        <div className="flex items-center gap-4 text-xs text-zinc-500">
+                          {diskUsage.imageCount !== undefined && (
+                            <span>{diskUsage.imageCount} {t('admin.cleanup.images')}</span>
+                          )}
+                          {diskUsage.activeContainerCount !== undefined && (
+                            <span>{diskUsage.activeContainerCount} {t('admin.cleanup.activeContainers')}</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </GlassCard>
+
+                  {/* Manual Cleanup */}
+                  <GlassCard>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Trash2 size={18} className="text-red-400" />
+                      <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                        {t('admin.cleanup.manualCleanup')}
+                      </h3>
+                    </div>
+                    <p className="text-xs text-zinc-500 mb-4">{t('admin.cleanup.manualDescription')}</p>
+
+                    <PillButton
+                      variant="danger"
+                      size="sm"
+                      onClick={handleTriggerCleanup}
+                      disabled={cleanupRunning}
+                      icon={cleanupRunning ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                    >
+                      {cleanupRunning ? t('admin.cleanup.running') : t('admin.cleanup.runNow')}
+                    </PillButton>
+
+                    {cleanupResult && (
+                      <div className={`mt-4 px-3 py-2.5 rounded-lg text-sm ${
+                        isDark ? 'bg-emerald-900/20 border border-emerald-800/30' : 'bg-emerald-50 border border-emerald-200'
+                      }`}>
+                        <p className={`text-xs font-medium mb-1 ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
+                          {t('admin.cleanup.resultTitle')}
+                        </p>
+                        <div className="grid grid-cols-2 gap-1 text-[11px] text-zinc-500">
+                          <span>{t('admin.cleanup.imagesRemoved')}: {cleanupResult.imagesRemoved}</span>
+                          <span>{t('admin.cleanup.containersRemoved')}: {cleanupResult.containersRemoved}</span>
+                          <span>{t('admin.cleanup.imageSpace')}: {formatBytes(cleanupResult.imagesReclaimed)}</span>
+                          <span>{t('admin.cleanup.buildCache')}: {formatBytes(cleanupResult.buildCacheReclaimed)}</span>
+                        </div>
+                        <p className={`text-xs font-semibold mt-1 ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
+                          {t('admin.cleanup.totalReclaimed')}: {formatBytes(cleanupResult.totalReclaimed)}
+                        </p>
+                      </div>
+                    )}
+                  </GlassCard>
+
+                  {/* Auto Cleanup Settings */}
+                  <GlassCard>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Activity size={18} className="text-amber-400" />
+                      <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                        {t('admin.cleanup.autoCleanup')}
+                      </h3>
+                    </div>
+                    <p className="text-xs text-zinc-500 mb-6">{t('admin.cleanup.autoDescription')}</p>
+
+                    <div className="space-y-4">
+                      <ToggleField
+                        label={t('admin.cleanup.enableAuto')}
+                        value={cleanupForm.enabled}
+                        onChange={(v) => setCleanupForm((prev) => ({ ...prev, enabled: v }))}
+                        isDark={isDark}
+                      />
+
+                      <div>
+                        <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
+                          {t('admin.cleanup.checkInterval')}
+                        </label>
+                        <select
+                          value={cleanupForm.intervalHours}
+                          onChange={(e) => setCleanupForm((prev) => ({ ...prev, intervalHours: parseInt(e.target.value) }))}
+                          className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors outline-none ${
+                            isDark
+                              ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 focus:border-amber-500/50'
+                              : 'bg-white border-zinc-200 text-zinc-800 focus:border-amber-500/50'
+                          }`}
+                        >
+                          <option value={6}>6 {t('admin.cleanup.hours')}</option>
+                          <option value={12}>12 {t('admin.cleanup.hours')}</option>
+                          <option value={24}>24 {t('admin.cleanup.hours')} ({t('admin.cleanup.recommended')})</option>
+                          <option value={48}>48 {t('admin.cleanup.hours')}</option>
+                          <option value={72}>72 {t('admin.cleanup.hours')}</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5">
+                          {t('admin.cleanup.diskThreshold')}
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="range"
+                            min={30}
+                            max={95}
+                            step={5}
+                            value={cleanupForm.thresholdPercent}
+                            onChange={(e) => setCleanupForm((prev) => ({ ...prev, thresholdPercent: parseInt(e.target.value) }))}
+                            className="flex-1 accent-amber-500"
+                          />
+                          <span className={`text-sm font-mono w-12 text-right ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                            {cleanupForm.thresholdPercent}%
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-500 mt-1">{t('admin.cleanup.thresholdHint')}</p>
+                      </div>
+
+                      <div className="pt-2">
+                        <PillButton
+                          variant="primary"
+                          size="sm"
+                          onClick={handleSaveCleanupSettings}
+                          disabled={cleanupSaving}
+                          icon={cleanupSaving ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
+                        >
+                          {cleanupSaving ? t('common.saving') : t('common.save')}
+                        </PillButton>
+                      </div>
+                    </div>
+                  </GlassCard>
+                </>
               )}
             </div>
           )}

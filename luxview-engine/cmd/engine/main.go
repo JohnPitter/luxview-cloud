@@ -83,7 +83,7 @@ func main() {
 	healthWorker := worker.NewHealthCheckWorker(healthChecker, cfg.HealthCheckInterval)
 	go healthWorker.Start(ctx)
 
-	cleanupWorker := worker.NewCleanupWorker(docker, metricRepo, cfg.CleanupInterval)
+	cleanupWorker := worker.NewCleanupWorker(docker, metricRepo, settingsRepo, cfg.CleanupInterval)
 	go cleanupWorker.Start(ctx)
 
 	alertWorker := worker.NewAlertWorker(alerter, cfg.AlertInterval)
@@ -106,6 +106,7 @@ func main() {
 		BuildQueue:  buildQueue,
 		EncryptKey:   encryptionKey,
 		SettingsRepo: settingsRepo,
+		Docker:       docker,
 	})
 
 	// HTTP server
