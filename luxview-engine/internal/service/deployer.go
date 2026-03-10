@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	"github.com/luxview/engine/internal/buildpack"
 	"github.com/luxview/engine/internal/model"
 	"github.com/luxview/engine/internal/repository"
@@ -311,25 +312,99 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 }
 
 // runPostDeployHooks executes post-deploy commands inside the container.
-// For example, runs Prisma migrations if the app uses Prisma.
+// Detects ORM/migration tools and runs the appropriate migration command.
 func (d *Deployer) runPostDeployHooks(ctx context.Context, containerID string, stack string) {
 	log := logger.With("deployer")
 
-	// Check if container has prisma by attempting to run prisma db push
-	execCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	// Try prisma db push (works for both migration-based and push-based projects)
-	output, err := d.docker.ContainerExec(execCtx, containerID, []string{"npx", "prisma", "db", "push", "--skip-generate"})
-	if err != nil {
-		// Not a Prisma project or prisma not installed — that's fine, skip silently
-		log.Debug().Err(err).Msg("prisma db push skipped (not a prisma project or failed)")
+	// First, check if package.json has a db:migrate script (monorepos, custom setups)
+	if d.tryMigration(ctx, containerID, log, "package.json db:migrate",
+		[]string{"sh", "-c", "cat package.json 2>/dev/null | grep -q '\"db:migrate\"'"},
+		[]string{"npm", "run", "db:migrate"}) {
 		return
 	}
 
-	if output != "" {
-		log.Info().Str("output", output).Msg("prisma db push completed")
+	// Also check for "migrate" script
+	if d.tryMigration(ctx, containerID, log, "package.json migrate",
+		[]string{"sh", "-c", "cat package.json 2>/dev/null | grep -q '\"migrate\"'"},
+		[]string{"npm", "run", "migrate"}) {
+		return
 	}
+
+	// Prisma — push schema to DB (works without migration history)
+	if d.tryMigration(ctx, containerID, log, "prisma db push",
+		[]string{"sh", "-c", "test -f node_modules/.prisma/client/index.js || test -f prisma/schema.prisma"},
+		[]string{"npx", "prisma", "db", "push", "--skip-generate"}) {
+		return
+	}
+
+	// Drizzle — push schema to DB
+	if d.tryMigration(ctx, containerID, log, "drizzle-kit push",
+		[]string{"sh", "-c", "test -f node_modules/drizzle-kit/bin.cjs"},
+		[]string{"npx", "drizzle-kit", "push"}) {
+		return
+	}
+
+	// TypeORM — run migrations
+	if d.tryMigration(ctx, containerID, log, "typeorm migrations",
+		[]string{"sh", "-c", "test -f node_modules/typeorm/cli.js"},
+		[]string{"npx", "typeorm", "migration:run", "-d", "dist/data-source.js"}) {
+		return
+	}
+
+	// Knex — run migrations
+	if d.tryMigration(ctx, containerID, log, "knex migrate",
+		[]string{"sh", "-c", "test -f node_modules/.bin/knex"},
+		[]string{"npx", "knex", "migrate:latest"}) {
+		return
+	}
+
+	// Python — Django migrate
+	if d.tryMigration(ctx, containerID, log, "django migrate",
+		[]string{"sh", "-c", "test -f manage.py"},
+		[]string{"python", "manage.py", "migrate", "--noinput"}) {
+		return
+	}
+
+	// Python — Alembic
+	if d.tryMigration(ctx, containerID, log, "alembic upgrade",
+		[]string{"sh", "-c", "test -f alembic.ini"},
+		[]string{"alembic", "upgrade", "head"}) {
+		return
+	}
+
+	// Java — Flyway (via Spring Boot, runs automatically on startup typically)
+	// Go — goose, golang-migrate (typically embedded in app binary)
+	// These usually run on app startup, no need for explicit hook.
+
+	log.Debug().Msg("no migration tool detected, skipping post-deploy hooks")
+}
+
+// tryMigration checks if a migration tool is present and runs the migration command.
+// Returns true if the tool was detected (regardless of migration success/failure).
+func (d *Deployer) tryMigration(ctx context.Context, containerID string, log zerolog.Logger, name string, detectCmd, migrateCmd []string) bool {
+	detectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	// Check if tool exists in container
+	_, err := d.docker.ContainerExec(detectCtx, containerID, detectCmd)
+	if err != nil {
+		return false // tool not present
+	}
+
+	// Tool detected — run migration
+	log.Info().Str("tool", name).Msg("migration tool detected, running migrations")
+
+	migrateCtx, migrateCancel := context.WithTimeout(ctx, 120*time.Second)
+	defer migrateCancel()
+
+	output, err := d.docker.ContainerExec(migrateCtx, containerID, migrateCmd)
+	if err != nil {
+		log.Warn().Err(err).Str("tool", name).Str("output", output).Msg("migration failed")
+	} else if output != "" {
+		log.Info().Str("tool", name).Str("output", output).Msg("migration completed")
+	}
+
+	return true // tool was detected, don't try others
 }
 
 func (d *Deployer) cloneRepo(ctx context.Context, app *model.App, destDir string) error {
