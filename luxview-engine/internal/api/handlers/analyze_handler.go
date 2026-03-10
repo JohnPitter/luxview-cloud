@@ -31,6 +31,7 @@ type AnalyzeHandler struct {
 	provisioner  *service.Provisioner
 	agent        *agent.DeployAgent
 	encryptKey   []byte
+	auditSvc     *service.AuditService
 }
 
 func NewAnalyzeHandler(
@@ -41,6 +42,7 @@ func NewAnalyzeHandler(
 	serviceRepo *repository.ServiceRepo,
 	provisioner *service.Provisioner,
 	encryptKey []byte,
+	auditSvc *service.AuditService,
 ) *AnalyzeHandler {
 	return &AnalyzeHandler{
 		appRepo:      appRepo,
@@ -51,6 +53,7 @@ func NewAnalyzeHandler(
 		provisioner:  provisioner,
 		agent:        agent.NewDeployAgent(),
 		encryptKey:   encryptKey,
+		auditSvc:     auditSvc,
 	}
 }
 
@@ -391,6 +394,18 @@ func (h *AnalyzeHandler) ApplyAnalysis(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Info().Str("service", svcType).Str("id", svc.ID.String()).Msg("service provisioned via apply-analysis")
 	}
+
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "create",
+		ResourceType: "deployment",
+		ResourceID:   app.ID.String(),
+		ResourceName: app.Subdomain,
+		NewValues:    map[string]interface{}{"services": req.Services},
+		IPAddress:    clientIP(r),
+	})
 
 	writeJSON(w, http.StatusOK, applyAnalysisResponse{
 		Message: "Analysis applied successfully",

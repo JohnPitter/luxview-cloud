@@ -28,6 +28,10 @@ import {
   Zap,
   CheckCircle2,
   XCircle,
+  FileText,
+  List,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
@@ -36,12 +40,12 @@ import { AppStatusBadge } from '../components/apps/AppStatusBadge';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { useThemeStore } from '../stores/theme.store';
 import { useNotificationsStore } from '../stores/notifications.store';
-import { adminApi, cleanupApi, type AdminStats, type AdminUser, type AdminApp, type VPSInfo, type CleanupSettings, type CleanupResult, type DiskUsage } from '../api/admin';
+import { adminApi, cleanupApi, auditApi, type AdminStats, type AdminUser, type AdminApp, type VPSInfo, type CleanupSettings, type CleanupResult, type DiskUsage, type AuditLog, type AuditStats, type AuditLogFilters } from '../api/admin';
 import { plansApi, type Plan, type CreatePlanPayload } from '../api/plans';
 import { aiSettingsApi, type AISettings, type AITestResult } from '../api/analyze';
 import { formatRelativeTime } from '../lib/format';
 
-type Tab = 'overview' | 'users' | 'apps' | 'plans' | 'ai' | 'cleanup';
+type Tab = 'overview' | 'users' | 'apps' | 'plans' | 'ai' | 'cleanup' | 'audit';
 
 function getDefaultPlanForm(): CreatePlanPayload {
   return {
@@ -101,6 +105,7 @@ export function Admin() {
     { id: 'plans', label: t('admin.tabs.plans'), icon: <CreditCard size={14} /> },
     { id: 'ai', label: t('admin.tabs.ai'), icon: <Bot size={14} /> },
     { id: 'cleanup', label: t('admin.tabs.cleanup'), icon: <HardDrive size={14} /> },
+    { id: 'audit', label: t('admin.tabs.audit'), icon: <FileText size={14} /> },
   ];
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -150,6 +155,16 @@ export function Admin() {
     intervalHours: 24,
     thresholdPercent: 80,
   });
+
+  // Audit state
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditStats, setAuditStats] = useState<AuditStats | null>(null);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditPage, setAuditPage] = useState(0);
+  const [auditView, setAuditView] = useState<'table' | 'timeline'>('table');
+  const [auditFilters, setAuditFilters] = useState<AuditLogFilters>({});
+  const [auditExpanded, setAuditExpanded] = useState<Set<number>>(new Set());
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -320,6 +335,27 @@ export function Admin() {
     }
   };
 
+  const fetchAuditLogs = useCallback(async () => {
+    setAuditLoading(true);
+    try {
+      const [logsData, statsData] = await Promise.all([
+        auditApi.list(auditFilters, 50, auditPage * 50),
+        auditApi.stats(),
+      ]);
+      setAuditLogs(logsData.logs ?? []);
+      setAuditTotal(logsData.total);
+      setAuditStats(statsData);
+    } catch {
+      addNotification({ type: 'error', title: t('admin.failedToLoad') });
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [auditFilters, auditPage, addNotification, t]);
+
+  useEffect(() => {
+    if (activeTab === 'audit') fetchAuditLogs();
+  }, [activeTab, fetchAuditLogs]);
+
   const handleRoleChange = async (user: AdminUser, newRole: 'user' | 'admin') => {
     try {
       await adminApi.updateUserRole(user.id, newRole);
@@ -428,6 +464,57 @@ export function Admin() {
   );
 
   const ownerMap = new Map(users.map((u) => [u.id, u.username]));
+
+  const toggleAuditExpand = (id: number) => {
+    setAuditExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const actionColor = (action: string) => {
+    const colors: Record<string, string> = {
+      create: isDark ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800/50' : 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      update: isDark ? 'bg-blue-900/30 text-blue-400 border-blue-800/50' : 'bg-blue-50 text-blue-700 border-blue-200',
+      delete: isDark ? 'bg-red-900/30 text-red-400 border-red-800/50' : 'bg-red-50 text-red-700 border-red-200',
+      deploy: isDark ? 'bg-purple-900/30 text-purple-400 border-purple-800/50' : 'bg-purple-50 text-purple-700 border-purple-200',
+      restart: isDark ? 'bg-purple-900/30 text-purple-400 border-purple-800/50' : 'bg-purple-50 text-purple-700 border-purple-200',
+      stop: isDark ? 'bg-purple-900/30 text-purple-400 border-purple-800/50' : 'bg-purple-50 text-purple-700 border-purple-200',
+      login: isDark ? 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50' : 'bg-zinc-100 text-zinc-600 border-zinc-200',
+    };
+    return colors[action] || colors.update;
+  };
+
+  const resourceIcon = (type: string) => {
+    const icons: Record<string, React.ReactNode> = {
+      app: <Server size={14} />,
+      user: <Users size={14} />,
+      service: <HardDrive size={14} />,
+      plan: <CreditCard size={14} />,
+      setting: <SlidersHorizontal size={14} />,
+      deployment: <Rocket size={14} />,
+      alert: <Activity size={14} />,
+      cleanup: <Trash2 size={14} />,
+    };
+    return icons[type] || <Activity size={14} />;
+  };
+
+  const groupLogsByDay = (logs: AuditLog[]) => {
+    const groups: { label: string; logs: AuditLog[] }[] = [];
+    const today = new Date().toDateString();
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
+
+    for (const log of logs) {
+      const day = new Date(log.createdAt).toDateString();
+      const label = day === today ? t('admin.audit.today') : day === yesterday ? t('admin.audit.yesterday') : new Date(log.createdAt).toLocaleDateString();
+      const existing = groups.find((g) => g.label === label);
+      if (existing) existing.logs.push(log);
+      else groups.push({ label, logs: [log] });
+    }
+    return groups;
+  };
 
   return (
     <div className="animate-fade-in">
@@ -1252,6 +1339,288 @@ export function Admin() {
                       </div>
                     </div>
                   </GlassCard>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ==================== AUDIT LOGS ==================== */}
+          {activeTab === 'audit' && (
+            <div className="space-y-4">
+              {auditLoading && auditLogs.length === 0 ? (
+                <div className="text-center py-16 text-sm text-zinc-500">{t('admin.loadingData')}</div>
+              ) : (
+                <>
+                  {/* Header with view toggle + stats badge */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`flex rounded-lg border ${isDark ? 'border-zinc-700' : 'border-zinc-200'}`}>
+                        <button
+                          onClick={() => setAuditView('table')}
+                          className={`px-3 py-1.5 text-xs rounded-l-lg transition-colors ${
+                            auditView === 'table'
+                              ? isDark ? 'bg-zinc-700 text-zinc-200' : 'bg-zinc-200 text-zinc-800'
+                              : isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-600'
+                          }`}
+                        >
+                          <List size={14} />
+                        </button>
+                        <button
+                          onClick={() => setAuditView('timeline')}
+                          className={`px-3 py-1.5 text-xs rounded-r-lg transition-colors ${
+                            auditView === 'timeline'
+                              ? isDark ? 'bg-zinc-700 text-zinc-200' : 'bg-zinc-200 text-zinc-800'
+                              : isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-600'
+                          }`}
+                        >
+                          <Activity size={14} />
+                        </button>
+                      </div>
+                      {auditStats && auditStats.total24h > 0 && (
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                          isDark ? 'bg-amber-900/30 text-amber-400' : 'bg-amber-50 text-amber-700'
+                        }`}>
+                          {auditStats.total24h} {t('admin.audit.last24h')}
+                        </span>
+                      )}
+                    </div>
+                    <PillButton variant="ghost" size="sm" onClick={fetchAuditLogs} icon={<RefreshCw size={12} />}>
+                      {t('common.refresh')}
+                    </PillButton>
+                  </div>
+
+                  {/* Filters */}
+                  <GlassCard>
+                    <div className="flex flex-wrap gap-3">
+                      <select
+                        value={auditFilters.action || ''}
+                        onChange={(e) => { setAuditFilters((f) => ({ ...f, action: e.target.value || undefined })); setAuditPage(0); }}
+                        className={`px-3 py-1.5 text-xs rounded-lg border transition-colors outline-none ${
+                          isDark ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200' : 'bg-white border-zinc-200 text-zinc-800'
+                        }`}
+                      >
+                        <option value="">{t('admin.audit.allActions')}</option>
+                        {['create', 'update', 'delete', 'deploy', 'restart', 'stop', 'login'].map((a) => (
+                          <option key={a} value={a}>{t(`admin.audit.actions.${a}`)}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={auditFilters.resourceType || ''}
+                        onChange={(e) => { setAuditFilters((f) => ({ ...f, resourceType: e.target.value || undefined })); setAuditPage(0); }}
+                        className={`px-3 py-1.5 text-xs rounded-lg border transition-colors outline-none ${
+                          isDark ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200' : 'bg-white border-zinc-200 text-zinc-800'
+                        }`}
+                      >
+                        <option value="">{t('admin.audit.allResources')}</option>
+                        {['app', 'user', 'service', 'plan', 'setting', 'deployment', 'alert', 'cleanup'].map((r) => (
+                          <option key={r} value={r}>{t(`admin.audit.resources.${r}`)}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        placeholder={t('admin.audit.search')}
+                        value={auditFilters.search || ''}
+                        onChange={(e) => { setAuditFilters((f) => ({ ...f, search: e.target.value || undefined })); setAuditPage(0); }}
+                        className={`px-3 py-1.5 text-xs rounded-lg border transition-colors outline-none flex-1 min-w-[150px] ${
+                          isDark ? 'bg-zinc-800/50 border-zinc-700 text-zinc-200 placeholder:text-zinc-600' : 'bg-white border-zinc-200 text-zinc-800 placeholder:text-zinc-400'
+                        }`}
+                      />
+                    </div>
+                  </GlassCard>
+
+                  {/* TABLE VIEW */}
+                  {auditView === 'table' && (
+                    <GlassCard>
+                      {auditLogs.length === 0 ? (
+                        <div className="text-center py-12 text-sm text-zinc-500">{t('admin.audit.noLogs')}</div>
+                      ) : (
+                        <div className="space-y-1">
+                          {auditLogs.map((log) => (
+                            <div key={log.id}>
+                              <button
+                                onClick={() => toggleAuditExpand(log.id)}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
+                                  isDark ? 'hover:bg-zinc-800/50' : 'hover:bg-zinc-50'
+                                }`}
+                              >
+                                <span className="text-[11px] text-zinc-500 w-[70px] shrink-0 font-mono">
+                                  {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                                <span className={`text-xs w-[100px] shrink-0 truncate ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                                  {log.actorUsername}
+                                </span>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium shrink-0 ${actionColor(log.action)}`}>
+                                  {t(`admin.audit.actions.${log.action}`)}
+                                </span>
+                                <span className="flex items-center gap-1 text-zinc-500 shrink-0">
+                                  {resourceIcon(log.resourceType)}
+                                </span>
+                                <span className={`text-xs truncate flex-1 ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                                  {log.resourceName || log.resourceId}
+                                </span>
+                                {(log.oldValues || log.newValues) && (
+                                  auditExpanded.has(log.id) ? <ChevronUp size={14} className="text-zinc-500 shrink-0" /> : <ChevronDown size={14} className="text-zinc-500 shrink-0" />
+                                )}
+                              </button>
+                              {auditExpanded.has(log.id) && (log.oldValues || log.newValues) && (
+                                <div className={`mx-3 mb-2 px-3 py-2 rounded-lg text-[11px] space-y-1 ${
+                                  isDark ? 'bg-zinc-800/50' : 'bg-zinc-50'
+                                }`}>
+                                  {log.oldValues && Object.entries(log.oldValues).map(([key, val]) => (
+                                    <div key={`old-${key}`} className="flex gap-2">
+                                      <span className="text-zinc-500 w-[80px] shrink-0">{key}</span>
+                                      <span className="text-red-400 line-through">{String(val)}</span>
+                                      {log.newValues?.[key] !== undefined && (
+                                        <span className="text-emerald-400">&rarr; {String(log.newValues[key])}</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                  {log.newValues && Object.entries(log.newValues)
+                                    .filter(([key]) => !log.oldValues?.[key])
+                                    .map(([key, val]) => (
+                                      <div key={`new-${key}`} className="flex gap-2">
+                                        <span className="text-zinc-500 w-[80px] shrink-0">{key}</span>
+                                        <span className="text-emerald-400">{String(val)}</span>
+                                      </div>
+                                    ))}
+                                  {log.ipAddress && (
+                                    <div className="flex gap-2 pt-1 border-t border-zinc-700/30">
+                                      <span className="text-zinc-500 w-[80px] shrink-0">IP</span>
+                                      <span className="text-zinc-400 font-mono">{log.ipAddress}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Pagination */}
+                      {auditTotal > 50 && (
+                        <div className="flex items-center justify-between pt-3 mt-3 border-t border-zinc-700/30">
+                          <span className="text-[11px] text-zinc-500">{auditTotal} {t('admin.audit.totalEvents')}</span>
+                          <div className="flex gap-1">
+                            {Array.from({ length: Math.min(Math.ceil(auditTotal / 50), 10) }, (_, i) => (
+                              <button
+                                key={i}
+                                onClick={() => setAuditPage(i)}
+                                className={`w-7 h-7 text-[11px] rounded-md transition-colors ${
+                                  auditPage === i
+                                    ? 'bg-amber-500 text-white'
+                                    : isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-zinc-600 hover:bg-zinc-100'
+                                }`}
+                              >
+                                {i + 1}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </GlassCard>
+                  )}
+
+                  {/* TIMELINE VIEW */}
+                  {auditView === 'timeline' && (
+                    <div className="space-y-6">
+                      {auditLogs.length === 0 ? (
+                        <GlassCard>
+                          <div className="text-center py-12 text-sm text-zinc-500">{t('admin.audit.noLogs')}</div>
+                        </GlassCard>
+                      ) : (
+                        groupLogsByDay(auditLogs).map((group) => (
+                          <div key={group.label}>
+                            <h4 className={`text-xs font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                              {group.label}
+                            </h4>
+                            <div className={`relative pl-6 border-l-2 ${isDark ? 'border-zinc-700/50' : 'border-zinc-200'} space-y-3`}>
+                              {group.logs.map((log) => (
+                                <div key={log.id} className="relative">
+                                  <div className={`absolute -left-[29px] w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                    log.action === 'create' ? 'border-emerald-500 bg-emerald-500/20' :
+                                    log.action === 'delete' ? 'border-red-500 bg-red-500/20' :
+                                    log.action === 'deploy' || log.action === 'restart' || log.action === 'stop' ? 'border-purple-500 bg-purple-500/20' :
+                                    log.action === 'login' ? 'border-zinc-500 bg-zinc-500/20' :
+                                    'border-blue-500 bg-blue-500/20'
+                                  }`} />
+                                  <button
+                                    onClick={() => toggleAuditExpand(log.id)}
+                                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                                      isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-zinc-50'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className={`text-xs font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                                        {log.actorUsername}
+                                      </span>
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded border ${actionColor(log.action)}`}>
+                                        {t(`admin.audit.actions.${log.action}`)}
+                                      </span>
+                                      <span className="flex items-center gap-1 text-zinc-500 text-xs">
+                                        {resourceIcon(log.resourceType)}
+                                        <span className={`font-medium ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                                          {log.resourceName || log.resourceId}
+                                        </span>
+                                      </span>
+                                      <span className="text-[10px] text-zinc-500 ml-auto">
+                                        {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    </div>
+                                    {auditExpanded.has(log.id) && (log.oldValues || log.newValues) && (
+                                      <div className={`mt-2 px-3 py-2 rounded text-[11px] space-y-1 ${
+                                        isDark ? 'bg-zinc-800/50' : 'bg-zinc-100'
+                                      }`}>
+                                        {log.oldValues && Object.entries(log.oldValues).map(([key, val]) => (
+                                          <div key={`old-${key}`} className="flex gap-2">
+                                            <span className="text-zinc-500 w-[80px] shrink-0">{key}</span>
+                                            <span className="text-red-400 line-through">{String(val)}</span>
+                                            {log.newValues?.[key] !== undefined && (
+                                              <span className="text-emerald-400">&rarr; {String(log.newValues[key])}</span>
+                                            )}
+                                          </div>
+                                        ))}
+                                        {log.newValues && Object.entries(log.newValues)
+                                          .filter(([key]) => !log.oldValues?.[key])
+                                          .map(([key, val]) => (
+                                            <div key={`new-${key}`} className="flex gap-2">
+                                              <span className="text-zinc-500 w-[80px] shrink-0">{key}</span>
+                                              <span className="text-emerald-400">{String(val)}</span>
+                                            </div>
+                                          ))}
+                                        {log.ipAddress && (
+                                          <div className="flex gap-2 pt-1 border-t border-zinc-700/30">
+                                            <span className="text-zinc-500 w-[80px] shrink-0">IP</span>
+                                            <span className="text-zinc-400 font-mono">{log.ipAddress}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                      {/* Pagination for timeline */}
+                      {auditTotal > 50 && (
+                        <div className="flex items-center justify-center gap-1">
+                          {Array.from({ length: Math.min(Math.ceil(auditTotal / 50), 10) }, (_, i) => (
+                            <button
+                              key={i}
+                              onClick={() => setAuditPage(i)}
+                              className={`w-7 h-7 text-[11px] rounded-md transition-colors ${
+                                auditPage === i
+                                  ? 'bg-amber-500 text-white'
+                                  : isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-zinc-600 hover:bg-zinc-100'
+                              }`}
+                            >
+                              {i + 1}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </div>

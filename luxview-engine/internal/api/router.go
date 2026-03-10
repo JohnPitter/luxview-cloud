@@ -32,6 +32,8 @@ type Deps struct {
 	PlanRepo     *repository.PlanRepo
 	SettingsRepo *repository.SettingsRepo
 	Docker       *dockerclient.Client
+	AuditRepo    *repository.AuditLogRepo
+	AuditSvc     *service.AuditService
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -62,20 +64,21 @@ func NewRouter(deps Deps) *chi.Mux {
 	})
 
 	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(deps.Config, deps.UserRepo, deps.EncryptKey)
-	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.BuildQueue, deps.EncryptKey)
-	deployHandler := handlers.NewDeploymentHandler(deps.DeployRepo, deps.AppRepo, deps.BuildQueue)
-	serviceHandler := handlers.NewServiceHandler(deps.ServiceRepo, deps.AppRepo, deps.Provisioner, deps.EncryptKey)
+	authHandler := handlers.NewAuthHandler(deps.Config, deps.UserRepo, deps.EncryptKey, deps.AuditSvc)
+	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.BuildQueue, deps.EncryptKey, deps.AuditSvc)
+	deployHandler := handlers.NewDeploymentHandler(deps.DeployRepo, deps.AppRepo, deps.BuildQueue, deps.AuditSvc)
+	serviceHandler := handlers.NewServiceHandler(deps.ServiceRepo, deps.AppRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)
 	metricHandler := handlers.NewMetricHandler(deps.MetricRepo, deps.AppRepo)
-	alertHandler := handlers.NewAlertHandler(deps.AlertRepo, deps.AppRepo)
-	adminHandler := handlers.NewAdminHandler(deps.UserRepo, deps.AppRepo, deps.DeployRepo, deps.ServiceRepo, deps.Container, deps.Provisioner)
+	alertHandler := handlers.NewAlertHandler(deps.AlertRepo, deps.AppRepo, deps.AuditSvc)
+	adminHandler := handlers.NewAdminHandler(deps.UserRepo, deps.AppRepo, deps.DeployRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.AuditSvc)
 	explorerHandler := handlers.NewExplorerHandler(deps.ServiceRepo, deps.AppRepo, deps.EncryptKey)
 	traefikHandler := handlers.NewTraefikHandler(deps.Router)
 	webhookHandler := handlers.NewWebhookHandler(deps.WebhookSvc, deps.Config.InternalToken)
-	planHandler := handlers.NewPlanHandler(deps.PlanRepo, deps.UserRepo, deps.AppRepo)
-	settingsHandler := handlers.NewSettingsHandler(deps.SettingsRepo)
-	analyzeHandler := handlers.NewAnalyzeHandler(deps.AppRepo, deps.UserRepo, deps.DeployRepo, deps.SettingsRepo, deps.ServiceRepo, deps.Provisioner, deps.EncryptKey)
-	cleanupHandler := handlers.NewCleanupHandler(deps.SettingsRepo, deps.Docker)
+	planHandler := handlers.NewPlanHandler(deps.PlanRepo, deps.UserRepo, deps.AppRepo, deps.AuditSvc)
+	settingsHandler := handlers.NewSettingsHandler(deps.SettingsRepo, deps.AuditSvc)
+	analyzeHandler := handlers.NewAnalyzeHandler(deps.AppRepo, deps.UserRepo, deps.DeployRepo, deps.SettingsRepo, deps.ServiceRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)
+	cleanupHandler := handlers.NewCleanupHandler(deps.SettingsRepo, deps.Docker, deps.AuditSvc)
+	auditHandler := handlers.NewAuditHandler(deps.AuditRepo)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 
@@ -186,6 +189,8 @@ func NewRouter(deps Deps) *chi.Mux {
 				r.Put("/admin/settings/cleanup", cleanupHandler.UpdateCleanupSettings)
 				r.Post("/admin/cleanup/trigger", cleanupHandler.TriggerCleanup)
 				r.Get("/admin/cleanup/disk-usage", cleanupHandler.DiskUsage)
+				r.Get("/admin/audit-logs", auditHandler.ListAuditLogs)
+				r.Get("/admin/audit-logs/stats", auditHandler.AuditStats)
 			})
 		})
 	})

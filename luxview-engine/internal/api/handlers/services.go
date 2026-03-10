@@ -20,6 +20,7 @@ type ServiceHandler struct {
 	appRepo       *repository.AppRepo
 	provisioner   *service.Provisioner
 	encryptionKey []byte
+	auditSvc      *service.AuditService
 }
 
 func NewServiceHandler(
@@ -27,12 +28,14 @@ func NewServiceHandler(
 	appRepo *repository.AppRepo,
 	provisioner *service.Provisioner,
 	encryptionKey []byte,
+	auditSvc *service.AuditService,
 ) *ServiceHandler {
 	return &ServiceHandler{
 		serviceRepo:   serviceRepo,
 		appRepo:       appRepo,
 		provisioner:   provisioner,
 		encryptionKey: encryptionKey,
+		auditSvc:      auditSvc,
 	}
 }
 
@@ -131,6 +134,17 @@ func (h *ServiceHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "create",
+		ResourceType: "service",
+		ResourceID:   svc.ID.String(),
+		ResourceName: string(req.ServiceType),
+		NewValues:    map[string]string{"type": string(req.ServiceType), "appSubdomain": app.Subdomain},
+		IPAddress:    clientIP(r),
+	})
+
 	log.Info().Str("app", app.Subdomain).Str("type", string(req.ServiceType)).Msg("service provisioned")
 	writeJSON(w, http.StatusCreated, svc)
 }
@@ -203,6 +217,18 @@ func (h *ServiceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to remove service")
 		return
 	}
+
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "delete",
+		ResourceType: "service",
+		ResourceID:   svc.ID.String(),
+		ResourceName: string(svc.ServiceType),
+		OldValues:    map[string]string{"type": string(svc.ServiceType)},
+		IPAddress:    clientIP(r),
+	})
 
 	log.Info().Str("service", svcID.String()).Msg("service removed")
 	writeJSON(w, http.StatusOK, map[string]string{"message": "service removed"})

@@ -16,13 +16,15 @@ type DeploymentHandler struct {
 	deployRepo *repository.DeploymentRepo
 	appRepo    *repository.AppRepo
 	buildQueue chan<- service.DeployRequest
+	auditSvc   *service.AuditService
 }
 
-func NewDeploymentHandler(deployRepo *repository.DeploymentRepo, appRepo *repository.AppRepo, buildQueue chan<- service.DeployRequest) *DeploymentHandler {
+func NewDeploymentHandler(deployRepo *repository.DeploymentRepo, appRepo *repository.AppRepo, buildQueue chan<- service.DeployRequest, auditSvc *service.AuditService) *DeploymentHandler {
 	return &DeploymentHandler{
 		deployRepo: deployRepo,
 		appRepo:    appRepo,
 		buildQueue: buildQueue,
+		auditSvc:   auditSvc,
 	}
 }
 
@@ -133,6 +135,17 @@ func (h *DeploymentHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 
 	select {
 	case h.buildQueue <- req:
+		user := middleware.GetUser(ctx)
+		h.auditSvc.Log(ctx, service.AuditEntry{
+			ActorID:      user.ID,
+			ActorUsername: user.Username,
+			Action:       "deploy",
+			ResourceType: "deployment",
+			ResourceID:   deployID.String(),
+			ResourceName: app.Subdomain,
+			NewValues:    map[string]string{"rollbackToDeployId": deployID.String()},
+			IPAddress:    clientIP(r),
+		})
 		log.Info().Str("app", app.Subdomain).Str("deploy", deployID.String()).Msg("rollback queued")
 		writeJSON(w, http.StatusAccepted, map[string]string{"message": "rollback queued"})
 	default:

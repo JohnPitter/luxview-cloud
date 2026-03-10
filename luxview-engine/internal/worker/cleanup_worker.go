@@ -17,14 +17,16 @@ type CleanupWorker struct {
 	docker       *dockerclient.Client
 	metricRepo   *repository.MetricRepo
 	settingsRepo *repository.SettingsRepo
+	auditRepo    *repository.AuditLogRepo
 	interval     time.Duration
 }
 
-func NewCleanupWorker(docker *dockerclient.Client, metricRepo *repository.MetricRepo, settingsRepo *repository.SettingsRepo, intervalSec int) *CleanupWorker {
+func NewCleanupWorker(docker *dockerclient.Client, metricRepo *repository.MetricRepo, settingsRepo *repository.SettingsRepo, auditRepo *repository.AuditLogRepo, intervalSec int) *CleanupWorker {
 	return &CleanupWorker{
 		docker:       docker,
 		metricRepo:   metricRepo,
 		settingsRepo: settingsRepo,
+		auditRepo:    auditRepo,
 		interval:     time.Duration(intervalSec) * time.Second,
 	}
 }
@@ -58,6 +60,15 @@ func (cw *CleanupWorker) cleanup(ctx context.Context) {
 		log.Error().Err(err).Msg("failed to cleanup old metrics")
 	} else if deleted > 0 {
 		log.Info().Int64("deleted", deleted).Msg("old metrics cleaned up")
+	}
+
+	// Remove audit logs older than 90 days
+	auditCutoff := time.Now().Add(-90 * 24 * time.Hour)
+	auditDeleted, err := cw.auditRepo.DeleteOlderThan(ctx, auditCutoff)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to cleanup old audit logs")
+	} else if auditDeleted > 0 {
+		log.Info().Int64("deleted", auditDeleted).Msg("old audit logs cleaned up")
 	}
 
 	// Check if Docker cleanup is enabled

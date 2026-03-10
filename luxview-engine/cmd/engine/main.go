@@ -60,6 +60,8 @@ func main() {
 	alertRepo := repository.NewAlertRepo(db)
 	planRepo := repository.NewPlanRepo(db)
 	settingsRepo := repository.NewSettingsRepo(db, encryptionKey)
+	auditRepo := repository.NewAuditLogRepo(db)
+	auditSvc := service.NewAuditService(auditRepo)
 
 	// Services
 	portManager := service.NewPortManager(appRepo, cfg.PortRangeStart, cfg.PortRangeEnd)
@@ -83,7 +85,7 @@ func main() {
 	healthWorker := worker.NewHealthCheckWorker(healthChecker, cfg.HealthCheckInterval)
 	go healthWorker.Start(ctx)
 
-	cleanupWorker := worker.NewCleanupWorker(docker, metricRepo, settingsRepo, cfg.CleanupInterval)
+	cleanupWorker := worker.NewCleanupWorker(docker, metricRepo, settingsRepo, auditRepo, cfg.CleanupInterval)
 	go cleanupWorker.Start(ctx)
 
 	alertWorker := worker.NewAlertWorker(alerter, cfg.AlertInterval)
@@ -107,6 +109,8 @@ func main() {
 		EncryptKey:   encryptionKey,
 		SettingsRepo: settingsRepo,
 		Docker:       docker,
+		AuditRepo:    auditRepo,
+		AuditSvc:     auditSvc,
 	})
 
 	// HTTP server

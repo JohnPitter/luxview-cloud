@@ -5,16 +5,19 @@ import (
 	"net/http"
 
 	"github.com/luxview/engine/internal/agent"
+	"github.com/luxview/engine/internal/api/middleware"
 	"github.com/luxview/engine/internal/repository"
+	"github.com/luxview/engine/internal/service"
 	"github.com/luxview/engine/pkg/logger"
 )
 
 type SettingsHandler struct {
 	settingsRepo *repository.SettingsRepo
+	auditSvc     *service.AuditService
 }
 
-func NewSettingsHandler(settingsRepo *repository.SettingsRepo) *SettingsHandler {
-	return &SettingsHandler{settingsRepo: settingsRepo}
+func NewSettingsHandler(settingsRepo *repository.SettingsRepo, auditSvc *service.AuditService) *SettingsHandler {
+	return &SettingsHandler{settingsRepo: settingsRepo, auditSvc: auditSvc}
 }
 
 // aiSettingsResponse is the JSON shape returned by GetAISettings.
@@ -108,6 +111,28 @@ func (h *SettingsHandler) UpdateAISettings(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
+
+	user := middleware.GetUser(ctx)
+	auditNewValues := map[string]interface{}{}
+	if req.AIEnabled != nil {
+		auditNewValues["aiEnabled"] = *req.AIEnabled
+	}
+	if req.AIModel != nil {
+		auditNewValues["aiModel"] = *req.AIModel
+	}
+	if req.APIKey != nil {
+		auditNewValues["apiKeyChanged"] = true
+	}
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "update",
+		ResourceType: "setting",
+		ResourceID:   "ai",
+		ResourceName: "ai",
+		NewValues:    auditNewValues,
+		IPAddress:    clientIP(r),
+	})
 
 	log.Info().Msg("AI settings updated")
 	writeJSON(w, http.StatusOK, map[string]string{"message": "settings updated"})

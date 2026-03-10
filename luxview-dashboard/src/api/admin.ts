@@ -136,3 +136,45 @@ export const cleanupApi = {
     return data;
   },
 };
+
+export interface AuditLog {
+  id: number;
+  actorId: string | null;
+  actorUsername: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  resourceName: string;
+  oldValues?: Record<string, unknown>;
+  newValues?: Record<string, unknown>;
+  ipAddress: string;
+  createdAt: string;
+}
+
+export interface AuditStats {
+  total24h: number;
+  byAction: Record<string, number>;
+  byResource: Record<string, number>;
+}
+
+export interface AuditLogFilters {
+  actorId?: string;
+  action?: string;
+  resourceType?: string;
+  search?: string;
+  from?: string;
+  to?: string;
+}
+
+export const auditApi = {
+  async list(filters: AuditLogFilters = {}, limit = 50, offset = 0): Promise<{ logs: AuditLog[]; total: number }> {
+    const { data } = await api.get<{ logs: AuditLog[]; total: number }>('/admin/audit-logs', {
+      params: { ...filters, limit, offset },
+    });
+    return data;
+  },
+  async stats(): Promise<AuditStats> {
+    const { data } = await api.get<AuditStats>('/admin/audit-logs/stats');
+    return data;
+  },
+};

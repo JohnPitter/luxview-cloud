@@ -6,8 +6,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/luxview/engine/internal/api/middleware"
 	"github.com/luxview/engine/internal/model"
 	"github.com/luxview/engine/internal/repository"
+	"github.com/luxview/engine/internal/service"
 	"github.com/luxview/engine/pkg/logger"
 )
 
@@ -15,13 +17,15 @@ type PlanHandler struct {
 	planRepo *repository.PlanRepo
 	userRepo *repository.UserRepo
 	appRepo  *repository.AppRepo
+	auditSvc *service.AuditService
 }
 
-func NewPlanHandler(planRepo *repository.PlanRepo, userRepo *repository.UserRepo, appRepo *repository.AppRepo) *PlanHandler {
+func NewPlanHandler(planRepo *repository.PlanRepo, userRepo *repository.UserRepo, appRepo *repository.AppRepo, auditSvc *service.AuditService) *PlanHandler {
 	return &PlanHandler{
 		planRepo: planRepo,
 		userRepo: userRepo,
 		appRepo:  appRepo,
+		auditSvc: auditSvc,
 	}
 }
 
@@ -102,6 +106,18 @@ func (h *PlanHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "create",
+		ResourceType: "plan",
+		ResourceID:   plan.ID.String(),
+		ResourceName: plan.Name,
+		NewValues:    map[string]interface{}{"name": plan.Name, "price": plan.Price},
+		IPAddress:    clientIP(r),
+	})
+
 	log.Info().Str("plan", plan.Name).Msg("plan created")
 	writeJSON(w, http.StatusCreated, plan)
 }
@@ -122,6 +138,9 @@ func (h *PlanHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "plan not found")
 		return
 	}
+
+	// Capture old values for audit
+	oldPlanValues := map[string]interface{}{"name": plan.Name, "price": plan.Price, "isActive": plan.IsActive, "isDefault": plan.IsDefault}
 
 	var req model.UpdatePlanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -190,6 +209,19 @@ func (h *PlanHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "update",
+		ResourceType: "plan",
+		ResourceID:   plan.ID.String(),
+		ResourceName: plan.Name,
+		OldValues:    oldPlanValues,
+		NewValues:    map[string]interface{}{"name": plan.Name, "price": plan.Price, "isActive": plan.IsActive, "isDefault": plan.IsDefault},
+		IPAddress:    clientIP(r),
+	})
+
 	log.Info().Str("plan", plan.Name).Msg("plan updated")
 	writeJSON(w, http.StatusOK, plan)
 }
@@ -217,6 +249,18 @@ func (h *PlanHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "delete",
+		ResourceType: "plan",
+		ResourceID:   plan.ID.String(),
+		ResourceName: plan.Name,
+		OldValues:    map[string]string{"name": plan.Name},
+		IPAddress:    clientIP(r),
+	})
+
 	log.Info().Str("plan", plan.Name).Msg("plan soft-deleted")
 	writeJSON(w, http.StatusOK, map[string]string{"message": "plan deleted"})
 }
@@ -243,6 +287,18 @@ func (h *PlanHandler) SetDefault(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to set default plan")
 		return
 	}
+
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "update",
+		ResourceType: "plan",
+		ResourceID:   plan.ID.String(),
+		ResourceName: plan.Name,
+		NewValues:    map[string]interface{}{"isDefault": true},
+		IPAddress:    clientIP(r),
+	})
 
 	log.Info().Str("plan", plan.Name).Msg("plan set as default")
 	writeJSON(w, http.StatusOK, map[string]string{"message": "plan set as default"})
@@ -286,6 +342,18 @@ func (h *PlanHandler) AssignUserPlan(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to assign plan")
 		return
 	}
+
+	actor := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      actor.ID,
+		ActorUsername: actor.Username,
+		Action:       "update",
+		ResourceType: "user",
+		ResourceID:   user.ID.String(),
+		ResourceName: user.Username,
+		NewValues:    map[string]string{"planId": body.PlanID.String()},
+		IPAddress:    clientIP(r),
+	})
 
 	log.Info().Str("user", user.Username).Str("plan", plan.Name).Msg("plan assigned to user")
 	writeJSON(w, http.StatusOK, map[string]string{"message": "plan assigned"})

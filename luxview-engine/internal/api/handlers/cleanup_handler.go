@@ -7,7 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/luxview/engine/internal/api/middleware"
 	"github.com/luxview/engine/internal/repository"
+	"github.com/luxview/engine/internal/service"
 	dockerclient "github.com/luxview/engine/pkg/docker"
 	"github.com/luxview/engine/pkg/logger"
 )
@@ -15,10 +17,11 @@ import (
 type CleanupHandler struct {
 	settingsRepo *repository.SettingsRepo
 	docker       *dockerclient.Client
+	auditSvc     *service.AuditService
 }
 
-func NewCleanupHandler(settingsRepo *repository.SettingsRepo, docker *dockerclient.Client) *CleanupHandler {
-	return &CleanupHandler{settingsRepo: settingsRepo, docker: docker}
+func NewCleanupHandler(settingsRepo *repository.SettingsRepo, docker *dockerclient.Client, auditSvc *service.AuditService) *CleanupHandler {
+	return &CleanupHandler{settingsRepo: settingsRepo, docker: docker, auditSvc: auditSvc}
 }
 
 type cleanupSettingsResponse struct {
@@ -111,6 +114,28 @@ func (h *CleanupHandler) UpdateCleanupSettings(w http.ResponseWriter, r *http.Re
 		}
 	}
 
+	user := middleware.GetUser(ctx)
+	auditNewValues := map[string]interface{}{}
+	if req.Enabled != nil {
+		auditNewValues["enabled"] = *req.Enabled
+	}
+	if req.IntervalHours != nil {
+		auditNewValues["intervalHours"] = *req.IntervalHours
+	}
+	if req.ThresholdPercent != nil {
+		auditNewValues["thresholdPercent"] = *req.ThresholdPercent
+	}
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "update",
+		ResourceType: "setting",
+		ResourceID:   "cleanup",
+		ResourceName: "cleanup",
+		NewValues:    auditNewValues,
+		IPAddress:    clientIP(r),
+	})
+
 	log.Info().Msg("cleanup settings updated")
 	writeJSON(w, http.StatusOK, map[string]string{"message": "cleanup settings updated"})
 }
@@ -134,6 +159,18 @@ func (h *CleanupHandler) TriggerCleanup(w http.ResponseWriter, r *http.Request) 
 		Int("containers_removed", result.ContainersRemoved).
 		Int64("total_reclaimed", result.TotalReclaimed).
 		Msg("manual docker prune completed")
+
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "create",
+		ResourceType: "cleanup",
+		ResourceID:   "manual-prune",
+		ResourceName: "manual-prune",
+		NewValues:    map[string]interface{}{"manual": true},
+		IPAddress:    clientIP(r),
+	})
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"images_removed":       result.ImagesRemoved,

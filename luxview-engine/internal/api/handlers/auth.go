@@ -19,14 +19,16 @@ type AuthHandler struct {
 	userRepo      *repository.UserRepo
 	github        *service.GitHubClient
 	encryptionKey []byte
+	auditSvc      *service.AuditService
 }
 
-func NewAuthHandler(cfg *config.Config, userRepo *repository.UserRepo, encryptionKey []byte) *AuthHandler {
+func NewAuthHandler(cfg *config.Config, userRepo *repository.UserRepo, encryptionKey []byte, auditSvc *service.AuditService) *AuthHandler {
 	return &AuthHandler{
 		cfg:           cfg,
 		userRepo:      userRepo,
 		github:        service.NewGitHubClient(),
 		encryptionKey: encryptionKey,
+		auditSvc:      auditSvc,
 	}
 }
 
@@ -113,6 +115,16 @@ func (h *AuthHandler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 		Secure:   r.TLS != nil,
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   86400, // 24h
+	})
+
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "login",
+		ResourceType: "user",
+		ResourceID:   user.ID.String(),
+		ResourceName: user.Username,
+		IPAddress:    clientIP(r),
 	})
 
 	log.Info().Str("user", user.Username).Msg("user authenticated")

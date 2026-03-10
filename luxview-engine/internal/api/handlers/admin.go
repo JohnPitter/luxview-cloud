@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/luxview/engine/internal/api/middleware"
 	"github.com/luxview/engine/internal/model"
 	"github.com/luxview/engine/internal/repository"
 	"github.com/luxview/engine/internal/service"
@@ -25,6 +26,7 @@ type AdminHandler struct {
 	serviceRepo *repository.ServiceRepo
 	container   *service.ContainerManager
 	provisioner *service.Provisioner
+	auditSvc    *service.AuditService
 }
 
 func NewAdminHandler(
@@ -34,6 +36,7 @@ func NewAdminHandler(
 	serviceRepo *repository.ServiceRepo,
 	container *service.ContainerManager,
 	provisioner *service.Provisioner,
+	auditSvc *service.AuditService,
 ) *AdminHandler {
 	return &AdminHandler{
 		userRepo:    userRepo,
@@ -42,6 +45,7 @@ func NewAdminHandler(
 		serviceRepo: serviceRepo,
 		container:   container,
 		provisioner: provisioner,
+		auditSvc:    auditSvc,
 	}
 }
 
@@ -127,6 +131,18 @@ func (h *AdminHandler) ForceDeleteApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "delete",
+		ResourceType: "app",
+		ResourceID:   app.ID.String(),
+		ResourceName: app.Subdomain,
+		OldValues:    map[string]string{"name": app.Name, "subdomain": app.Subdomain, "owner": app.UserID.String()},
+		IPAddress:    clientIP(r),
+	})
+
 	log.Info().Str("app", app.Subdomain).Msg("admin force-deleted app")
 	writeJSON(w, http.StatusOK, map[string]string{"message": "app force deleted"})
 }
@@ -159,10 +175,25 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	oldRole := user.Role
+
 	if err := h.userRepo.UpdateRole(ctx, userID, body.Role); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update role")
 		return
 	}
+
+	actor := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      actor.ID,
+		ActorUsername: actor.Username,
+		Action:       "update",
+		ResourceType: "user",
+		ResourceID:   user.ID.String(),
+		ResourceName: user.Username,
+		OldValues:    map[string]string{"role": string(oldRole)},
+		NewValues:    map[string]string{"role": string(body.Role)},
+		IPAddress:    clientIP(r),
+	})
 
 	log := logger.With("admin")
 	log.Info().Str("user", user.Username).Str("role", string(body.Role)).Msg("user role updated")
@@ -252,10 +283,25 @@ func (h *AdminHandler) UpdateAppLimits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	oldLimits := map[string]string{"cpu": app.ResourceLimits.CPU, "memory": app.ResourceLimits.Memory, "disk": app.ResourceLimits.Disk}
+
 	if err := h.appRepo.UpdateResourceLimits(ctx, appID, body.ResourceLimits); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update limits")
 		return
 	}
+
+	actor := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      actor.ID,
+		ActorUsername: actor.Username,
+		Action:       "update",
+		ResourceType: "app",
+		ResourceID:   app.ID.String(),
+		ResourceName: app.Subdomain,
+		OldValues:    oldLimits,
+		NewValues:    map[string]string{"cpu": body.ResourceLimits.CPU, "memory": body.ResourceLimits.Memory, "disk": body.ResourceLimits.Disk},
+		IPAddress:    clientIP(r),
+	})
 
 	log := logger.With("admin")
 	log.Info().Str("app", app.Subdomain).Msg("app resource limits updated")

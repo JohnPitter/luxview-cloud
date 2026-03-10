@@ -31,6 +31,7 @@ type AppHandler struct {
 	github        *service.GitHubClient
 	buildQueue    chan<- service.DeployRequest
 	encryptionKey []byte
+	auditSvc      *service.AuditService
 }
 
 func NewAppHandler(
@@ -41,6 +42,7 @@ func NewAppHandler(
 	provisioner *service.Provisioner,
 	buildQueue chan<- service.DeployRequest,
 	encryptionKey []byte,
+	auditSvc *service.AuditService,
 ) *AppHandler {
 	return &AppHandler{
 		appRepo:       appRepo,
@@ -51,6 +53,7 @@ func NewAppHandler(
 		github:        service.NewGitHubClient(),
 		buildQueue:    buildQueue,
 		encryptionKey: encryptionKey,
+		auditSvc:      auditSvc,
 	}
 }
 
@@ -174,6 +177,18 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	app.EnvVarsPlain = req.EnvVars
 	log.Info().Str("app", app.Subdomain).Str("user", userID.String()).Msg("app created")
+
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "create",
+		ResourceType: "app",
+		ResourceID:   app.ID.String(),
+		ResourceName: app.Subdomain,
+		NewValues:    map[string]string{"name": app.Name, "subdomain": app.Subdomain, "repo_url": app.RepoURL, "branch": app.RepoBranch},
+		IPAddress:    clientIP(r),
+	})
+
 	writeJSON(w, http.StatusCreated, app)
 }
 
@@ -262,6 +277,16 @@ func (h *AppHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Capture old values for audit
+	oldValues := map[string]interface{}{
+		"name":       app.Name,
+		"branch":     app.RepoBranch,
+		"autoDeploy": app.AutoDeploy,
+		"cpu":        app.ResourceLimits.CPU,
+		"memory":     app.ResourceLimits.Memory,
+		"disk":       app.ResourceLimits.Disk,
+	}
+
 	if req.Name != nil {
 		app.Name = *req.Name
 	}
@@ -322,6 +347,27 @@ func (h *AppHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := middleware.GetUser(ctx)
+	newValues := map[string]interface{}{
+		"name":       app.Name,
+		"branch":     app.RepoBranch,
+		"autoDeploy": app.AutoDeploy,
+		"cpu":        app.ResourceLimits.CPU,
+		"memory":     app.ResourceLimits.Memory,
+		"disk":       app.ResourceLimits.Disk,
+	}
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "update",
+		ResourceType: "app",
+		ResourceID:   app.ID.String(),
+		ResourceName: app.Subdomain,
+		OldValues:    oldValues,
+		NewValues:    newValues,
+		IPAddress:    clientIP(r),
+	})
+
 	writeJSON(w, http.StatusOK, app)
 }
 
@@ -367,6 +413,18 @@ func (h *AppHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to delete app")
 		return
 	}
+
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "delete",
+		ResourceType: "app",
+		ResourceID:   app.ID.String(),
+		ResourceName: app.Subdomain,
+		OldValues:    map[string]string{"name": app.Name, "subdomain": app.Subdomain},
+		IPAddress:    clientIP(r),
+	})
 
 	log.Info().Str("app", app.Subdomain).Msg("app deleted")
 	writeJSON(w, http.StatusOK, map[string]string{"message": "app deleted"})
@@ -420,6 +478,16 @@ func (h *AppHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 	select {
 	case h.buildQueue <- deployReq:
 		log.Info().Str("app", app.Subdomain).Msg("deploy queued")
+		h.auditSvc.Log(ctx, service.AuditEntry{
+			ActorID:      user.ID,
+			ActorUsername: user.Username,
+			Action:       "deploy",
+			ResourceType: "app",
+			ResourceID:   app.ID.String(),
+			ResourceName: app.Subdomain,
+			NewValues:    map[string]string{"branch": app.RepoBranch},
+			IPAddress:    clientIP(r),
+		})
 		writeJSON(w, http.StatusAccepted, map[string]string{
 			"message":    "deploy queued",
 			"commit_sha": commitSHA,
@@ -457,6 +525,18 @@ func (h *AppHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = h.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusRunning, app.ContainerID)
+
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "restart",
+		ResourceType: "app",
+		ResourceID:   app.ID.String(),
+		ResourceName: app.Subdomain,
+		IPAddress:    clientIP(r),
+	})
+
 	writeJSON(w, http.StatusOK, map[string]string{"message": "app restarted"})
 }
 
@@ -487,6 +567,18 @@ func (h *AppHandler) Stop(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = h.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusStopped, app.ContainerID)
+
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "stop",
+		ResourceType: "app",
+		ResourceID:   app.ID.String(),
+		ResourceName: app.Subdomain,
+		IPAddress:    clientIP(r),
+	})
+
 	writeJSON(w, http.StatusOK, map[string]string{"message": "app stopped"})
 }
 

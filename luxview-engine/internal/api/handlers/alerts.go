@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -9,17 +10,20 @@ import (
 	"github.com/luxview/engine/internal/api/middleware"
 	"github.com/luxview/engine/internal/model"
 	"github.com/luxview/engine/internal/repository"
+	"github.com/luxview/engine/internal/service"
 )
 
 type AlertHandler struct {
 	alertRepo *repository.AlertRepo
 	appRepo   *repository.AppRepo
+	auditSvc  *service.AuditService
 }
 
-func NewAlertHandler(alertRepo *repository.AlertRepo, appRepo *repository.AppRepo) *AlertHandler {
+func NewAlertHandler(alertRepo *repository.AlertRepo, appRepo *repository.AppRepo, auditSvc *service.AuditService) *AlertHandler {
 	return &AlertHandler{
 		alertRepo: alertRepo,
 		appRepo:   appRepo,
+		auditSvc:  auditSvc,
 	}
 }
 
@@ -78,6 +82,18 @@ func (h *AlertHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to create alert")
 		return
 	}
+
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "create",
+		ResourceType: "alert",
+		ResourceID:   alert.ID.String(),
+		ResourceName: fmt.Sprintf("%s %s %.0f", req.Metric, req.Condition, req.Threshold),
+		NewValues:    map[string]interface{}{"metric": req.Metric, "operator": req.Condition, "threshold": req.Threshold},
+		IPAddress:    clientIP(r),
+	})
 
 	writeJSON(w, http.StatusCreated, alert)
 }
@@ -165,6 +181,17 @@ func (h *AlertHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "update",
+		ResourceType: "alert",
+		ResourceID:   alert.ID.String(),
+		ResourceName: alert.Metric,
+		IPAddress:    clientIP(r),
+	})
+
 	writeJSON(w, http.StatusOK, alert)
 }
 
@@ -195,6 +222,17 @@ func (h *AlertHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to delete alert")
 		return
 	}
+
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "delete",
+		ResourceType: "alert",
+		ResourceID:   alert.ID.String(),
+		ResourceName: alert.Metric,
+		IPAddress:    clientIP(r),
+	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "alert deleted"})
 }

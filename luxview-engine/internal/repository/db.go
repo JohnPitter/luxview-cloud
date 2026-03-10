@@ -175,6 +175,24 @@ func (db *DB) migrate(ctx context.Context) error {
 		)`,
 
 		`ALTER TABLE apps ADD COLUMN IF NOT EXISTS custom_dockerfile TEXT DEFAULT NULL`,
+
+		`CREATE TABLE IF NOT EXISTS audit_logs (
+			id BIGSERIAL PRIMARY KEY,
+			actor_id UUID REFERENCES users(id) ON DELETE SET NULL,
+			actor_username VARCHAR(100) NOT NULL,
+			action VARCHAR(20) NOT NULL,
+			resource_type VARCHAR(30) NOT NULL,
+			resource_id VARCHAR(100),
+			resource_name VARCHAR(200),
+			old_values JSONB,
+			new_values JSONB,
+			ip_address INET,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs(actor_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_logs(resource_type, resource_id)`,
 	}
 
 	for i, m := range migrations {
