@@ -10,13 +10,18 @@ function camelToSnake(str: string): string {
   return str.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 }
 
-function transformKeys(obj: unknown, fn: (key: string) => string): unknown {
-  if (Array.isArray(obj)) return obj.map((item) => transformKeys(item, fn));
+// Keys that should NOT have their nested keys transformed (e.g., user-defined env vars).
+const PRESERVE_NESTED_KEYS = new Set(['env_vars', 'envVars', 'resource_limits', 'resourceLimits']);
+
+function transformKeys(obj: unknown, fn: (key: string) => string, preserveValues = false): unknown {
+  if (Array.isArray(obj)) return obj.map((item) => transformKeys(item, fn, preserveValues));
   if (obj !== null && typeof obj === 'object' && !(obj instanceof Date)) {
     return Object.fromEntries(
       Object.entries(obj as Record<string, unknown>).map(([key, value]) => [
-        fn(key),
-        transformKeys(value, fn),
+        preserveValues ? key : fn(key),
+        PRESERVE_NESTED_KEYS.has(key)
+          ? value // preserve user-defined keys as-is
+          : transformKeys(value, fn, preserveValues),
       ]),
     );
   }
