@@ -263,16 +263,24 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 			}
 		}
 		if len(services) > 0 {
-			log.Info().Int("count", len(services)).Msg("injected service env vars")
+			svcKeys := make([]string, 0, len(serviceEnvVars))
+			for k := range serviceEnvVars {
+				svcKeys = append(svcKeys, k)
+			}
+			log.Info().Int("count", len(services)).Strs("env_keys", svcKeys).Msg("injected service env vars")
 		}
 	}
 
-	// Merge: service env vars first, then user env vars override
+	// Merge: service env vars first, then user env vars override (skip empty user values)
 	mergedEnvVars := make(map[string]string)
 	for k, v := range serviceEnvVars {
 		mergedEnvVars[k] = v
 	}
 	for k, v := range envVars {
+		// Don't let empty user env vars override service-provided values
+		if v == "" && serviceEnvVars[k] != "" {
+			continue
+		}
 		mergedEnvVars[k] = v
 	}
 	envVars = mergedEnvVars
