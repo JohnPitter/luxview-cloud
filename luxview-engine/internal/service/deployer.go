@@ -487,6 +487,68 @@ func (d *Deployer) runMigrations(ctx context.Context, containerID string, log ze
 		return
 	}
 
+	// Go — golang-migrate (binary installed or in PATH)
+	if d.tryHook(ctx, containerID, log, "golang-migrate",
+		[]string{"sh", "-c", "command -v migrate >/dev/null 2>&1 && ls migrations/*.sql >/dev/null 2>&1"},
+		[]string{"sh", "-c", `migrate -path ./migrations -database "$DATABASE_URL" up`}) {
+		return
+	}
+
+	// Go — goose
+	if d.tryHook(ctx, containerID, log, "goose migrate",
+		[]string{"sh", "-c", "command -v goose >/dev/null 2>&1 && ls migrations/*.sql >/dev/null 2>&1"},
+		[]string{"sh", "-c", `goose -dir ./migrations postgres "$DATABASE_URL" up`}) {
+		return
+	}
+
+	// Go — atlas
+	if d.tryHook(ctx, containerID, log, "atlas schema apply",
+		[]string{"sh", "-c", "command -v atlas >/dev/null 2>&1"},
+		[]string{"sh", "-c", `atlas schema apply --url "$DATABASE_URL" --auto-approve`}) {
+		return
+	}
+
+	// Java — Flyway (Spring Boot auto-runs on startup, but standalone Flyway CLI also supported)
+	if d.tryHook(ctx, containerID, log, "flyway migrate",
+		[]string{"sh", "-c", "command -v flyway >/dev/null 2>&1"},
+		[]string{"sh", "-c", `flyway -url="$DATABASE_URL" migrate`}) {
+		return
+	}
+
+	// Java — Liquibase
+	if d.tryHook(ctx, containerID, log, "liquibase update",
+		[]string{"sh", "-c", "command -v liquibase >/dev/null 2>&1"},
+		[]string{"sh", "-c", `liquibase --url="$DATABASE_URL" update`}) {
+		return
+	}
+
+	// Rust — sqlx
+	if d.tryHook(ctx, containerID, log, "sqlx migrate",
+		[]string{"sh", "-c", "command -v sqlx >/dev/null 2>&1 && ls migrations/*.sql >/dev/null 2>&1"},
+		[]string{"sh", "-c", `sqlx database setup --database-url "$DATABASE_URL"`}) {
+		return
+	}
+
+	// Rust — diesel
+	if d.tryHook(ctx, containerID, log, "diesel migrate",
+		[]string{"sh", "-c", "command -v diesel >/dev/null 2>&1 && test -f diesel.toml"},
+		[]string{"sh", "-c", `diesel migration run --database-url "$DATABASE_URL"`}) {
+		return
+	}
+
+	// Generic — SQL migration files with psql (last resort)
+	if d.tryHook(ctx, containerID, log, "generic SQL migrations",
+		[]string{"sh", "-c", "command -v psql >/dev/null 2>&1 && ls migrations/*.sql >/dev/null 2>&1"},
+		[]string{"sh", "-c", `
+			echo "Running generic SQL migrations..."
+			for f in $(ls migrations/*.sql | sort); do
+				echo "Applying $f"
+				psql "$DATABASE_URL" -f "$f"
+			done
+		`}) {
+		return
+	}
+
 	log.Debug().Msg("no migration tool detected, skipping migrations")
 }
 
@@ -565,6 +627,23 @@ func (d *Deployer) runSeeds(ctx context.Context, containerID string, log zerolog
 	if d.tryHook(ctx, containerID, log, "django loaddata",
 		[]string{"sh", "-c", "test -f manage.py && ls */fixtures/*.json >/dev/null 2>&1"},
 		[]string{"sh", "-c", "for f in $(find . -path '*/fixtures/*.json'); do python manage.py loaddata $f; done"}) {
+		return
+	}
+
+	// Go — seed binary or main function
+	if d.tryHook(ctx, containerID, log, "go seed",
+		[]string{"sh", "-c", "test -f seed 2>/dev/null || test -f cmd/seed/main.go 2>/dev/null"},
+		[]string{"sh", "-c", `
+			if [ -f seed ]; then ./seed; exit $?; fi
+			if [ -f cmd/seed/main.go ]; then go run ./cmd/seed; exit $?; fi
+		`}) {
+		return
+	}
+
+	// Generic — seed.sql file applied via psql
+	if d.tryHook(ctx, containerID, log, "seed.sql",
+		[]string{"sh", "-c", "command -v psql >/dev/null 2>&1 && test -f seed.sql"},
+		[]string{"sh", "-c", `echo "Running seed.sql..." && psql "$DATABASE_URL" -f seed.sql`}) {
 		return
 	}
 
