@@ -398,9 +398,39 @@ func (d *Deployer) runPostDeployHooks(ctx context.Context, containerID string, s
 	}
 
 	// Prisma — push schema to DB (works without migration history)
+	// Supports root and monorepo layouts (packages/*/prisma/schema.prisma)
+	// IMPORTANT: In prod containers, "prisma" CLI (devDep) is removed but @prisma/client remains.
+	// We detect the @prisma/client version and use npx prisma@<version> to avoid downloading
+	// an incompatible major version (e.g. Prisma 7 vs project using Prisma 6).
 	if d.tryMigration(ctx, containerID, log, "prisma db push",
-		[]string{"sh", "-c", "test -f node_modules/.prisma/client/index.js || test -f prisma/schema.prisma"},
-		[]string{"npx", "prisma", "db", "push", "--skip-generate"}) {
+		[]string{"sh", "-c", "test -f prisma/schema.prisma || ls packages/*/prisma/schema.prisma >/dev/null 2>&1"},
+		[]string{"sh", "-c", `
+			SCHEMA=$(find /app -path "*/prisma/schema.prisma" -not -path "*/node_modules/*" | head -1)
+			if [ -z "$SCHEMA" ]; then exit 0; fi
+
+			# 1) Try existing prisma CLI (available if prisma is a prod dep or not pruned)
+			if command -v prisma >/dev/null 2>&1; then
+				prisma db push --schema="$SCHEMA" --skip-generate --accept-data-loss
+				exit $?
+			fi
+
+			# 2) Try finding prisma CLI in .pnpm store
+			PRISMA_CLI=$(find /app/node_modules/.pnpm -name "prisma" -path "*/node_modules/.bin/prisma" 2>/dev/null | head -1)
+			if [ -n "$PRISMA_CLI" ]; then
+				"$PRISMA_CLI" db push --schema="$SCHEMA" --skip-generate --accept-data-loss
+				exit $?
+			fi
+
+			# 3) Detect @prisma/client version and use pinned npx to avoid major version mismatch
+			PRISMA_VER=$(node -e "try{console.log(require('@prisma/client/package.json').version)}catch(e){}" 2>/dev/null)
+			if [ -n "$PRISMA_VER" ]; then
+				echo "Using npx prisma@$PRISMA_VER (pinned to @prisma/client version)"
+				npx prisma@$PRISMA_VER db push --schema="$SCHEMA" --skip-generate --accept-data-loss
+				exit $?
+			fi
+
+			echo "prisma CLI not found and version not detectable, skipping db push"
+		`}) {
 		return
 	}
 
