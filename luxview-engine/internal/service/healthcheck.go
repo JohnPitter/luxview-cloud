@@ -12,6 +12,9 @@ import (
 	"github.com/luxview/engine/pkg/logger"
 )
 
+// healthPaths are the paths to try when checking if a container is healthy.
+var healthPaths = []string{"/", "/health", "/api/health"}
+
 // HealthChecker performs health checks on running containers.
 type HealthChecker struct {
 	appRepo   *repository.AppRepo
@@ -62,26 +65,29 @@ func (hc *HealthChecker) CheckApp(ctx context.Context, app *model.App) bool {
 		return false
 	}
 
-	// Try container IP first (more reliable), then host port
-	urls := []string{
-		fmt.Sprintf("http://host.docker.internal:%d/", app.AssignedPort),
+	// Build base URLs: container IP first (more reliable), then host port
+	bases := []string{
+		fmt.Sprintf("http://host.docker.internal:%d", app.AssignedPort),
 	}
 	info, err := hc.container.docker.InspectContainer(ctx, app.ContainerID)
 	if err == nil {
 		for _, nw := range info.NetworkSettings.Networks {
 			if nw.IPAddress != "" {
-				urls = append([]string{fmt.Sprintf("http://%s:%d/", nw.IPAddress, app.InternalPort)}, urls...)
+				bases = append([]string{fmt.Sprintf("http://%s:%d", nw.IPAddress, app.InternalPort)}, bases...)
 				break
 			}
 		}
 	}
 
-	for _, url := range urls {
-		resp, err := hc.client.Get(url)
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode < 500 {
-				return true
+	// Try each base with /, /health, /api/health
+	for _, base := range bases {
+		for _, path := range healthPaths {
+			resp, err := hc.client.Get(base + path)
+			if err == nil {
+				resp.Body.Close()
+				if resp.StatusCode < 500 {
+					return true
+				}
 			}
 		}
 	}
@@ -94,9 +100,9 @@ func (hc *HealthChecker) WaitForHealthy(ctx context.Context, appID uuid.UUID, co
 	log := logger.With("healthcheck")
 	deadline := time.Now().Add(timeout)
 
-	// Build list of health check URLs to try (container IP is most reliable)
-	urls := []string{
-		fmt.Sprintf("http://host.docker.internal:%d/", hostPort),
+	// Build base URLs to try (container IP is most reliable)
+	bases := []string{
+		fmt.Sprintf("http://host.docker.internal:%d", hostPort),
 	}
 
 	// Try to get container IP for direct health check (more reliable than host routing)
@@ -105,29 +111,32 @@ func (hc *HealthChecker) WaitForHealthy(ctx context.Context, appID uuid.UUID, co
 		if err == nil {
 			for _, nw := range info.NetworkSettings.Networks {
 				if nw.IPAddress != "" {
-					urls = append([]string{fmt.Sprintf("http://%s:%d/", nw.IPAddress, internalPort)}, urls...)
+					bases = append([]string{fmt.Sprintf("http://%s:%d", nw.IPAddress, internalPort)}, bases...)
 					break
 				}
 			}
 		}
 	}
 
-	log.Debug().Strs("urls", urls).Str("app_id", appID.String()).Dur("timeout", timeout).Msg("starting health check")
+	log.Debug().Strs("bases", bases).Strs("paths", healthPaths).Str("app_id", appID.String()).Dur("timeout", timeout).Msg("starting health check")
 
 	attempt := 0
 	for time.Now().Before(deadline) {
 		attempt++
-		for _, url := range urls {
-			resp, err := hc.client.Get(url)
-			if err != nil {
-				log.Debug().Str("app_id", appID.String()).Int("attempt", attempt).Str("url", url).Err(err).Msg("health check attempt failed")
-			} else {
-				statusCode := resp.StatusCode
-				resp.Body.Close()
-				log.Debug().Str("app_id", appID.String()).Int("attempt", attempt).Str("url", url).Int("status_code", statusCode).Msg("health check attempt result")
-				if statusCode < 500 {
-					log.Info().Str("app_id", appID.String()).Str("url", url).Int("attempts", attempt).Msg("app is healthy")
-					return true
+		for _, base := range bases {
+			for _, path := range healthPaths {
+				url := base + path
+				resp, err := hc.client.Get(url)
+				if err != nil {
+					log.Debug().Str("app_id", appID.String()).Int("attempt", attempt).Str("url", url).Err(err).Msg("health check attempt failed")
+				} else {
+					statusCode := resp.StatusCode
+					resp.Body.Close()
+					log.Debug().Str("app_id", appID.String()).Int("attempt", attempt).Str("url", url).Int("status_code", statusCode).Msg("health check attempt result")
+					if statusCode < 500 {
+						log.Info().Str("app_id", appID.String()).Str("url", url).Int("attempts", attempt).Msg("app is healthy")
+						return true
+					}
 				}
 			}
 		}
