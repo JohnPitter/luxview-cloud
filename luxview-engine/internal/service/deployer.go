@@ -146,33 +146,41 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 
 	log.Debug().Str("build_dir", buildDir).Msg("repo cloned, build directory ready")
 
-	// If app has a custom Dockerfile (from AI agent or user), inject it into the build dir
+	// Detect stack: custom Dockerfile vs auto-detect
+	var bp buildpack.Buildpack
+
 	if app.CustomDockerfile != nil && *app.CustomDockerfile != "" {
+		// Write custom Dockerfile from AI agent / user into the build dir
 		dockerfilePath := filepath.Join(buildDir, "Dockerfile")
 		if err := os.WriteFile(dockerfilePath, []byte(*app.CustomDockerfile), 0644); err != nil {
-			log.Warn().Err(err).Msg("failed to write custom Dockerfile, falling back to auto-detect")
-		} else {
-			preview := *app.CustomDockerfile
-			if len(preview) > 100 {
-				preview = preview[:100]
-			}
-			log.Debug().Str("app", app.Subdomain).Str("dockerfile_preview", preview).Msg("custom Dockerfile written to build dir")
-			log.Info().Str("app", app.Subdomain).Msg("using custom Dockerfile from AI agent")
+			d.failDeploy(ctx, deployment, app, "failed to write custom Dockerfile: "+err.Error(), start)
+			return fmt.Errorf("write custom dockerfile: %w", err)
 		}
-	}
+		preview := *app.CustomDockerfile
+		if len(preview) > 100 {
+			preview = preview[:100]
+		}
+		log.Debug().Str("app", app.Subdomain).Str("dockerfile_preview", preview).Msg("custom Dockerfile written to build dir")
+		log.Info().Str("app", app.Subdomain).Msg("using custom Dockerfile — skipping auto-detect")
 
-	// Detect stack
-	result := d.detector.Detect(buildDir)
-	if result == nil {
-		failMsg := "no supported stack detected — run AI analysis to generate a custom Dockerfile"
-		if d.detector.IsMonorepo(buildDir) {
-			failMsg = "monorepo detected (turbo/pnpm/lerna) — workspace:* dependencies require a custom Dockerfile. Run AI analysis first to generate one."
+		// Use DockerfilePack directly (skip detector which would reject monorepos)
+		dfp := &buildpack.DockerfilePack{}
+		dfp.DetectPort(buildDir)
+		bp = dfp
+	} else {
+		// Auto-detect stack
+		result := d.detector.Detect(buildDir)
+		if result == nil {
+			failMsg := "no supported stack detected — run AI analysis to generate a custom Dockerfile"
+			if d.detector.IsMonorepo(buildDir) {
+				failMsg = "monorepo detected (turbo/pnpm/lerna) — workspace:* dependencies require a custom Dockerfile. Run AI analysis first to generate one."
+			}
+			d.failDeploy(ctx, deployment, app, failMsg, start)
+			return fmt.Errorf("no buildpack detected for app %s", app.Subdomain)
 		}
-		d.failDeploy(ctx, deployment, app, failMsg, start)
-		return fmt.Errorf("no buildpack detected for app %s", app.Subdomain)
+		bp = result.Buildpack
+		buildDir = result.BuildDir
 	}
-	bp := result.Buildpack
-	buildDir = result.BuildDir
 
 	log.Debug().Str("buildpack", bp.Name()).Str("build_dir", buildDir).Msg("stack detected")
 
