@@ -111,6 +111,14 @@ Dockerfile rules:
     RUN find node_modules/.pnpm -path '*/@prisma/client' -type d | head -1 | xargs -I{} cp -r /tmp/.prisma {}/../../.prisma
 14. If a workspace package has "main" pointing to TypeScript source (e.g., "./src/index.ts"), patch it to point to compiled output after build: RUN sed -i 's|"./src/index.ts"|"./dist/index.js"|g' packages/<pkg>/package.json
 15. After COPY of source directories that may contain node_modules from the host, always clean them and re-install: RUN rm -rf packages/*/node_modules && pnpm install --frozen-lockfile — host node_modules contain symlinks pointing to host paths that don't exist in the container.
+16. CRITICAL for full-stack monorepos (API + SPA frontend in the same repo): The API server typically serves the frontend's static build via express.static() or similar, using RELATIVE paths like "../../web/dist" from __dirname. You MUST preserve the monorepo directory structure so these paths resolve correctly. Rules:
+    - WORKDIR must be the monorepo ROOT (e.g., /app), NOT a subdirectory
+    - CMD must run the API from the root: CMD ["node", "packages/api/dist/index.js"] — NEVER "cd packages/api && node dist/index.js"
+    - NEVER use "cd .." or relative navigation in CMD or ENTRYPOINT — the API uses __dirname-relative paths that only work when the full directory tree is intact
+    - Both packages/api/dist/ AND packages/web/dist/ must exist in the final image (don't delete build output)
+    - The port should be the API's port (e.g., 3001), NOT port 80 — the API handles both /api routes and serves the SPA
+    - Look at the API source code for express.static() or sendFile() calls to understand how it references the frontend build path
+17. For the "port" field: read the API source code to find the actual PORT. Look for patterns like "process.env.PORT ?? 3001" or "const PORT = 3001". Use that exact port number. Do NOT default to 3000 if the code says 3001.
 
 LuxView Cloud managed services (available via platform):
 - PostgreSQL: env vars DATABASE_URL, PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
@@ -160,10 +168,18 @@ Rules:
 1. The app MUST run in a single container.
 2. The Dockerfile MUST use EXPOSE to declare the port.
 3. The container MUST respond to HTTP GET on / or /health for health checks.
-4. Optimize for small images: prefer alpine base images and multi-stage builds.
-5. For monorepos, bundle everything into a single container.
+4. For simple (non-monorepo) projects, use multi-stage builds for smaller images. For pnpm monorepos, use a SINGLE stage (see rules below).
+5. For monorepos, bundle everything into a single container. Identify the main application entry point.
 6. Focus on diagnosing the EXACT cause of failure from the build log.
 7. Provide a corrected Dockerfile that fixes the issue.
+8. CRITICAL: The "dockerfile" field MUST contain ONLY valid Dockerfile instructions. Every line must start with a valid instruction (FROM, RUN, COPY, WORKDIR, EXPOSE, CMD, ENTRYPOINT, ENV, ARG, ADD, LABEL, VOLUME, USER, HEALTHCHECK, SHELL, STOPSIGNAL, ONBUILD) or be a comment starting with #.
+9. For the CMD instruction: check the package.json "scripts" section. Do NOT use "pnpm start" or "npm start" if there is no "start" script. Instead, use "node" to run the compiled entrypoint directly (e.g., CMD ["node", "packages/api/dist/index.js"]).
+10. Always set ENV CI=true early in the Dockerfile.
+11. CRITICAL for pnpm monorepos: Do NOT use multi-stage builds. Use a SINGLE stage: install deps → build → delete node_modules → reinstall with --prod.
+12. For Prisma in monorepos: SAVE the generated Prisma client BEFORE prod reinstall, then RESTORE it after.
+13. If a workspace package has "main" pointing to TypeScript source (e.g., "./src/index.ts"), patch it to point to compiled output after build.
+14. CRITICAL for full-stack monorepos (API + SPA frontend): The API serves the frontend via express.static() using RELATIVE paths from __dirname. WORKDIR must be the monorepo ROOT (/app). CMD must run from the root: CMD ["node", "packages/api/dist/index.js"]. NEVER use "cd .." or "cd packages/api &&" in CMD. Both packages/api/dist/ AND packages/web/dist/ must exist. The port is the API's port (read the source code), NOT port 80.
+15. For the "port" field: read the API source code to find the actual PORT (e.g., "process.env.PORT ?? 3001" means port 3001).
 
 You MUST respond with valid JSON only (no markdown, no explanation outside JSON). Use this exact format:
 {
