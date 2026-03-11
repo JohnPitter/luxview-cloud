@@ -78,6 +78,7 @@ export function AppDetail() {
   const [selectedDeployId, setSelectedDeployId] = useState<string>('');
   const [actionPending, setActionPending] = useState(false);
   const [logType, setLogType] = useState<'runtime' | 'build'>('runtime');
+  const [notFound, setNotFound] = useState(false);
 
   // Env vars state
   const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>([]);
@@ -98,12 +99,12 @@ export function AppDetail() {
 
   useEffect(() => {
     if (appId) {
-      fetchApp(appId);
+      fetchApp(appId).catch(() => setNotFound(true));
     }
   }, [appId, fetchApp]);
 
-  // Track the status at the moment the user clicked an action
-  const [statusWhenActionStarted, setStatusWhenActionStarted] = useState<string | null>(null);
+  // Track whether the deploy has entered a transitional state (building/deploying)
+  const sawTransitionalRef = useRef(false);
 
   // Track previous status to detect transitions
   const prevStatusRef = useRef(app?.status);
@@ -118,8 +119,21 @@ export function AppDetail() {
     const poll = async () => {
       fetchApp(appId);
       try {
-        const deps = await deploymentsApi.list(appId, 5, 0);
-        setDeployments(deps);
+        const latest = await deploymentsApi.list(appId, 5, 0);
+        // Merge latest statuses into full list instead of replacing it
+        setDeployments((prev: Deployment[]) => {
+          if (prev.length === 0) return latest;
+          const map = new Map(latest.map((d: Deployment) => [d.id, d]));
+          const merged = prev.map((d: Deployment) => map.get(d.id) || d);
+          // Add any new deployments not in prev (e.g. new deploy just started)
+          for (const d of latest) {
+            if (!prev.some((p: Deployment) => p.id === d.id)) {
+              merged.unshift(d);
+            }
+          }
+          return merged;
+        });
+        const deps = latest;
 
         // Auto-select the active deployment (building/deploying) and poll its logs
         const activeDeploy = deps.find((d) => transitional.includes(d.status));
@@ -138,16 +152,19 @@ export function AppDetail() {
     poll(); // immediate first poll
     const interval = setInterval(poll, 3000);
 
-    // Stop actionPending only after the status has actually changed from when the action started
-    if (actionPending && statusWhenActionStarted && app.status !== statusWhenActionStarted) {
-      if (!transitional.includes(app.status)) {
+    // Track transitional states and clear actionPending when deploy cycle completes
+    if (actionPending) {
+      if (transitional.includes(app.status)) {
+        sawTransitionalRef.current = true;
+      } else if (sawTransitionalRef.current) {
+        // Exited transitional → deploy finished (running, error, stopped, etc.)
         setActionPending(false);
-        setStatusWhenActionStarted(null);
+        sawTransitionalRef.current = false;
       }
     }
 
     return () => clearInterval(interval);
-  }, [appId, app?.status, actionPending, statusWhenActionStarted, fetchApp]);
+  }, [appId, app?.status, actionPending, fetchApp]);
 
   // Detect status transitions and notify user
   useEffect(() => {
@@ -284,7 +301,7 @@ export function AppDetail() {
         const merged = { ...(app?.envVars || {}), ...envVars };
         await appsApi.updateEnvVars(appId, merged);
       }
-      setStatusWhenActionStarted(app?.status || null);
+      sawTransitionalRef.current = false;
       setActionPending(true);
       await deployApp(appId);
       setShowAnalysisModal(false);
@@ -322,6 +339,80 @@ export function AppDetail() {
     focus:outline-none focus:ring-2 focus:ring-amber-400/30
     ${isDark ? 'bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder-zinc-600' : 'bg-white border-zinc-200 text-zinc-900 placeholder-zinc-400'}
   `;
+
+  if (notFound) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 animate-fade-in">
+        {/* Animated ghost icon */}
+        <div className="relative mb-8">
+          <div
+            className={`w-24 h-24 rounded-3xl flex items-center justify-center ${
+              isDark ? 'bg-zinc-800/60' : 'bg-zinc-100'
+            }`}
+            style={{ animation: 'float 3s ease-in-out infinite' }}
+          >
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-zinc-400"
+            >
+              <path d="M12 2a7 7 0 0 0-7 7v8l2-2 2 2 2-2 2 2 2-2 2 2 2-2v-8a7 7 0 0 0-7-7z" />
+              <circle cx="10" cy="10" r="1" fill="currentColor" />
+              <circle cx="14" cy="10" r="1" fill="currentColor" />
+            </svg>
+          </div>
+          {/* Pulse ring */}
+          <div
+            className={`absolute inset-0 rounded-3xl ${
+              isDark ? 'bg-amber-400/10' : 'bg-amber-400/5'
+            }`}
+            style={{ animation: 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite' }}
+          />
+        </div>
+        <h2
+          className={`text-2xl font-bold tracking-tight mb-3 ${
+            isDark ? 'text-zinc-100' : 'text-zinc-900'
+          }`}
+        >
+          {t('app.notFound.title')}
+        </h2>
+        <p
+          className={`text-sm max-w-md text-center mb-2 ${
+            isDark ? 'text-zinc-400' : 'text-zinc-500'
+          }`}
+        >
+          {t('app.notFound.description')}
+        </p>
+        <p
+          className={`text-xs max-w-sm text-center mb-8 ${
+            isDark ? 'text-zinc-500' : 'text-zinc-400'
+          }`}
+        >
+          {t('app.notFound.support')}
+        </p>
+        <PillButton
+          variant="secondary"
+          size="md"
+          onClick={() => navigate('/dashboard')}
+          icon={<ArrowLeft size={16} />}
+        >
+          {t('app.notFound.backToDashboard')}
+        </PillButton>
+        <style>{`
+          @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   if (!app) {
     return (
@@ -374,7 +465,7 @@ export function AppDetail() {
               variant="secondary"
               size="sm"
               disabled={actionPending}
-              onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); deployApp(appId!); }}
+              onClick={() => { sawTransitionalRef.current = false; setActionPending(true); deployApp(appId!).catch(() => setActionPending(false)); }}
               icon={<Play size={14} />}
             >
               {t('app.actions.start')}
@@ -386,7 +477,7 @@ export function AppDetail() {
                 variant="secondary"
                 size="sm"
                 disabled={actionPending || ['building', 'deploying'].includes(app.status)}
-                onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); restartApp(appId!); }}
+                onClick={async () => { setActionPending(true); await restartApp(appId!); setActionPending(false); }}
                 icon={<RotateCcw size={14} />}
               >
                 {t('app.actions.restart')}
@@ -395,7 +486,7 @@ export function AppDetail() {
                 variant="ghost"
                 size="sm"
                 disabled={actionPending || ['building', 'deploying'].includes(app.status)}
-                onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); stopApp(appId!); }}
+                onClick={async () => { setActionPending(true); await stopApp(appId!); setActionPending(false); }}
                 icon={<Square size={14} />}
               >
                 {t('app.actions.stop')}
@@ -417,7 +508,7 @@ export function AppDetail() {
             variant="primary"
             size="sm"
             disabled={actionPending || ['building', 'deploying'].includes(app.status)}
-            onClick={() => { setStatusWhenActionStarted(app?.status || null); setActionPending(true); deployApp(appId!); }}
+            onClick={() => { sawTransitionalRef.current = false; setActionPending(true); deployApp(appId!).catch(() => setActionPending(false)); }}
             icon={['building', 'deploying'].includes(app.status) || actionPending
               ? <Loader2 size={14} className="animate-spin" />
               : <Rocket size={14} />}
