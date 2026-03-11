@@ -289,6 +289,85 @@ func (g *GitHubClient) CreatePullRequest(ctx context.Context, token, owner, repo
 	return result.HTMLURL, nil
 }
 
+// GitHubWebhook represents a GitHub repository webhook.
+type GitHubWebhook struct {
+	ID     int64  `json:"id"`
+	Active bool   `json:"active"`
+	Config struct {
+		URL string `json:"url"`
+	} `json:"config"`
+}
+
+// CreateWebhook creates a push webhook on a GitHub repository.
+func (g *GitHubClient) CreateWebhook(ctx context.Context, token, owner, repo, webhookURL, secret string) (int64, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/hooks", owner, repo)
+
+	payload := map[string]interface{}{
+		"name":   "web",
+		"active": true,
+		"events": []string{"push"},
+		"config": map[string]string{
+			"url":          webhookURL,
+			"content_type": "json",
+			"secret":       secret,
+		},
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return 0, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("github API error %d creating webhook: %s", resp.StatusCode, string(respBody))
+	}
+
+	var hook GitHubWebhook
+	if err := json.NewDecoder(resp.Body).Decode(&hook); err != nil {
+		return 0, err
+	}
+	return hook.ID, nil
+}
+
+// DeleteWebhook removes a webhook from a GitHub repository.
+func (g *GitHubClient) DeleteWebhook(ctx context.Context, token, owner, repo string, hookID int64) error {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/hooks/%d", owner, repo, hookID)
+
+	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("github API error %d deleting webhook: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
+}
+
 func doGitHubGet[T any](ctx context.Context, client *http.Client, url, token string) (*T, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {

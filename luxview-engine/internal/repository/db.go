@@ -243,6 +243,8 @@ func (db *DB) migrate(ctx context.Context) error {
 			COALESCE(os, ''), COALESCE(device_type, ''), COALESCE(referer_domain, ''))`,
 
 		`CREATE INDEX IF NOT EXISTS idx_pva_app_bucket ON pageview_aggregations(app_id, bucket DESC, granularity)`,
+
+		`ALTER TABLE apps ADD COLUMN IF NOT EXISTS webhook_id BIGINT DEFAULT NULL`,
 	}
 
 	for i, m := range migrations {

@@ -39,6 +39,7 @@ type App struct {
 	EnvVarsPlain   map[string]string `json:"env_vars"` // decrypted for API responses
 	ResourceLimits ResourceLimits  `json:"resource_limits"`
 	AutoDeploy       bool            `json:"auto_deploy"`
+	WebhookID        *int64          `json:"webhook_id,omitempty"`
 	CustomDockerfile *string         `json:"custom_dockerfile,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`
 	UpdatedAt        time.Time       `json:"updated_at"`

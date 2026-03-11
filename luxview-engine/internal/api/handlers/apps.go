@@ -32,6 +32,8 @@ type AppHandler struct {
 	buildQueue    chan<- service.DeployRequest
 	encryptionKey []byte
 	auditSvc      *service.AuditService
+	webhookURL    string
+	webhookSecret string
 }
 
 func NewAppHandler(
@@ -43,6 +45,8 @@ func NewAppHandler(
 	buildQueue chan<- service.DeployRequest,
 	encryptionKey []byte,
 	auditSvc *service.AuditService,
+	webhookURL string,
+	webhookSecret string,
 ) *AppHandler {
 	return &AppHandler{
 		appRepo:       appRepo,
@@ -54,6 +58,8 @@ func NewAppHandler(
 		buildQueue:    buildQueue,
 		encryptionKey: encryptionKey,
 		auditSvc:      auditSvc,
+		webhookURL:    webhookURL,
+		webhookSecret: webhookSecret,
 	}
 }
 
@@ -151,7 +157,6 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Auto-deploy: queue a deploy immediately after creation
 	if autoDeploy {
-		user := middleware.GetUser(ctx)
 		token := user.GitHubToken
 		if decrypted, err := crypto.Decrypt(token, h.encryptionKey); err == nil {
 			token = decrypted
@@ -172,6 +177,18 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 			log.Info().Str("app", app.Subdomain).Msg("auto-deploy queued on creation")
 		default:
 			log.Warn().Str("app", app.Subdomain).Msg("build queue full, auto-deploy skipped")
+		}
+
+		// Create GitHub webhook for auto-deploy
+		if owner != "" && repo != "" {
+			hookID, whErr := h.github.CreateWebhook(ctx, token, owner, repo, h.webhookURL, h.webhookSecret)
+			if whErr != nil {
+				log.Warn().Err(whErr).Str("app", app.Subdomain).Msg("failed to create GitHub webhook on app creation")
+			} else {
+				app.WebhookID = &hookID
+				_ = h.appRepo.Update(ctx, app)
+				log.Info().Int64("hook_id", hookID).Str("app", app.Subdomain).Msg("GitHub webhook created on app creation")
+			}
 		}
 	}
 
@@ -252,6 +269,7 @@ func (h *AppHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // Update updates an app.
 func (h *AppHandler) Update(w http.ResponseWriter, r *http.Request) {
+	log := logger.With("apps")
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)
 
@@ -277,7 +295,8 @@ func (h *AppHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Capture old values for audit
+	// Capture old values for audit and webhook management
+	oldAutoDeploy := app.AutoDeploy
 	oldValues := map[string]interface{}{
 		"name":       app.Name,
 		"branch":     app.RepoBranch,
@@ -347,6 +366,36 @@ func (h *AppHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Manage GitHub webhook when auto_deploy changes
+	if req.AutoDeploy != nil && *req.AutoDeploy != oldAutoDeploy {
+		u := middleware.GetUser(ctx)
+		token := u.GitHubToken
+		if decrypted, err := crypto.Decrypt(token, h.encryptionKey); err == nil {
+			token = decrypted
+		}
+		owner, repoName := parseRepoURL(app.RepoURL)
+		if owner != "" && repoName != "" {
+			if app.AutoDeploy {
+				hookID, err := h.github.CreateWebhook(ctx, token, owner, repoName, h.webhookURL, h.webhookSecret)
+				if err != nil {
+					log.Warn().Err(err).Str("app", app.Subdomain).Msg("failed to create GitHub webhook")
+				} else {
+					app.WebhookID = &hookID
+					_ = h.appRepo.Update(ctx, app)
+					log.Info().Int64("hook_id", hookID).Str("app", app.Subdomain).Msg("GitHub webhook created")
+				}
+			} else if app.WebhookID != nil {
+				if err := h.github.DeleteWebhook(ctx, token, owner, repoName, *app.WebhookID); err != nil {
+					log.Warn().Err(err).Str("app", app.Subdomain).Msg("failed to delete GitHub webhook")
+				} else {
+					log.Info().Int64("hook_id", *app.WebhookID).Str("app", app.Subdomain).Msg("GitHub webhook deleted")
+				}
+				app.WebhookID = nil
+				_ = h.appRepo.Update(ctx, app)
+			}
+		}
+	}
+
 	user := middleware.GetUser(ctx)
 	newValues := map[string]interface{}{
 		"name":       app.Name,
@@ -405,6 +454,23 @@ func (h *AppHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		for i := range services {
 			if depErr := h.provisioner.Deprovision(ctx, &services[i]); depErr != nil {
 				log.Warn().Err(depErr).Str("service_id", services[i].ID.String()).Msg("failed to deprovision service during app deletion")
+			}
+		}
+	}
+
+	// Remove GitHub webhook if exists
+	if app.WebhookID != nil {
+		delUser := middleware.GetUser(ctx)
+		token := delUser.GitHubToken
+		if decrypted, err := crypto.Decrypt(token, h.encryptionKey); err == nil {
+			token = decrypted
+		}
+		owner, repoName := parseRepoURL(app.RepoURL)
+		if owner != "" && repoName != "" {
+			if err := h.github.DeleteWebhook(ctx, token, owner, repoName, *app.WebhookID); err != nil {
+				log.Warn().Err(err).Str("app", app.Subdomain).Msg("failed to delete GitHub webhook during app deletion")
+			} else {
+				log.Info().Int64("hook_id", *app.WebhookID).Str("app", app.Subdomain).Msg("GitHub webhook deleted on app deletion")
 			}
 		}
 	}
