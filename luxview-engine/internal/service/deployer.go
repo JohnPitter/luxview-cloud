@@ -385,21 +385,31 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 }
 
 // runPostDeployHooks executes post-deploy commands inside the container.
-// Detects ORM/migration tools and runs the appropriate migration command.
+// Phase 1: Detect ORM/migration tools and run schema migrations.
+// Phase 2: Detect and run seed scripts to populate initial data.
 func (d *Deployer) runPostDeployHooks(ctx context.Context, containerID string, stack string) {
 	log := logger.With("deployer")
 
 	log.Debug().Str("stack", stack).Msg("checking migration tools for post-deploy hooks")
 
+	// === Phase 1: Migrations ===
+	d.runMigrations(ctx, containerID, log)
+
+	// === Phase 2: Seeds ===
+	d.runSeeds(ctx, containerID, log)
+}
+
+// runMigrations detects ORM/migration tools and pushes schema to DB.
+func (d *Deployer) runMigrations(ctx context.Context, containerID string, log zerolog.Logger) {
 	// First, check if package.json has a db:migrate script (monorepos, custom setups)
-	if d.tryMigration(ctx, containerID, log, "package.json db:migrate",
+	if d.tryHook(ctx, containerID, log, "package.json db:migrate",
 		[]string{"sh", "-c", "cat package.json 2>/dev/null | grep -q '\"db:migrate\"'"},
 		[]string{"npm", "run", "db:migrate"}) {
 		return
 	}
 
 	// Also check for "migrate" script
-	if d.tryMigration(ctx, containerID, log, "package.json migrate",
+	if d.tryHook(ctx, containerID, log, "package.json migrate",
 		[]string{"sh", "-c", "cat package.json 2>/dev/null | grep -q '\"migrate\"'"},
 		[]string{"npm", "run", "migrate"}) {
 		return
@@ -410,7 +420,7 @@ func (d *Deployer) runPostDeployHooks(ctx context.Context, containerID string, s
 	// IMPORTANT: In prod containers, "prisma" CLI (devDep) is removed but @prisma/client remains.
 	// We detect the @prisma/client version and use npx prisma@<version> to avoid downloading
 	// an incompatible major version (e.g. Prisma 7 vs project using Prisma 6).
-	if d.tryMigration(ctx, containerID, log, "prisma db push",
+	if d.tryHook(ctx, containerID, log, "prisma db push",
 		[]string{"sh", "-c", "test -f prisma/schema.prisma || ls packages/*/prisma/schema.prisma >/dev/null 2>&1"},
 		[]string{"sh", "-c", `
 			SCHEMA=$(find /app -path "*/prisma/schema.prisma" -not -path "*/node_modules/*" | head -1)
@@ -443,50 +453,127 @@ func (d *Deployer) runPostDeployHooks(ctx context.Context, containerID string, s
 	}
 
 	// Drizzle — push schema to DB
-	if d.tryMigration(ctx, containerID, log, "drizzle-kit push",
+	if d.tryHook(ctx, containerID, log, "drizzle-kit push",
 		[]string{"sh", "-c", "test -f node_modules/drizzle-kit/bin.cjs"},
 		[]string{"npx", "drizzle-kit", "push"}) {
 		return
 	}
 
 	// TypeORM — run migrations
-	if d.tryMigration(ctx, containerID, log, "typeorm migrations",
+	if d.tryHook(ctx, containerID, log, "typeorm migrations",
 		[]string{"sh", "-c", "test -f node_modules/typeorm/cli.js"},
 		[]string{"npx", "typeorm", "migration:run", "-d", "dist/data-source.js"}) {
 		return
 	}
 
 	// Knex — run migrations
-	if d.tryMigration(ctx, containerID, log, "knex migrate",
+	if d.tryHook(ctx, containerID, log, "knex migrate",
 		[]string{"sh", "-c", "test -f node_modules/.bin/knex"},
 		[]string{"npx", "knex", "migrate:latest"}) {
 		return
 	}
 
 	// Python — Django migrate
-	if d.tryMigration(ctx, containerID, log, "django migrate",
+	if d.tryHook(ctx, containerID, log, "django migrate",
 		[]string{"sh", "-c", "test -f manage.py"},
 		[]string{"python", "manage.py", "migrate", "--noinput"}) {
 		return
 	}
 
 	// Python — Alembic
-	if d.tryMigration(ctx, containerID, log, "alembic upgrade",
+	if d.tryHook(ctx, containerID, log, "alembic upgrade",
 		[]string{"sh", "-c", "test -f alembic.ini"},
 		[]string{"alembic", "upgrade", "head"}) {
 		return
 	}
 
-	// Java — Flyway (via Spring Boot, runs automatically on startup typically)
-	// Go — goose, golang-migrate (typically embedded in app binary)
-	// These usually run on app startup, no need for explicit hook.
-
-	log.Debug().Msg("no migration tool detected, skipping post-deploy hooks")
+	log.Debug().Msg("no migration tool detected, skipping migrations")
 }
 
-// tryMigration checks if a migration tool is present and runs the migration command.
-// Returns true if the tool was detected (regardless of migration success/failure).
-func (d *Deployer) tryMigration(ctx context.Context, containerID string, log zerolog.Logger, name string, detectCmd, migrateCmd []string) bool {
+// runSeeds detects seed scripts and runs them to populate initial data.
+// Seeds run after migrations so tables exist. Seeds should be idempotent (use upsert).
+func (d *Deployer) runSeeds(ctx context.Context, containerID string, log zerolog.Logger) {
+	// Check package.json for common seed script names
+	seedScripts := []string{"db:seed", "seed", "prisma:seed"}
+	for _, script := range seedScripts {
+		if d.tryHook(ctx, containerID, log, "package.json "+script,
+			[]string{"sh", "-c", fmt.Sprintf(`cat package.json 2>/dev/null | grep -q '"%s"'`, script)},
+			[]string{"npm", "run", script}) {
+			return
+		}
+	}
+
+	// Prisma db seed (uses the "prisma.seed" field in package.json)
+	// Works in monorepos: check root and packages/*/package.json
+	if d.tryHook(ctx, containerID, log, "prisma db seed",
+		[]string{"sh", "-c", `grep -rq '"seed"' package.json 2>/dev/null && grep -q '"prisma"' package.json 2>/dev/null`},
+		[]string{"sh", "-c", `
+			# Try npx prisma db seed, with version pinning fallback
+			if command -v prisma >/dev/null 2>&1; then
+				prisma db seed
+				exit $?
+			fi
+			PRISMA_CLI=$(find /app/node_modules/.pnpm -name "prisma" -path "*/node_modules/.bin/prisma" 2>/dev/null | head -1)
+			if [ -n "$PRISMA_CLI" ]; then
+				"$PRISMA_CLI" db seed
+				exit $?
+			fi
+			PRISMA_VER=$(node -e "try{console.log(require('@prisma/client/package.json').version)}catch(e){}" 2>/dev/null)
+			if [ -n "$PRISMA_VER" ]; then
+				npx prisma@$PRISMA_VER db seed
+				exit $?
+			fi
+			echo "prisma CLI not found for seed, skipping"
+		`}) {
+		return
+	}
+
+	// Prisma seed.ts/seed.js — direct execution (monorepo: find in packages/*/prisma/)
+	// This handles cases where prisma.seed isn't in package.json but seed file exists
+	if d.tryHook(ctx, containerID, log, "prisma seed file",
+		[]string{"sh", "-c", "find /app -path '*/prisma/seed.*' -not -path '*/node_modules/*' | grep -q ."},
+		[]string{"sh", "-c", `
+			SEED=$(find /app -path "*/prisma/seed.*" -not -path "*/node_modules/*" | head -1)
+			if [ -z "$SEED" ]; then exit 1; fi
+			SEED_DIR=$(dirname $(dirname "$SEED"))
+			echo "Running seed: $SEED (from $SEED_DIR)"
+			cd "$SEED_DIR"
+			if echo "$SEED" | grep -q '\.ts$'; then
+				# TypeScript seed — try tsx, ts-node, or compile and run
+				if command -v tsx >/dev/null 2>&1; then
+					tsx "$SEED"
+				elif command -v ts-node >/dev/null 2>&1; then
+					ts-node "$SEED"
+				else
+					# No TS runner in prod — look for compiled JS equivalent
+					JS_SEED=$(echo "$SEED" | sed 's|/prisma/seed\.ts|/dist/prisma/seed.js|; s|/src/seed\.ts|/dist/seed.js|')
+					if [ -f "$JS_SEED" ]; then
+						node "$JS_SEED"
+					else
+						# Inline execution with @prisma/client
+						node --input-type=module -e "$(cat "$SEED" | sed 's/import.*from.*prisma\/client.*/import { PrismaClient } from "@prisma\/client";/')"
+					fi
+				fi
+			else
+				node "$SEED"
+			fi
+		`}) {
+		return
+	}
+
+	// Django seed/loaddata
+	if d.tryHook(ctx, containerID, log, "django loaddata",
+		[]string{"sh", "-c", "test -f manage.py && ls */fixtures/*.json >/dev/null 2>&1"},
+		[]string{"sh", "-c", "for f in $(find . -path '*/fixtures/*.json'); do python manage.py loaddata $f; done"}) {
+		return
+	}
+
+	log.Debug().Msg("no seed script detected, skipping seeds")
+}
+
+// tryHook checks if a tool is present and runs the associated command.
+// Returns true if the tool was detected (regardless of command success/failure).
+func (d *Deployer) tryHook(ctx context.Context, containerID string, log zerolog.Logger, name string, detectCmd, migrateCmd []string) bool {
 	detectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 

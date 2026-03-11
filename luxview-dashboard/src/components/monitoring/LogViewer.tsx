@@ -6,11 +6,12 @@ import { useThemeStore } from '../../stores/theme.store';
 interface LogViewerProps {
   logs: TerminalLine[];
   onClear?: () => void;
+  loading?: boolean;
 }
 
 type LogLevel = 'all' | 'info' | 'error' | 'warn' | 'debug';
 
-export function LogViewer({ logs, onClear }: LogViewerProps) {
+export function LogViewer({ logs, onClear, loading = false }: LogViewerProps) {
   const { t } = useTranslation();
   const [level, setLevel] = useState<LogLevel>('all');
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -54,7 +55,7 @@ export function LogViewer({ logs, onClear }: LogViewerProps) {
         ))}
       </div>
 
-      <Terminal lines={filtered} title={t('monitoring.logViewer.title')} maxHeight="600px" onClear={onClear} />
+      <Terminal lines={filtered} title={t('monitoring.logViewer.title')} maxHeight="600px" onClear={onClear} loading={loading} />
     </div>
   );
 }
