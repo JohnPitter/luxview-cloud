@@ -93,15 +93,14 @@ Use a single stage. Here is the COMPLETE template — adapt it to the project:
   RUN rm -rf packages/*/node_modules && pnpm install --frozen-lockfile
   # If shared package "main" points to .ts source, patch to .js:
   RUN sed -i 's|"./src/index.ts"|"./dist/index.js"|g' packages/shared/package.json
-  # If Prisma: generate before build
+  # If Prisma: generate before build, save prisma CLI version for re-generation
   RUN cd packages/api && npx prisma generate
+  RUN cd packages/api && node -e "console.log(require('@prisma/client/package.json').version)" > /tmp/prisma-version
   RUN pnpm build
   RUN rm -rf node_modules packages/*/node_modules
   RUN pnpm install --frozen-lockfile --prod
-  # Re-generate Prisma client after prod install. @prisma/client is a prod dep so we can read its version.
-  # Use that version to pin npx (without pinning, npx downloads latest which may be incompatible).
-  RUN PRISMA_VER=$(node -e "console.log(require('@prisma/client/package.json').version)") && \
-      cd packages/api && npx --yes prisma@$PRISMA_VER generate
+  # Re-generate Prisma client (prod install loses it). Pin npx to same version to avoid incompatibility.
+  RUN cd packages/api && npx --yes prisma@$(cat /tmp/prisma-version) generate
   EXPOSE 3001
   CMD ["node", "packages/api/dist/index.js"]
 
