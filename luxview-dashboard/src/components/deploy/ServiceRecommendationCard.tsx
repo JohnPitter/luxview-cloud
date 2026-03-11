@@ -22,7 +22,7 @@ const serviceIcons: Record<string, React.ReactNode> = {
   redis: <Database size={18} className="text-red-400" />,
   mongodb: <Database size={18} className="text-emerald-400" />,
   rabbitmq: <Radio size={18} className="text-orange-400" />,
-  s3: <HardDrive size={18} className="text-purple-400" />,
+  storage: <HardDrive size={18} className="text-purple-400" />,
 };
 
 export function ServiceRecommendationCard({

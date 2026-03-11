@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -243,10 +244,27 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		}
 	}
 
-	// Inject service env vars (DATABASE_URL, REDIS_URL, etc.)
+	// Auto-provision storage if the Dockerfile references STORAGE_PATH but no storage service exists.
+	// This ensures apps that need file storage get it automatically on first deploy.
+	if hasCustomDockerfile {
+		dockerfile := *app.CustomDockerfile
+		if strings.Contains(dockerfile, "STORAGE_PATH") || strings.Contains(dockerfile, "/storage") {
+			existingStorage, _ := d.serviceRepo.FindByAppAndType(ctx, app.ID, model.ServiceStorage)
+			if existingStorage == nil {
+				if svc, provErr := d.provisioner.Provision(ctx, app.ID, model.ServiceStorage); provErr == nil {
+					log.Info().Str("app", app.Subdomain).Str("service_id", svc.ID.String()).Msg("auto-provisioned storage service")
+				} else if !strings.Contains(provErr.Error(), "already provisioned") {
+					log.Warn().Err(provErr).Str("app", app.Subdomain).Msg("failed to auto-provision storage")
+				}
+			}
+		}
+	}
+
+	// Inject service env vars (DATABASE_URL, REDIS_URL, etc.) and collect bind mounts.
 	// Service vars are injected first, then user env vars override them.
 	// This ensures user-defined DATABASE_URL takes priority.
 	serviceEnvVars := make(map[string]string)
+	var storageBinds []string
 	services, err := d.serviceRepo.ListByAppID(ctx, app.ID)
 	if err == nil {
 		for _, svc := range services {
@@ -258,6 +276,9 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 						for k, v := range d.provisioner.GetEnvVarsForService(&svc, creds) {
 							serviceEnvVars[k] = v
 						}
+						if binds := d.provisioner.GetStorageBinds(&svc, creds); len(binds) > 0 {
+							storageBinds = append(storageBinds, binds...)
+						}
 					}
 				}
 			}
@@ -267,7 +288,7 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 			for k := range serviceEnvVars {
 				svcKeys = append(svcKeys, k)
 			}
-			log.Info().Int("count", len(services)).Strs("env_keys", svcKeys).Msg("injected service env vars")
+			log.Info().Int("count", len(services)).Strs("env_keys", svcKeys).Int("binds", len(storageBinds)).Msg("injected service env vars")
 		}
 	}
 
@@ -299,7 +320,7 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		Msg("starting container")
 
 	// Start new container
-	containerID, err := d.container.Start(ctx, app, deployment.ImageTag, envVars)
+	containerID, err := d.container.Start(ctx, app, deployment.ImageTag, envVars, storageBinds)
 	if err != nil {
 		// Try to restart old container on failure
 		if oldContainerID != "" {
@@ -415,39 +436,82 @@ func (d *Deployer) runMigrations(ctx context.Context, containerID string, log ze
 		return
 	}
 
-	// Prisma — push schema to DB (works without migration history)
-	// Supports root and monorepo layouts (packages/*/prisma/schema.prisma)
-	// IMPORTANT: In prod containers, "prisma" CLI (devDep) is removed but @prisma/client remains.
-	// We detect the @prisma/client version and use npx prisma@<version> to avoid downloading
-	// an incompatible major version (e.g. Prisma 7 vs project using Prisma 6).
-	if d.tryHook(ctx, containerID, log, "prisma db push",
+	// Prisma — apply schema to DB via migrate deploy (preferred) or db push (fallback).
+	// Supports root and monorepo layouts (packages/*/prisma/schema.prisma).
+	// In prod containers, "prisma" CLI (devDep) is removed but @prisma/client remains.
+	// We detect @prisma/client version and use npx prisma@<version> to run commands.
+	// IMPORTANT for pnpm monorepos: require('@prisma/client/package.json') only resolves
+	// from within the package that declares it as a dependency, NOT from the monorepo root.
+	if d.tryHook(ctx, containerID, log, "prisma migrate",
 		[]string{"sh", "-c", "test -f prisma/schema.prisma || ls packages/*/prisma/schema.prisma >/dev/null 2>&1"},
 		[]string{"sh", "-c", `
 			SCHEMA=$(find /app -path "*/prisma/schema.prisma" -not -path "*/node_modules/*" | head -1)
 			if [ -z "$SCHEMA" ]; then exit 0; fi
+			SCHEMA_DIR=$(dirname "$SCHEMA")
+			PACKAGE_DIR=$(dirname "$SCHEMA_DIR")
+
+			# Resolve prisma CLI: try direct CLI, .pnpm store, then npx with pinned version
+			PRISMA_CMD=""
 
 			# 1) Try existing prisma CLI (available if prisma is a prod dep or not pruned)
 			if command -v prisma >/dev/null 2>&1; then
-				prisma db push --schema="$SCHEMA" --skip-generate --accept-data-loss
-				exit $?
+				PRISMA_CMD="prisma"
 			fi
 
 			# 2) Try finding prisma CLI in .pnpm store
-			PRISMA_CLI=$(find /app/node_modules/.pnpm -name "prisma" -path "*/node_modules/.bin/prisma" 2>/dev/null | head -1)
-			if [ -n "$PRISMA_CLI" ]; then
-				"$PRISMA_CLI" db push --schema="$SCHEMA" --skip-generate --accept-data-loss
-				exit $?
+			if [ -z "$PRISMA_CMD" ]; then
+				PRISMA_CLI=$(find /app/node_modules/.pnpm -name "prisma" -path "*/node_modules/.bin/prisma" 2>/dev/null | head -1)
+				if [ -n "$PRISMA_CLI" ]; then
+					PRISMA_CMD="$PRISMA_CLI"
+				fi
 			fi
 
-			# 3) Detect @prisma/client version and use pinned npx to avoid major version mismatch
-			PRISMA_VER=$(node -e "try{console.log(require('@prisma/client/package.json').version)}catch(e){}" 2>/dev/null)
-			if [ -n "$PRISMA_VER" ]; then
-				echo "Using npx prisma@$PRISMA_VER (pinned to @prisma/client version)"
-				npx prisma@$PRISMA_VER db push --schema="$SCHEMA" --skip-generate --accept-data-loss
-				exit $?
+			# 3) Detect @prisma/client version — try from package dir first (pnpm monorepo),
+			#    then from root (standard layout)
+			if [ -z "$PRISMA_CMD" ]; then
+				PRISMA_VER=""
+				if [ "$PACKAGE_DIR" != "$SCHEMA_DIR" ] && [ -d "$PACKAGE_DIR/node_modules" ]; then
+					PRISMA_VER=$(cd "$PACKAGE_DIR" && node -e "try{console.log(require('@prisma/client/package.json').version)}catch(e){}" 2>/dev/null)
+				fi
+				if [ -z "$PRISMA_VER" ]; then
+					PRISMA_VER=$(node -e "try{console.log(require('@prisma/client/package.json').version)}catch(e){}" 2>/dev/null)
+				fi
+				if [ -n "$PRISMA_VER" ]; then
+					echo "Using npx prisma@$PRISMA_VER (pinned to @prisma/client version)"
+					PRISMA_CMD="npx --yes prisma@$PRISMA_VER"
+				fi
 			fi
 
-			echo "prisma CLI not found and version not detectable, skipping db push"
+			if [ -z "$PRISMA_CMD" ]; then
+				echo "prisma CLI not found and version not detectable, skipping"
+				exit 0
+			fi
+
+			# If migrations folder exists, use migrate deploy (production-safe, applies pending migrations).
+			# Otherwise fall back to db push (schema-only sync, no migration history).
+			if [ -d "$SCHEMA_DIR/migrations" ]; then
+				echo "Running: $PRISMA_CMD migrate deploy --schema=$SCHEMA"
+				OUTPUT=$($PRISMA_CMD migrate deploy --schema="$SCHEMA" 2>&1)
+				EXIT_CODE=$?
+				echo "$OUTPUT"
+
+				# P3005 = non-empty DB without _prisma_migrations table (first deploy on existing DB).
+				# Strategy: sync schema with db push, then baseline all migrations so future deploys work.
+				if [ $EXIT_CODE -ne 0 ] && echo "$OUTPUT" | grep -q "P3005"; then
+					echo "Detected P3005: syncing schema with db push, then baselining..."
+					$PRISMA_CMD db push --schema="$SCHEMA" --skip-generate --accept-data-loss 2>&1
+					for m in $(ls "$SCHEMA_DIR/migrations/" | grep -v migration_lock.toml | sort); do
+						echo "  Resolving: $m"
+						$PRISMA_CMD migrate resolve --applied "$m" --schema="$SCHEMA" 2>&1
+					done
+					echo "Schema synced and migrations baselined."
+				else
+					exit $EXIT_CODE
+				fi
+			else
+				echo "Running: $PRISMA_CMD db push --schema=$SCHEMA"
+				$PRISMA_CMD db push --schema="$SCHEMA" --skip-generate --accept-data-loss
+			fi
 		`}) {
 		return
 	}

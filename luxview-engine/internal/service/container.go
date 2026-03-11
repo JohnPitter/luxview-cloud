@@ -26,7 +26,8 @@ func NewContainerManager(docker *dockerclient.Client, appNetwork string) *Contai
 }
 
 // Start creates and starts a container for the given app.
-func (cm *ContainerManager) Start(ctx context.Context, app *model.App, imageTag string, envVars map[string]string) (string, error) {
+// binds is an optional list of Docker bind mount strings (e.g., "/host/path:/container/path").
+func (cm *ContainerManager) Start(ctx context.Context, app *model.App, imageTag string, envVars map[string]string, binds []string) (string, error) {
 	log := logger.With("container")
 	containerName := fmt.Sprintf("luxview-%s", app.Subdomain)
 
@@ -73,6 +74,7 @@ func (cm *ContainerManager) Start(ctx context.Context, app *model.App, imageTag 
 			NanoCPUs: cpuQuota,
 			Memory:   memory,
 		},
+		Binds: binds,
 	}
 
 	networkConfig := &network.NetworkingConfig{}

@@ -10,7 +10,7 @@ import { AppDetail } from './pages/AppDetail';
 import { Admin } from './pages/Admin';
 import { Resources } from './pages/Resources';
 import { DbExplorer } from './pages/DbExplorer';
-import { S3Explorer } from './pages/S3Explorer';
+import { StorageExplorer } from './pages/StorageExplorer';
 import { Logs } from './pages/Logs';
 import { Settings } from './pages/Settings';
 import { Profile } from './pages/Profile';
@@ -54,7 +54,7 @@ export function App() {
         <Route path="admin" element={<Admin />} />
         <Route path="resources" element={<Resources />} />
         <Route path="resources/db/:serviceId" element={<DbExplorer />} />
-        <Route path="resources/s3/:serviceId" element={<S3Explorer />} />
+        <Route path="resources/storage/:serviceId" element={<StorageExplorer />} />
         <Route path="logs" element={<Logs />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="settings" element={<Settings />} />

@@ -55,9 +55,9 @@ const serviceConfig: Record<
     bgColor: 'bg-orange-500/10',
     borderColor: 'border-orange-500/20',
   },
-  s3: {
-    labelKey: 'resources.service.objectStorage',
-    icon: 'S3',
+  storage: {
+    labelKey: 'resources.service.storage',
+    icon: 'ST',
     color: 'text-purple-400',
     bgColor: 'bg-purple-500/10',
     borderColor: 'border-purple-500/20',
@@ -95,7 +95,7 @@ export function Resources() {
       label: t('resources.categories.objectStorage'),
       description: t('resources.categories.objectStorageDescription'),
       icon: HardDriveIcon,
-      types: ['s3'] as ServiceType[],
+      types: ['storage'] as ServiceType[],
     },
   ];
 
@@ -185,7 +185,7 @@ export function Resources() {
           },
           {
             label: t('resources.stats.storage'),
-            value: totalByType(['s3']),
+            value: totalByType(['storage']),
             icon: HardDriveIcon,
             color: 'text-purple-400',
           },
@@ -373,8 +373,8 @@ export function Resources() {
                             <div className="mb-3">
                               <button
                                 onClick={() => {
-                                  if (svc.serviceType === 's3') {
-                                    navigate(`/dashboard/resources/s3/${svc.id}`);
+                                  if (svc.serviceType === 'storage') {
+                                    navigate(`/dashboard/resources/storage/${svc.id}`);
                                   } else {
                                     navigate(`/dashboard/resources/db/${svc.id}`);
                                   }
@@ -389,7 +389,7 @@ export function Resources() {
                                   }
                                 `}
                               >
-                                {svc.serviceType === 's3' ? (
+                                {svc.serviceType === 'storage' ? (
                                   <>
                                     <FolderOpen size={14} />
                                     {t('resources.explorer.browseFiles')}
@@ -406,7 +406,7 @@ export function Resources() {
 
                           {/* Credentials Grid */}
                           <div className="grid grid-cols-2 gap-2">
-                            {(svc.serviceType === 's3'
+                            {(svc.serviceType === 'storage'
                               ? [
                                   { label: t('common.field.endpoint'), value: creds?.endpoint },
                                   { label: t('common.field.bucket'), value: creds?.bucket },
@@ -451,7 +451,7 @@ export function Resources() {
                             {/* Password / Secret Key */}
                             {(creds?.password || creds?.secretKey) && (() => {
                               const secretValue = creds?.password || creds?.secretKey || '';
-                              const secretLabel = svc.serviceType === 's3' ? t('common.field.secretKey') : t('common.field.password');
+                              const secretLabel = svc.serviceType === 'storage' ? t('common.field.secretKey') : t('common.field.password');
                               return (
                               <div>
                                 <label className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">

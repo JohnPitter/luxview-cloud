@@ -24,7 +24,7 @@ const services: Array<{
   { type: 'redis', labelKey: 'services.dialog.redis.label', descriptionKey: 'services.dialog.redis.description', icon: 'RD', color: 'border-red-500/30 hover:border-red-500/60' },
   { type: 'mongodb', labelKey: 'services.dialog.mongodb.label', descriptionKey: 'services.dialog.mongodb.description', icon: 'MG', color: 'border-emerald-500/30 hover:border-emerald-500/60' },
   { type: 'rabbitmq', labelKey: 'services.dialog.rabbitmq.label', descriptionKey: 'services.dialog.rabbitmq.description', icon: 'RQ', color: 'border-orange-500/30 hover:border-orange-500/60' },
-  { type: 's3', labelKey: 'services.dialog.s3.label', descriptionKey: 'services.dialog.s3.description', icon: 'S3', color: 'border-purple-500/30 hover:border-purple-500/60' },
+  { type: 'storage', labelKey: 'services.dialog.storage.label', descriptionKey: 'services.dialog.storage.description', icon: 'ST', color: 'border-purple-500/30 hover:border-purple-500/60' },
 ];
 
 export function AddServiceDialog({ open, onClose, onAdd, existingTypes, loading }: AddServiceDialogProps) {

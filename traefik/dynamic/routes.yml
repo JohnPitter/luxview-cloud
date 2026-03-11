@@ -40,6 +40,19 @@ http:
         - gzip-compress
       priority: 1
 
+    # Catch-all for deleted/unknown *.luxview.cloud subdomains
+    # Priority must be lower than dynamic app routes (which default to rule length)
+    app-not-found:
+      rule: "HostRegexp(`^.+\\.luxview\\.cloud$`)"
+      entryPoints:
+        - websecure
+      service: dashboard-svc
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+      priority: 1
+
   serversTransports:
     engine-transport:
       forwardingTimeouts:

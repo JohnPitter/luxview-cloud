@@ -1,6 +1,6 @@
 import { api } from './client';
 
-export type ServiceType = 'postgres' | 'redis' | 'mongodb' | 'rabbitmq' | 's3';
+export type ServiceType = 'postgres' | 'redis' | 'mongodb' | 'rabbitmq' | 'storage';
 
 export interface AppService {
   id: string;
@@ -41,8 +41,8 @@ export interface QueryResult {
   truncated: boolean;
 }
 
-// S3 Explorer types
-export interface S3FileInfo {
+// Storage Explorer types
+export interface StorageFileInfo {
   key: string;
   size: number;
   lastModified: string;
@@ -85,10 +85,10 @@ export const servicesApi = {
     return data;
   },
 
-  // S3 Explorer
-  async listFiles(serviceId: string, prefix?: string): Promise<S3FileInfo[]> {
+  // Storage Explorer
+  async listFiles(serviceId: string, prefix?: string): Promise<StorageFileInfo[]> {
     const params = prefix ? { prefix } : {};
-    const { data } = await api.get<S3FileInfo[]>(`/services/${serviceId}/files`, { params });
+    const { data } = await api.get<StorageFileInfo[]>(`/services/${serviceId}/files`, { params });
     return data ?? [];
   },
 

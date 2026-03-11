@@ -200,7 +200,7 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "role updated"})
 }
 
-// Platform services reserve: ~1 CPU core, 2GB RAM for postgres, redis, mongo, rabbitmq, minio, traefik, engine, dashboard.
+// Platform services reserve: ~1 CPU core, 2GB RAM for postgres, redis, mongo, rabbitmq, traefik, engine, dashboard.
 const (
 	platformReservedCPU    = 1.0
 	platformReservedMemory = 2 * 1024 * 1024 * 1024 // 2GB

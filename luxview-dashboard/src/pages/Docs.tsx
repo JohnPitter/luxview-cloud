@@ -72,7 +72,7 @@ export function Docs() {
         'docs.services.redis',
         'docs.services.mongo',
         'docs.services.rabbitmq',
-        'docs.services.s3',
+        'docs.services.storage',
       ],
     },
     {

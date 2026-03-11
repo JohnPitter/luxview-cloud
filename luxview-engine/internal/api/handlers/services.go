@@ -120,7 +120,7 @@ func (h *ServiceHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Validate service type
 	switch req.ServiceType {
-	case model.ServicePostgres, model.ServiceRedis, model.ServiceMongoDB, model.ServiceRabbitMQ, model.ServiceS3:
+	case model.ServicePostgres, model.ServiceRedis, model.ServiceMongoDB, model.ServiceRabbitMQ, model.ServiceStorage:
 		// valid
 	default:
 		writeError(w, http.StatusBadRequest, "invalid service type")

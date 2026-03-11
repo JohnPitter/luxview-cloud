@@ -44,6 +44,8 @@ type Config struct {
 	SharedMinioUser     string
 	SharedMinioPassword string
 
+	StorageBasePath string // base path for local storage volumes
+
 	BuildConcurrency int
 	PortRangeStart   int
 	PortRangeEnd     int
@@ -100,6 +102,8 @@ func Load() (*Config, error) {
 		SharedMinioPort:     envInt("SHARED_MINIO_PORT", 9000),
 		SharedMinioUser:     envStr("SHARED_MINIO_USER", "luxview_admin"),
 		SharedMinioPassword: envStr("SHARED_MINIO_PASSWORD", ""),
+
+		StorageBasePath: envStr("STORAGE_BASE_PATH", "/data/luxview/storage"),
 
 		BuildConcurrency: envInt("BUILD_CONCURRENCY", 3),
 		PortRangeStart:   envInt("PORT_RANGE_START", 10000),

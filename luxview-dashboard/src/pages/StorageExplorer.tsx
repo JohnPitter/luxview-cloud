@@ -18,7 +18,7 @@ import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { useThemeStore } from '../stores/theme.store';
-import { servicesApi, type S3FileInfo } from '../api/services';
+import { servicesApi, type StorageFileInfo } from '../api/services';
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return '-';
@@ -27,14 +27,14 @@ function formatSize(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
 }
 
-export function S3Explorer() {
+export function StorageExplorer() {
   const { serviceId } = useParams<{ serviceId: string }>();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [files, setFiles] = useState<S3FileInfo[]>([]);
+  const [files, setFiles] = useState<StorageFileInfo[]>([]);
   const [prefix, setPrefix] = useState('');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -65,7 +65,7 @@ export function S3Explorer() {
       const data = await servicesApi.listFiles(serviceId, prefix || undefined);
       setFiles(data);
     } catch {
-      setError(t('resources.s3.failedToLoadFiles'));
+      setError(t('resources.storage.failedToLoadFiles'));
     } finally {
       setLoading(false);
     }
@@ -106,7 +106,7 @@ export function S3Explorer() {
       }
       await fetchFiles();
     } catch {
-      setError(t('resources.s3.failedToUploadFile'));
+      setError(t('resources.storage.failedToUploadFile'));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -127,7 +127,7 @@ export function S3Explorer() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
-      setError(t('resources.s3.failedToDownloadFile'));
+      setError(t('resources.storage.failedToDownloadFile'));
     } finally {
       setDownloadingKey(null);
     }
@@ -141,7 +141,7 @@ export function S3Explorer() {
       setDeleteTarget(null);
       await fetchFiles();
     } catch {
-      setError(t('resources.s3.failedToDeleteFile'));
+      setError(t('resources.storage.failedToDeleteFile'));
     } finally {
       setDeleting(false);
     }
@@ -172,9 +172,9 @@ export function S3Explorer() {
                 isDark ? 'text-zinc-100' : 'text-zinc-900'
               }`}
             >
-              {t('resources.s3.title')}
+              {t('resources.storage.title')}
             </h1>
-            <p className="text-xs text-zinc-500">{t('resources.s3.subtitle')}</p>
+            <p className="text-xs text-zinc-500">{t('resources.storage.subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -201,7 +201,7 @@ export function S3Explorer() {
               )
             }
           >
-            {uploading ? t('resources.s3.uploading') : t('resources.s3.upload')}
+            {uploading ? t('resources.storage.uploading') : t('resources.storage.upload')}
           </PillButton>
         </div>
       </div>
@@ -258,7 +258,7 @@ export function S3Explorer() {
             />
             <input
               type="text"
-              placeholder={t('resources.s3.filterPlaceholder')}
+              placeholder={t('resources.storage.filterPlaceholder')}
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               className={`pl-7 pr-3 py-1.5 rounded-lg text-xs outline-none w-40 ${
@@ -274,16 +274,16 @@ export function S3Explorer() {
         {loading ? (
           <div className="p-8 text-center">
             <Loader2 size={24} className="mx-auto text-amber-400 animate-spin mb-3" />
-            <p className="text-xs text-zinc-500">{t('resources.s3.loadingFiles')}</p>
+            <p className="text-xs text-zinc-500">{t('resources.storage.loadingFiles')}</p>
           </div>
         ) : filteredFiles.length === 0 ? (
           <div className="p-12 text-center">
             <FileIcon size={32} className="mx-auto text-zinc-600 mb-3" />
             <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
-              {searchFilter ? t('resources.s3.noFilesMatchFilter') : t('resources.s3.folderEmpty')}
+              {searchFilter ? t('resources.storage.noFilesMatchFilter') : t('resources.storage.folderEmpty')}
             </p>
             <p className="text-xs text-zinc-500 mt-1">
-              {!searchFilter && t('resources.s3.uploadFilesHint')}
+              {!searchFilter && t('resources.storage.uploadFilesHint')}
             </p>
           </div>
         ) : (
@@ -355,7 +355,7 @@ export function S3Explorer() {
                         className={`p-1.5 rounded-lg transition-colors ${
                           isDark ? 'hover:bg-zinc-700' : 'hover:bg-zinc-200'
                         }`}
-                        title={t('resources.s3.download')}
+                        title={t('resources.storage.download')}
                       >
                         {downloadingKey === file.key ? (
                           <Loader2 size={14} className="animate-spin text-amber-400" />
@@ -371,7 +371,7 @@ export function S3Explorer() {
                         className={`p-1.5 rounded-lg transition-colors ${
                           isDark ? 'hover:bg-red-500/10' : 'hover:bg-red-50'
                         }`}
-                        title={t('resources.s3.delete')}
+                        title={t('resources.storage.delete')}
                       >
                         <Trash2 size={14} className="text-red-400" />
                       </button>
@@ -387,9 +387,9 @@ export function S3Explorer() {
       {/* Delete confirm */}
       <ConfirmDialog
         open={!!deleteTarget}
-        title={t('resources.s3.deleteDialog.title')}
-        message={t('resources.s3.deleteDialog.message', { name: deleteTarget?.split('/').pop() })}
-        confirmLabel={deleting ? t('resources.s3.deleteDialog.deleting') : t('resources.s3.deleteDialog.confirm')}
+        title={t('resources.storage.deleteDialog.title')}
+        message={t('resources.storage.deleteDialog.message', { name: deleteTarget?.split('/').pop() })}
+        confirmLabel={deleting ? t('resources.storage.deleteDialog.deleting') : t('resources.storage.deleteDialog.confirm')}
         variant="danger"
         loading={deleting}
         onConfirm={handleDelete}

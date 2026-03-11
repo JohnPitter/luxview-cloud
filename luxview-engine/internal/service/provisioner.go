@@ -9,15 +9,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/luxview/engine/internal/config"
 	"github.com/luxview/engine/internal/model"
 	"github.com/luxview/engine/internal/repository"
@@ -124,21 +124,18 @@ func (p *Provisioner) Provision(ctx context.Context, appID uuid.UUID, serviceTyp
 		}
 		log.Info().Str("vhost", vhost).Str("user", userName).Msg("rabbitmq provisioned")
 
-	case model.ServiceS3:
-		bucketName := fmt.Sprintf("app-%s", strings.ReplaceAll(appID.String(), "_", "-"))
-		dbName = bucketName
-		if err := p.provisionS3(ctx, bucketName); err != nil {
-			return nil, fmt.Errorf("provision s3: %w", err)
+	case model.ServiceStorage:
+		storageName := fmt.Sprintf("app-%s", strings.ReplaceAll(appID.String(), "_", "-"))
+		dbName = storageName
+		hostPath := filepath.Join(p.cfg.StorageBasePath, storageName)
+		if err := p.provisionStorage(hostPath); err != nil {
+			return nil, fmt.Errorf("provision storage: %w", err)
 		}
-		endpoint := fmt.Sprintf("%s:%d", p.cfg.SharedMinioHost, p.cfg.SharedMinioPort)
 		creds = map[string]string{
-			"endpoint":   endpoint,
-			"bucket":     bucketName,
-			"access_key": p.cfg.SharedMinioUser,
-			"secret_key": p.cfg.SharedMinioPassword,
-			"url":        fmt.Sprintf("http://%s/%s", endpoint, bucketName),
+			"host_path":      hostPath,
+			"container_path": "/storage",
 		}
-		log.Info().Str("bucket", bucketName).Msg("s3 provisioned")
+		log.Info().Str("path", hostPath).Msg("storage provisioned")
 
 	default:
 		return nil, fmt.Errorf("unsupported service type: %s", serviceType)
@@ -247,9 +244,9 @@ func (p *Provisioner) Deprovision(ctx context.Context, svc *model.AppService) er
 		if err := p.deprovisionRabbitMQ(ctx, svc.DBName); err != nil {
 			log.Warn().Err(err).Str("vhost", svc.DBName).Msg("failed to deprovision rabbitmq")
 		}
-	case model.ServiceS3:
-		if err := p.deprovisionS3(ctx, svc.DBName); err != nil {
-			log.Warn().Err(err).Str("bucket", svc.DBName).Msg("failed to deprovision s3")
+	case model.ServiceStorage:
+		if err := p.deprovisionStorage(svc.DBName); err != nil {
+			log.Warn().Err(err).Str("storage", svc.DBName).Msg("failed to deprovision storage")
 		}
 	}
 
@@ -398,48 +395,25 @@ func (p *Provisioner) rabbitAPIDelete(ctx context.Context, client *http.Client, 
 	return nil
 }
 
-func (p *Provisioner) provisionS3(ctx context.Context, bucketName string) error {
-	endpoint := fmt.Sprintf("%s:%d", p.cfg.SharedMinioHost, p.cfg.SharedMinioPort)
-	client, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(p.cfg.SharedMinioUser, p.cfg.SharedMinioPassword, ""),
-		Secure: false,
-	})
-	if err != nil {
-		return fmt.Errorf("connect to minio: %w", err)
-	}
-
-	exists, err := client.BucketExists(ctx, bucketName)
-	if err != nil {
-		return fmt.Errorf("check bucket: %w", err)
-	}
-	if !exists {
-		if err := client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{}); err != nil {
-			return fmt.Errorf("create bucket: %w", err)
-		}
-	}
-	return nil
+func (p *Provisioner) provisionStorage(hostPath string) error {
+	return os.MkdirAll(hostPath, 0755)
 }
 
-func (p *Provisioner) deprovisionS3(ctx context.Context, bucketName string) error {
-	endpoint := fmt.Sprintf("%s:%d", p.cfg.SharedMinioHost, p.cfg.SharedMinioPort)
-	client, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(p.cfg.SharedMinioUser, p.cfg.SharedMinioPassword, ""),
-		Secure: false,
-	})
+func (p *Provisioner) deprovisionStorage(storageName string) error {
+	hostPath := filepath.Join(p.cfg.StorageBasePath, storageName)
+	// Validate path is under storage base to prevent path traversal
+	absPath, err := filepath.Abs(hostPath)
 	if err != nil {
 		return err
 	}
-
-	// Remove all objects first
-	objectsCh := client.ListObjects(ctx, bucketName, minio.ListObjectsOptions{Recursive: true})
-	for obj := range objectsCh {
-		if obj.Err != nil {
-			continue
-		}
-		_ = client.RemoveObject(ctx, bucketName, obj.Key, minio.RemoveObjectOptions{})
+	absBase, err := filepath.Abs(p.cfg.StorageBasePath)
+	if err != nil {
+		return err
 	}
-
-	return client.RemoveBucket(ctx, bucketName)
+	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) {
+		return fmt.Errorf("invalid storage path: outside base directory")
+	}
+	return os.RemoveAll(absPath)
 }
 
 func (p *Provisioner) deprovisionPostgres(ctx context.Context, dbName string) error {
@@ -486,17 +460,24 @@ func (p *Provisioner) GetEnvVarsForService(svc *model.AppService, creds map[stri
 	case model.ServiceRabbitMQ:
 		envVars["RABBITMQ_URL"] = creds["url"]
 		envVars["AMQP_URL"] = creds["url"]
-	case model.ServiceS3:
-		envVars["S3_ENDPOINT"] = fmt.Sprintf("http://%s", creds["endpoint"])
-		envVars["S3_BUCKET"] = creds["bucket"]
-		envVars["S3_ACCESS_KEY"] = creds["access_key"]
-		envVars["S3_SECRET_KEY"] = creds["secret_key"]
-		envVars["AWS_ENDPOINT_URL"] = fmt.Sprintf("http://%s", creds["endpoint"])
-		envVars["AWS_ACCESS_KEY_ID"] = creds["access_key"]
-		envVars["AWS_SECRET_ACCESS_KEY"] = creds["secret_key"]
-		envVars["AWS_DEFAULT_REGION"] = "us-east-1"
+	case model.ServiceStorage:
+		envVars["STORAGE_PATH"] = creds["container_path"]
 	}
 	return envVars
+}
+
+// GetStorageBinds returns Docker bind mount strings for storage services.
+// Format: "host_path:container_path"
+func (p *Provisioner) GetStorageBinds(svc *model.AppService, creds map[string]string) []string {
+	if svc.ServiceType != model.ServiceStorage {
+		return nil
+	}
+	hostPath := creds["host_path"]
+	containerPath := creds["container_path"]
+	if hostPath == "" || containerPath == "" {
+		return nil
+	}
+	return []string{fmt.Sprintf("%s:%s", hostPath, containerPath)}
 }
 
 func sanitizeForDB(s string) string {

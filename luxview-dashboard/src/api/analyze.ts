@@ -14,7 +14,7 @@ export interface EnvHint {
 export interface ServiceRecommendation {
   currentService: string;
   currentEvidence: string;
-  recommendedService: 'postgres' | 'redis' | 'mongodb' | 'rabbitmq' | 's3';
+  recommendedService: 'postgres' | 'redis' | 'mongodb' | 'rabbitmq' | 'storage';
   reason: string;
   manualSteps: string[];
 }

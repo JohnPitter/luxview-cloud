@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -13,8 +15,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"github.com/luxview/engine/internal/api/middleware"
 	"github.com/luxview/engine/internal/model"
@@ -325,31 +325,43 @@ func (h *ExplorerHandler) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ListFiles lists objects in an S3 bucket.
+// resolveStoragePath validates and resolves a storage path, preventing path traversal.
+func resolveStoragePath(basePath, key string) (string, error) {
+	fullPath := filepath.Join(basePath, filepath.FromSlash(key))
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", err
+	}
+	absBase, err := filepath.Abs(basePath)
+	if err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) && absPath != absBase {
+		return "", fmt.Errorf("path traversal detected")
+	}
+	return absPath, nil
+}
+
+// ListFiles lists files in the local storage directory.
 func (h *ExplorerHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	svc, creds, err := h.decryptServiceCreds(r)
 	if err != nil {
 		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
-	if svc.ServiceType != model.ServiceS3 {
-		writeError(w, http.StatusBadRequest, "not an S3 service")
+	if svc.ServiceType != model.ServiceStorage {
+		writeError(w, http.StatusBadRequest, "not a storage service")
 		return
 	}
 
+	basePath := creds["host_path"]
 	prefix := r.URL.Query().Get("prefix")
 
-	client, err := minio.New(creds["endpoint"], &minio.Options{
-		Creds:  credentials.NewStaticV4(creds["access_key"], creds["secret_key"], ""),
-		Secure: false,
-	})
+	dirPath, err := resolveStoragePath(basePath, prefix)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to connect to storage")
+		writeError(w, http.StatusBadRequest, "invalid path")
 		return
 	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-	defer cancel()
 
 	type fileInfo struct {
 		Key          string    `json:"key"`
@@ -358,41 +370,47 @@ func (h *ExplorerHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 		IsDir        bool      `json:"isDir"`
 	}
 
-	var files []fileInfo
-	opts := minio.ListObjectsOptions{
-		Prefix:    prefix,
-		Recursive: false,
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeJSON(w, http.StatusOK, []fileInfo{})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to list files")
+		return
 	}
 
-	for obj := range client.ListObjects(ctx, creds["bucket"], opts) {
-		if obj.Err != nil {
+	files := make([]fileInfo, 0, len(entries))
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
 			continue
 		}
-		isDir := strings.HasSuffix(obj.Key, "/")
+		key := prefix + entry.Name()
+		if entry.IsDir() {
+			key += "/"
+		}
 		files = append(files, fileInfo{
-			Key:          obj.Key,
-			Size:         obj.Size,
-			LastModified: obj.LastModified,
-			IsDir:        isDir,
+			Key:          key,
+			Size:         info.Size(),
+			LastModified: info.ModTime(),
+			IsDir:        entry.IsDir(),
 		})
-	}
-	if files == nil {
-		files = []fileInfo{}
 	}
 
 	writeJSON(w, http.StatusOK, files)
 }
 
-// UploadFile uploads a file to the S3 bucket.
+// UploadFile uploads a file to the local storage directory.
 func (h *ExplorerHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
-	log := logger.With("s3-explorer")
+	log := logger.With("storage-explorer")
 	svc, creds, err := h.decryptServiceCreds(r)
 	if err != nil {
 		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
-	if svc.ServiceType != model.ServiceS3 {
-		writeError(w, http.StatusBadRequest, "not an S3 service")
+	if svc.ServiceType != model.ServiceStorage {
+		writeError(w, http.StatusBadRequest, "not a storage service")
 		return
 	}
 
@@ -415,39 +433,45 @@ func (h *ExplorerHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		key = header.Filename
 	}
 
-	client, err := minio.New(creds["endpoint"], &minio.Options{
-		Creds:  credentials.NewStaticV4(creds["access_key"], creds["secret_key"], ""),
-		Secure: false,
-	})
+	basePath := creds["host_path"]
+	destPath, err := resolveStoragePath(basePath, key)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to connect to storage")
+		writeError(w, http.StatusBadRequest, "invalid path")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
-	defer cancel()
-
-	_, err = client.PutObject(ctx, creds["bucket"], key, file, header.Size, minio.PutObjectOptions{
-		ContentType: header.Header.Get("Content-Type"),
-	})
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to upload file")
+	// Create parent directories if needed
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create directory")
 		return
 	}
 
-	log.Info().Str("key", key).Int64("size", header.Size).Msg("file uploaded")
+	dst, err := os.Create(destPath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create file")
+		return
+	}
+	defer dst.Close()
+
+	written, err := io.Copy(dst, file)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to write file")
+		return
+	}
+
+	log.Info().Str("key", key).Int64("size", written).Msg("file uploaded")
 	writeJSON(w, http.StatusOK, map[string]string{"key": key, "message": "uploaded"})
 }
 
-// DownloadFile downloads a file from the S3 bucket.
+// DownloadFile downloads a file from the local storage directory.
 func (h *ExplorerHandler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 	svc, creds, err := h.decryptServiceCreds(r)
 	if err != nil {
 		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
-	if svc.ServiceType != model.ServiceS3 {
-		writeError(w, http.StatusBadRequest, "not an S3 service")
+	if svc.ServiceType != model.ServiceStorage {
+		writeError(w, http.StatusBadRequest, "not a storage service")
 		return
 	}
 
@@ -457,51 +481,46 @@ func (h *ExplorerHandler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, err := minio.New(creds["endpoint"], &minio.Options{
-		Creds:  credentials.NewStaticV4(creds["access_key"], creds["secret_key"], ""),
-		Secure: false,
-	})
+	basePath := creds["host_path"]
+	filePath, err := resolveStoragePath(basePath, key)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to connect to storage")
+		writeError(w, http.StatusBadRequest, "invalid path")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
-	defer cancel()
-
-	obj, err := client.GetObject(ctx, creds["bucket"], key, minio.GetObjectOptions{})
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to get file")
-		return
-	}
-	defer obj.Close()
-
-	stat, err := obj.Stat()
+	info, err := os.Stat(filePath)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "file not found")
 		return
 	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to open file")
+		return
+	}
+	defer file.Close()
 
 	// Extract filename from key
 	parts := strings.Split(key, "/")
 	filename := parts[len(parts)-1]
 
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	w.Header().Set("Content-Type", stat.ContentType)
-	w.Header().Set("Content-Length", strconv.FormatInt(stat.Size, 10))
-	io.Copy(w, obj)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+	io.Copy(w, file)
 }
 
-// DeleteFile deletes a file from the S3 bucket.
+// DeleteFile deletes a file from the local storage directory.
 func (h *ExplorerHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
-	log := logger.With("s3-explorer")
+	log := logger.With("storage-explorer")
 	svc, creds, err := h.decryptServiceCreds(r)
 	if err != nil {
 		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
-	if svc.ServiceType != model.ServiceS3 {
-		writeError(w, http.StatusBadRequest, "not an S3 service")
+	if svc.ServiceType != model.ServiceStorage {
+		writeError(w, http.StatusBadRequest, "not a storage service")
 		return
 	}
 
@@ -511,19 +530,18 @@ func (h *ExplorerHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, err := minio.New(creds["endpoint"], &minio.Options{
-		Creds:  credentials.NewStaticV4(creds["access_key"], creds["secret_key"], ""),
-		Secure: false,
-	})
+	basePath := creds["host_path"]
+	filePath, err := resolveStoragePath(basePath, key)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to connect to storage")
+		writeError(w, http.StatusBadRequest, "invalid path")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-	defer cancel()
-
-	if err := client.RemoveObject(ctx, creds["bucket"], key, minio.RemoveObjectOptions{}); err != nil {
+	if err := os.Remove(filePath); err != nil {
+		if os.IsNotExist(err) {
+			writeError(w, http.StatusNotFound, "file not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to delete file")
 		return
 	}

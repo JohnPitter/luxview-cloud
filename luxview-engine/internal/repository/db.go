@@ -245,6 +245,8 @@ func (db *DB) migrate(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_pva_app_bucket ON pageview_aggregations(app_id, bucket DESC, granularity)`,
 
 		`ALTER TABLE apps ADD COLUMN IF NOT EXISTS webhook_id BIGINT DEFAULT NULL`,
+
+		`UPDATE app_services SET service_type = 'storage' WHERE service_type = 's3'`,
 	}
 
 	for i, m := range migrations {

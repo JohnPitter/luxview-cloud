@@ -242,13 +242,19 @@ const servicesReference = `
 - Redis: REDIS_URL, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 - MongoDB: MONGODB_URL, MONGO_URL
 - RabbitMQ: RABBITMQ_URL, AMQP_URL
-- S3/MinIO: S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY, S3_SECRET_KEY
+- Storage: STORAGE_PATH (local disk volume mounted at /storage)
 
 Detect and recommend replacements:
 - SQLite/MySQL/MariaDB/SQL Server/CockroachDB → "postgres"
 - Memcached/local cache → "redis"
 - Self-hosted Redis/MongoDB/RabbitMQ/PostgreSQL → managed version
-- Local file uploads → "s3"
+- Local file uploads / S3 usage → "storage"
+- multer / formidable / busboy / express-fileupload / sharp (image processing) → "storage"
+- fs.writeFile / fs.createWriteStream with uploads directory → "storage"
+- Any file upload middleware or local file persistence → "storage"
+
+IMPORTANT: When recommending "storage", also add STORAGE_PATH=/storage as an ENV in the Dockerfile.
+The platform will auto-provision the storage volume on deploy when it detects STORAGE_PATH in the Dockerfile.
 `
 
 const systemPrompt = `You are a Deploy Agent for LuxView Cloud, a self-hosted PaaS platform.

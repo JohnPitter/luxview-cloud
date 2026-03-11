@@ -45,6 +45,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - build-cache:/tmp/builds
       - traefik-logs:/var/log/traefik:ro
+      - app-storage:/data/luxview/storage
     environment:
       - PORT=${ENGINE_PORT:-8080}
       - DATABASE_URL=postgres://luxview:${DB_PASSWORD}@pg-platform:5432/luxview_platform?sslmode=disable
@@ -68,10 +69,7 @@ services:
       - SHARED_RABBITMQ_PORT=5672
       - SHARED_RABBITMQ_USER=${SHARED_RABBITMQ_USER:-luxview_admin}
       - SHARED_RABBITMQ_PASSWORD=${SHARED_RABBITMQ_PASSWORD}
-      - SHARED_MINIO_HOST=minio-shared
-      - SHARED_MINIO_PORT=9000
-      - SHARED_MINIO_USER=${SHARED_MINIO_USER:-luxview_admin}
-      - SHARED_MINIO_PASSWORD=${SHARED_MINIO_PASSWORD}
+      - STORAGE_BASE_PATH=/data/luxview/storage
       - BUILD_CONCURRENCY=${BUILD_CONCURRENCY:-3}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - TRAEFIK_LOG_PATH=/var/log/traefik/access.json
@@ -172,27 +170,6 @@ services:
       retries: 5
 
   # ---------------------------------------------------------------------------
-  # MinIO — S3-Compatible Object Storage (User Apps)
-  # ---------------------------------------------------------------------------
-  minio-shared:
-    image: minio/minio:latest
-    container_name: luxview-minio-shared
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${SHARED_MINIO_USER:-luxview_admin}
-      MINIO_ROOT_PASSWORD: ${SHARED_MINIO_PASSWORD}
-    volumes:
-      - minio-shared-data:/data
-    networks:
-      - luxview-net
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ---------------------------------------------------------------------------
   # RabbitMQ — Shared (User Apps)
   # ---------------------------------------------------------------------------
   rabbitmq-shared:
@@ -233,7 +210,7 @@ volumes:
   redis-shared-data:
   mongo-shared-data:
   rabbitmq-shared-data:
-  minio-shared-data:
+  app-storage:
   traefik-certs:
   build-cache:
   traefik-logs:

@@ -14,7 +14,7 @@ const (
 	ServiceRedis    ServiceType = "redis"
 	ServiceMongoDB  ServiceType = "mongodb"
 	ServiceRabbitMQ ServiceType = "rabbitmq"
-	ServiceS3       ServiceType = "s3"
+	ServiceStorage  ServiceType = "storage"
 )
 
 type AppService struct {
