@@ -650,6 +650,7 @@ export function AppDetail() {
                 <BuildLogViewer
                   log={selectedBuildLog}
                   streaming={deployments.some((d) => ['building', 'deploying'].includes(d.status))}
+                  loading={!selectedBuildLog && deployments.some((d) => ['building', 'deploying'].includes(d.status))}
                 />
                 {!selectedBuildLog && deployments.length === 0 && (
                   <div className="text-center py-12 text-zinc-500 text-sm">

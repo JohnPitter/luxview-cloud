@@ -93,14 +93,24 @@ Dockerfile rules:
 8. CRITICAL: The "dockerfile" field MUST contain ONLY valid Dockerfile instructions. Every line must start with a valid instruction (FROM, RUN, COPY, WORKDIR, EXPOSE, CMD, ENTRYPOINT, ENV, ARG, ADD, LABEL, VOLUME, USER, HEALTHCHECK, SHELL, STOPSIGNAL, ONBUILD) or be a comment starting with #. Do NOT include bare words like "alpine" or "node" on their own line — these cause parse errors.
 9. For the CMD instruction: check the package.json "scripts" section. Do NOT use "pnpm start" or "npm start" if there is no "start" script. Instead, use "node" to run the compiled entrypoint directly (e.g., CMD ["node", "packages/api/dist/index.js"]). Look at the "dev" script to find the entrypoint file (e.g., "tsx watch src/index.ts" means the entrypoint is "dist/index.js" after build).
 10. Always set ENV CI=true early in the Dockerfile — pnpm commands like prune fail without a TTY unless CI=true.
-11. CRITICAL for pnpm monorepos (pnpm-workspace.yaml): Do NOT use multi-stage builds. pnpm uses symlinks in node_modules — COPY --from=builder breaks these symlinks and causes "Cannot find package" errors at runtime. Instead, use a SINGLE stage: install all deps → build → delete node_modules → reinstall with --prod. Example pattern:
+11. CRITICAL for pnpm monorepos (pnpm-workspace.yaml): Do NOT use multi-stage builds. pnpm uses symlinks in node_modules — COPY --from=builder breaks these symlinks and causes "Cannot find package" errors at runtime. Instead, use a SINGLE stage: install all deps → build → delete node_modules → reinstall with --prod. After COPY of source files, delete and re-install to fix any broken symlinks from host. Example pattern:
     RUN pnpm install --frozen-lockfile
-    COPY . .
+    COPY packages/shared/ ./packages/shared/
+    COPY packages/api/ ./packages/api/
+    RUN rm -rf packages/*/node_modules && pnpm install --frozen-lockfile
     RUN pnpm build
     RUN rm -rf node_modules packages/*/node_modules
     RUN pnpm install --frozen-lockfile --prod
 12. If the project has .test.ts/.spec.ts files inside src/ directories, delete them before build: RUN find packages -name "*.test.ts" -delete && find packages -name "*.test.tsx" -delete
-13. For Prisma: run "prisma generate" BEFORE the build step and BEFORE pruning to prod deps. After pruning, the generated client in node_modules/.prisma may be lost — if so, copy prisma/ schema and re-generate after prod install.
+13. For Prisma in monorepos: run "cd packages/<api> && npx prisma generate" BEFORE the build step. CRITICAL: After deleting node_modules and reinstalling with --prod, the generated Prisma client is lost AND "prisma" CLI (a devDep) is gone. Do NOT use "npx prisma generate" after prod install — npx downloads the latest version (e.g., Prisma 7) which is incompatible with Prisma 6 schemas. Instead, SAVE the generated client BEFORE cleaning, then RESTORE it after prod install. Pattern:
+    RUN cd packages/<api> && npx prisma generate
+    RUN pnpm build
+    RUN cp -r node_modules/.pnpm/@prisma+client*/node_modules/.prisma /tmp/.prisma
+    RUN rm -rf node_modules packages/*/node_modules
+    RUN pnpm install --frozen-lockfile --prod
+    RUN find node_modules/.pnpm -path '*/@prisma/client' -type d | head -1 | xargs -I{} cp -r /tmp/.prisma {}/../../.prisma
+14. If a workspace package has "main" pointing to TypeScript source (e.g., "./src/index.ts"), patch it to point to compiled output after build: RUN sed -i 's|"./src/index.ts"|"./dist/index.js"|g' packages/<pkg>/package.json
+15. After COPY of source directories that may contain node_modules from the host, always clean them and re-install: RUN rm -rf packages/*/node_modules && pnpm install --frozen-lockfile — host node_modules contain symlinks pointing to host paths that don't exist in the container.
 
 LuxView Cloud managed services (available via platform):
 - PostgreSQL: env vars DATABASE_URL, PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD

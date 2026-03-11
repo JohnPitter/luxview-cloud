@@ -4,6 +4,7 @@ import { Terminal, type TerminalLine } from '../common/Terminal';
 interface BuildLogViewerProps {
   log: string;
   streaming?: boolean;
+  loading?: boolean;
 }
 
 function parseBuildLog(log: string): TerminalLine[] {
@@ -21,7 +22,7 @@ function parseBuildLog(log: string): TerminalLine[] {
   });
 }
 
-export function BuildLogViewer({ log, streaming = false }: BuildLogViewerProps) {
+export function BuildLogViewer({ log, streaming = false, loading = false }: BuildLogViewerProps) {
   const { t } = useTranslation();
   const lines = parseBuildLog(log);
 
@@ -30,6 +31,7 @@ export function BuildLogViewer({ log, streaming = false }: BuildLogViewerProps) 
       lines={lines}
       title={streaming ? t('deploy.buildLog.titleLive') : t('deploy.buildLog.title')}
       maxHeight="400px"
+      loading={loading}
     />
   );
 }

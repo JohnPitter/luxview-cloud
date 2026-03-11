@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Pause, Play, Trash2 } from 'lucide-react';
+import { Search, Pause, Play, Trash2, Loader2 } from 'lucide-react';
 import { useThemeStore } from '../../stores/theme.store';
 
 export interface TerminalLine {
@@ -14,6 +14,7 @@ interface TerminalProps {
   title?: string;
   maxHeight?: string;
   onClear?: () => void;
+  loading?: boolean;
 }
 
 const levelColors: Record<string, string> = {
@@ -23,7 +24,7 @@ const levelColors: Record<string, string> = {
   debug: 'text-zinc-500',
 };
 
-export function Terminal({ lines, title, maxHeight = '500px', onClear }: TerminalProps) {
+export function Terminal({ lines, title, maxHeight = '500px', onClear, loading = false }: TerminalProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -113,7 +114,23 @@ export function Terminal({ lines, title, maxHeight = '500px', onClear }: Termina
         className="overflow-y-auto font-mono text-xs leading-6 p-4"
         style={{ maxHeight }}
       >
-        {filteredLines.length === 0 ? (
+        {loading && filteredLines.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-3">
+            <div className="relative">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                <Loader2 size={20} className="text-amber-400 animate-spin" />
+              </div>
+            </div>
+            <div className="space-y-1 text-center">
+              <p className="text-xs text-zinc-400 font-medium">{t('monitoring.terminal.connecting')}</p>
+              <div className="flex items-center gap-1.5 justify-center">
+                <span className="w-1 h-1 rounded-full bg-amber-400/60 animate-pulse" />
+                <span className="w-1 h-1 rounded-full bg-amber-400/60 animate-pulse" style={{ animationDelay: '150ms' }} />
+                <span className="w-1 h-1 rounded-full bg-amber-400/60 animate-pulse" style={{ animationDelay: '300ms' }} />
+              </div>
+            </div>
+          </div>
+        ) : filteredLines.length === 0 ? (
           <div className="text-zinc-600 text-center py-8">
             {search ? t('monitoring.terminal.noMatchingEntries') : t('monitoring.terminal.waitingForOutput')}
           </div>

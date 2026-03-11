@@ -669,6 +669,7 @@
   "monitoring.terminal.searchPlaceholder": "Buscar nos logs...",
   "monitoring.terminal.noMatchingEntries": "Nenhuma entrada de log correspondente",
   "monitoring.terminal.waitingForOutput": "Aguardando saída...",
+  "monitoring.terminal.connecting": "Conectando ao stream de logs...",
 
   "services.card.connectionUrl": "URL de conexão",
   "services.card.showCredentials": "Mostrar credenciais",
