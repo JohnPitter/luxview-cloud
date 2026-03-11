@@ -15,12 +15,21 @@ import {
   HardDriveIcon,
   Terminal,
   FolderOpen,
+  Crown,
 } from 'lucide-react';
 import { GlassCard } from '../components/common/GlassCard';
 import { PageTour } from '../components/common/PageTour';
 import { useThemeStore } from '../stores/theme.store';
-import { servicesApi, type AppServiceWithApp, type ServiceType } from '../api/services';
+import { useAuthStore } from '../stores/auth.store';
+import { servicesApi, type AppServiceWithApp, type ServiceType, type StorageUsageInfo } from '../api/services';
 import { resourcesTourSteps } from '../tours/resources';
+
+function formatSize(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
+}
 
 const serviceConfig: Record<
   ServiceType,
@@ -70,10 +79,14 @@ export function Resources() {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
+  const user = useAuthStore((s) => s.user);
+  const plan = user?.plan;
+
   const [services, setServices] = useState<AppServiceWithApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState<string | null>(null);
+  const [serviceUsages, setServiceUsages] = useState<Record<string, StorageUsageInfo>>({});
 
   const categoryConfig = [
     {
@@ -116,6 +129,16 @@ export function Resources() {
     }, 30000);
     return () => clearInterval(interval);
   }, [fetchServices]);
+
+  // Fetch usage for all services
+  useEffect(() => {
+    if (services.length === 0) return;
+    services.forEach((svc) => {
+      servicesApi.getServiceUsage(svc.id).then((usage) => {
+        setServiceUsages((prev) => ({ ...prev, [svc.id]: usage }));
+      }).catch(() => {});
+    });
+  }, [services]);
 
   const togglePassword = (id: string) =>
     setShowPasswords((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -209,6 +232,52 @@ export function Resources() {
           </GlassCard>
         ))}
       </div>
+
+      {/* Plan Limits */}
+      {plan && (
+        <GlassCard className="!p-4 mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <Crown size={16} className="text-amber-400" />
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+              {t('resources.planLimits.title', { plan: plan.name })}
+            </h3>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider mb-0.5">
+                {t('resources.planLimits.maxApps')}
+              </p>
+              <p className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                {plan.maxApps}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider mb-0.5">
+                {t('resources.planLimits.maxServicesPerApp')}
+              </p>
+              <p className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                {plan.maxServicesPerApp}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider mb-0.5">
+                {t('resources.planLimits.maxDiskPerApp')}
+              </p>
+              <p className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                {plan.maxDiskPerApp}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider mb-0.5">
+                {t('resources.planLimits.maxResources')}
+              </p>
+              <p className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                {plan.maxCpuPerApp} CPU · {plan.maxMemoryPerApp} RAM
+              </p>
+            </div>
+          </div>
+        </GlassCard>
+      )}
 
       {/* Loading */}
       {loading && services.length === 0 && (
@@ -448,6 +517,33 @@ export function Resources() {
                                   </div>
                                 </div>
                               ))}
+                            {/* Disk Usage */}
+                            {(() => {
+                              const usage = serviceUsages[svc.id];
+                              if (!usage || usage.limit <= 0) return null;
+                              const pct = usage.limit > 0 ? usage.used / usage.limit : 0;
+                              return (
+                                <div className="col-span-2 mt-1">
+                                  <label className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">
+                                    {t('resources.service.diskUsage')}
+                                  </label>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <div className={`flex-1 h-2 rounded-full overflow-hidden ${isDark ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                                      <div
+                                        className={`h-full rounded-full transition-all duration-500 ${
+                                          pct > 0.9 ? 'bg-red-500' : pct > 0.7 ? 'bg-amber-500' : cfg.color.replace('text-', 'bg-')
+                                        }`}
+                                        style={{ width: `${Math.min(pct * 100, 100)}%` }}
+                                      />
+                                    </div>
+                                    <span className={`text-[10px] font-mono flex-shrink-0 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                      {usage.used > 0 ? formatSize(usage.used) : '-'} / {usage.limitStr}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
                             {/* Password / Secret Key */}
                             {(creds?.password || creds?.secretKey) && (() => {
                               const secretValue = creds?.password || creds?.secretKey || '';

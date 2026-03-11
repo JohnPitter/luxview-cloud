@@ -24,7 +24,7 @@ import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { useThemeStore } from '../stores/theme.store';
-import { servicesApi, type StorageFileInfo } from '../api/services';
+import { servicesApi, type StorageFileInfo, type StorageUsageInfo } from '../api/services';
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return '-';
@@ -84,6 +84,9 @@ export function StorageExplorer() {
   const [error, setError] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState('');
 
+  // Usage state
+  const [usage, setUsage] = useState<StorageUsageInfo | null>(null);
+
   // Preview state
   const [previewFile, setPreviewFile] = useState<StorageFileInfo | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -103,6 +106,16 @@ export function StorageExplorer() {
     });
   };
 
+  const fetchUsage = useCallback(async () => {
+    if (!serviceId) return;
+    try {
+      const data = await servicesApi.getServiceUsage(serviceId);
+      setUsage(data);
+    } catch {
+      // non-critical
+    }
+  }, [serviceId]);
+
   const fetchFiles = useCallback(async () => {
     if (!serviceId) return;
     setLoading(true);
@@ -119,7 +132,8 @@ export function StorageExplorer() {
 
   useEffect(() => {
     fetchFiles();
-  }, [fetchFiles]);
+    fetchUsage();
+  }, [fetchFiles, fetchUsage]);
 
   // Cleanup preview URL on unmount or when closing
   useEffect(() => {
@@ -158,6 +172,7 @@ export function StorageExplorer() {
         await servicesApi.uploadFile(serviceId, file, key);
       }
       await fetchFiles();
+      fetchUsage();
     } catch {
       setError(t('resources.storage.failedToUploadFile'));
     } finally {
@@ -233,6 +248,7 @@ export function StorageExplorer() {
       await servicesApi.deleteFile(serviceId, deleteTarget);
       setDeleteTarget(null);
       await fetchFiles();
+      fetchUsage();
     } catch {
       setError(t('resources.storage.failedToDeleteFile'));
     } finally {
@@ -270,6 +286,27 @@ export function StorageExplorer() {
             <p className="text-xs text-zinc-500">{t('resources.storage.subtitle')}</p>
           </div>
         </div>
+        {usage && usage.limit > 0 && (
+          <div className="flex items-center gap-3 mr-4">
+            <div className="flex flex-col items-end gap-1">
+              <span className={`text-[11px] font-mono ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                {formatSize(usage.used)} / {usage.limitStr}
+              </span>
+              <div className={`w-32 h-1.5 rounded-full overflow-hidden ${isDark ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    usage.used / usage.limit > 0.9
+                      ? 'bg-red-500'
+                      : usage.used / usage.limit > 0.7
+                        ? 'bg-amber-500'
+                        : 'bg-purple-500'
+                  }`}
+                  style={{ width: `${Math.min((usage.used / usage.limit) * 100, 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <PillButton variant="ghost" size="sm" onClick={fetchFiles} icon={<RefreshCw size={12} />}>
             {t('common.refresh')}

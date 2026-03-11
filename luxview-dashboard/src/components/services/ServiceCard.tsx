@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Database, Eye, EyeOff, Copy, Trash2, Check, HardDrive } from 'lucide-react';
+import { Eye, EyeOff, Copy, Trash2, Check, HardDrive } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { useThemeStore } from '../../stores/theme.store';
-import type { AppService, ServiceType } from '../../api/services';
+import { servicesApi, type AppService, type ServiceType, type StorageUsageInfo } from '../../api/services';
 
 interface ServiceCardProps {
   service: AppService;
@@ -18,12 +18,24 @@ const serviceConfig: Record<ServiceType, { labelKey: string; color: string; icon
   storage: { labelKey: 'resources.service.storage', color: 'text-purple-400', icon: 'ST' },
 };
 
+function formatStorageSize(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
+}
+
 export function ServiceCard({ service, onDelete }: ServiceCardProps) {
   const [showCreds, setShowCreds] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [storageUsage, setStorageUsage] = useState<StorageUsageInfo | null>(null);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const { t } = useTranslation();
   const config = serviceConfig[service.serviceType];
+
+  useEffect(() => {
+    servicesApi.getServiceUsage(service.id).then(setStorageUsage).catch(() => {});
+  }, [service.id]);
 
   const copyUrl = async () => {
     await navigator.clipboard.writeText((service.credentials?.url || ""));
@@ -78,6 +90,38 @@ export function ServiceCard({ service, onDelete }: ServiceCardProps) {
           >
             {service.credentials?.container_path || '/storage'}
           </div>
+
+          {/* Storage usage bar */}
+          {storageUsage && storageUsage.limit > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
+                  {t('services.card.storageUsage')}
+                </span>
+                <span className={`text-[11px] font-mono ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                  {formatStorageSize(storageUsage.used)} / {storageUsage.limitStr}
+                </span>
+              </div>
+              <div className={`w-full h-2 rounded-full overflow-hidden ${isDark ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    storageUsage.used / storageUsage.limit > 0.9
+                      ? 'bg-red-500'
+                      : storageUsage.used / storageUsage.limit > 0.7
+                        ? 'bg-amber-500'
+                        : 'bg-purple-500'
+                  }`}
+                  style={{ width: `${Math.min((storageUsage.used / storageUsage.limit) * 100, 100)}%` }}
+                />
+              </div>
+              {storageUsage.used / storageUsage.limit > 0.9 && (
+                <p className="text-[11px] text-red-400">
+                  {t('services.card.storageAlmostFull')}
+                </p>
+              )}
+            </div>
+          )}
+
           <p className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
             {t('services.card.storageDescription')}
           </p>
@@ -140,6 +184,34 @@ export function ServiceCard({ service, onDelete }: ServiceCardProps) {
                   </p>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Usage bar for database services */}
+          {storageUsage && storageUsage.limit > 0 && (
+            <div className="space-y-1.5 mt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
+                  {t('services.card.diskUsage')}
+                </span>
+                <span className={`text-[11px] font-mono ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                  {storageUsage.used > 0 ? formatStorageSize(storageUsage.used) : '-'} / {storageUsage.limitStr}
+                </span>
+              </div>
+              {storageUsage.used > 0 && (
+                <div className={`w-full h-2 rounded-full overflow-hidden ${isDark ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      storageUsage.used / storageUsage.limit > 0.9
+                        ? 'bg-red-500'
+                        : storageUsage.used / storageUsage.limit > 0.7
+                          ? 'bg-amber-500'
+                          : 'bg-blue-500'
+                    }`}
+                    style={{ width: `${Math.min((storageUsage.used / storageUsage.limit) * 100, 100)}%` }}
+                  />
+                </div>
+              )}
             </div>
           )}
         </>

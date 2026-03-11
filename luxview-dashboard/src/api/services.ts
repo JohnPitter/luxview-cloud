@@ -41,6 +41,12 @@ export interface QueryResult {
   truncated: boolean;
 }
 
+export interface StorageUsageInfo {
+  used: number;
+  limit: number;
+  limitStr: string;
+}
+
 // Storage Explorer types
 export interface StorageFileInfo {
   key: string;
@@ -113,5 +119,10 @@ export const servicesApi = {
 
   async deleteFile(serviceId: string, key: string): Promise<void> {
     await api.delete(`/services/${serviceId}/files`, { params: { key } });
+  },
+
+  async getServiceUsage(serviceId: string): Promise<StorageUsageInfo> {
+    const { data } = await api.get<StorageUsageInfo>(`/services/${serviceId}/usage`);
+    return data;
   },
 };

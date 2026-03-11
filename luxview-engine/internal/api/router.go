@@ -158,6 +158,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Post("/services/{id}/files/upload", explorerHandler.UploadFile)
 			r.Get("/services/{id}/files/download", explorerHandler.DownloadFile)
 			r.Delete("/services/{id}/files", explorerHandler.DeleteFile)
+			r.Get("/services/{id}/usage", explorerHandler.ServiceUsage)
 
 			// Metrics
 			r.Get("/apps/metrics/latest", metricHandler.LatestAll)

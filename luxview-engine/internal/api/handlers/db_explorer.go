@@ -434,6 +434,23 @@ func (h *ExplorerHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	basePath := creds["host_path"]
+
+	// Enforce storage quota from user's plan
+	user := middleware.GetUser(r.Context())
+	if user != nil && user.Plan != nil && user.Plan.MaxDiskPerApp != "" {
+		planLimit := parseMemoryString(user.Plan.MaxDiskPerApp)
+		if planLimit > 0 {
+			currentUsage, _ := calculateDirSize(basePath)
+			if currentUsage+header.Size > planLimit {
+				writeError(w, http.StatusForbidden, fmt.Sprintf(
+					"storage quota exceeded: used %s + %s would exceed limit of %s",
+					formatBytes(currentUsage), formatBytes(header.Size), user.Plan.MaxDiskPerApp,
+				))
+				return
+			}
+		}
+	}
+
 	destPath, err := resolveStoragePath(basePath, key)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid path")
@@ -548,6 +565,95 @@ func (h *ExplorerHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 
 	log.Info().Str("key", key).Msg("file deleted")
 	writeJSON(w, http.StatusOK, map[string]string{"message": "deleted"})
+}
+
+// formatBytes formats bytes into a human-readable string.
+func formatBytes(b int64) string {
+	const (
+		kb = 1024
+		mb = kb * 1024
+		gb = mb * 1024
+	)
+	switch {
+	case b >= gb:
+		return fmt.Sprintf("%.1fGB", float64(b)/float64(gb))
+	case b >= mb:
+		return fmt.Sprintf("%.1fMB", float64(b)/float64(mb))
+	case b >= kb:
+		return fmt.Sprintf("%.1fKB", float64(b)/float64(kb))
+	default:
+		return fmt.Sprintf("%dB", b)
+	}
+}
+
+// calculateDirSize walks a directory tree and returns the total size in bytes.
+func calculateDirSize(path string) (int64, error) {
+	var total int64
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // skip unreadable entries
+		}
+		if !info.IsDir() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total, err
+}
+
+// ServiceUsage returns the current disk/resource usage and plan limit for any service type.
+func (h *ExplorerHandler) ServiceUsage(w http.ResponseWriter, r *http.Request) {
+	svc, creds, err := h.decryptServiceCreds(r)
+	if err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+
+	var used int64
+
+	switch svc.ServiceType {
+	case model.ServiceStorage:
+		basePath := creds["host_path"]
+		used, _ = calculateDirSize(basePath)
+
+	case model.ServicePostgres:
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		conn, connErr := pgx.Connect(ctx, creds["url"])
+		if connErr == nil {
+			defer conn.Close(ctx)
+			_ = conn.QueryRow(ctx, "SELECT pg_database_size(current_database())").Scan(&used)
+		}
+
+	case model.ServiceRedis:
+		// Redis is in-memory; report memory usage via INFO
+		// For now, report 0 — redis usage is ephemeral
+		used = 0
+
+	case model.ServiceMongoDB:
+		// MongoDB db.stats() requires mongosh; skip for now
+		used = 0
+
+	case model.ServiceRabbitMQ:
+		// RabbitMQ doesn't expose per-vhost disk usage easily
+		used = 0
+	}
+
+	user := middleware.GetUser(r.Context())
+	var limitStr string
+	if user != nil && user.Plan != nil {
+		limitStr = user.Plan.MaxDiskPerApp
+	}
+	var limit int64
+	if limitStr != "" {
+		limit = parseMemoryString(limitStr)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"used":     used,
+		"limit":    limit,
+		"limitStr": limitStr,
+	})
 }
 
 func quoteIdentPG(s string) string {
