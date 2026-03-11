@@ -82,28 +82,33 @@ const dockerfileRules = `
 
 ### pnpm Monorepos (pnpm-workspace.yaml present)
 DO NOT use multi-stage builds — pnpm symlinks break with COPY --from=builder.
-Use a single stage with this pattern:
+Use a single stage. Here is the COMPLETE template — adapt it to the project:
 
   FROM node:20-alpine
-  ENV CI=true
+  ENV CI=true NODE_ENV=production
   RUN corepack enable && corepack prepare pnpm@latest --activate
   WORKDIR /app
   COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json* ./
   COPY packages/ ./packages/
   RUN rm -rf packages/*/node_modules && pnpm install --frozen-lockfile
-  # If shared package has "main": "./src/index.ts", patch it:
-  # RUN sed -i 's|"./src/index.ts"|"./dist/index.js"|g' packages/<shared>/package.json
-  # If Prisma is used, generate client before build:
-  # RUN cd packages/<api> && npx prisma generate
+  # If shared package "main" points to .ts source, patch to .js:
+  RUN sed -i 's|"./src/index.ts"|"./dist/index.js"|g' packages/shared/package.json
+  # If Prisma: generate before build, save version for later
+  RUN cd packages/api && npx prisma generate
+  RUN node -e "console.log(require('prisma/package.json').version)" > /tmp/prisma-version
   RUN pnpm build
-  # Save Prisma client if applicable:
-  # RUN cp -r node_modules/.pnpm/@prisma+client*/node_modules/.prisma /tmp/.prisma
   RUN rm -rf node_modules packages/*/node_modules
   RUN pnpm install --frozen-lockfile --prod
-  # Restore Prisma client if applicable:
-  # RUN find node_modules/.pnpm -path '*/@prisma/client' -type d | head -1 | xargs -I{} cp -r /tmp/.prisma {}/../../.prisma
-  EXPOSE <port>
-  CMD ["node", "packages/<api>/dist/index.js"]
+  # Re-generate Prisma client with pinned version (npx without version downloads latest which may be incompatible)
+  RUN cd packages/api && npx prisma@$(cat /tmp/prisma-version) generate
+  EXPOSE 3001
+  CMD ["node", "packages/api/dist/index.js"]
+
+Adapt the template:
+- Only include Prisma lines if @prisma/client is in dependencies.
+- Only include shared package "main" patch if it actually points to .ts source.
+- Replace package names (shared, api) with actual names from the repo.
+- Read the API source to find the actual PORT for EXPOSE.
 
 Key principles:
 - WORKDIR is always the monorepo ROOT (/app), never a subdirectory.
