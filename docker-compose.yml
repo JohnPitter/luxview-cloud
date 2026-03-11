@@ -45,7 +45,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - build-cache:/tmp/builds
       - traefik-logs:/var/log/traefik:ro
-      - app-storage:/data/luxview/storage
+      - /data/luxview/storage:/data/luxview/storage
     environment:
       - PORT=${ENGINE_PORT:-8080}
       - DATABASE_URL=postgres://luxview:${DB_PASSWORD}@pg-platform:5432/luxview_platform?sslmode=disable
@@ -210,7 +210,6 @@ volumes:
   redis-shared-data:
   mongo-shared-data:
   rabbitmq-shared-data:
-  app-storage:
   traefik-certs:
   build-cache:
   traefik-logs:
