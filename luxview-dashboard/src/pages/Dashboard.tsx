@@ -92,11 +92,12 @@ export function Dashboard() {
   const firstName = user?.username || 'Developer';
 
   const deployStatusColor: Record<string, string> = {
-    success: 'text-emerald-400',
+    live: 'text-emerald-400',
     failed: 'text-red-400',
     building: 'text-amber-400',
     deploying: 'text-blue-400',
     pending: 'text-zinc-400',
+    rolled_back: 'text-violet-400',
   };
 
   return (
@@ -279,7 +280,7 @@ export function Dashboard() {
                   >
                     <StatusDot
                       status={
-                        d.status === 'success'
+                        d.status === 'live'
                           ? 'running'
                           : d.status === 'failed'
                             ? 'error'
