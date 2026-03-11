@@ -87,6 +87,11 @@ func (lp *LogParser) ParseLine(line []byte) *model.Pageview {
 		return nil
 	}
 
+	// Filter: skip DevTools emulated devices (not real users)
+	if isEmulatedDevice(entry.UserAgent) {
+		return nil
+	}
+
 	// Resolve app_id from host
 	var appID *uuid.UUID
 	host := strings.ToLower(entry.RequestHost)
@@ -179,6 +184,25 @@ func isInternalPath(path string) bool {
 	lower := strings.ToLower(path)
 	for _, p := range internals {
 		if strings.HasPrefix(lower, p) || lower == p {
+			return true
+		}
+	}
+	return false
+}
+
+// isEmulatedDevice detects Chrome DevTools "Toggle Device Toolbar" emulated devices.
+// These send fake mobile UAs from a desktop browser and pollute analytics.
+func isEmulatedDevice(ua string) bool {
+	emulatedSignatures := []string{
+		"Nexus 5 Build/MRA58N",  // Chrome DevTools default mobile
+		"Nexus 5X Build/",       // DevTools preset
+		"Nexus 6P Build/",       // DevTools preset
+		"Pixel 2 Build/",        // DevTools preset
+		"Pixel 2 XL Build/",     // DevTools preset
+		"Pixel 3 Build/",        // DevTools preset
+	}
+	for _, sig := range emulatedSignatures {
+		if strings.Contains(ua, sig) {
 			return true
 		}
 	}
