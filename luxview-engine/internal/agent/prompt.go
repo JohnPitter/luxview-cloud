@@ -86,13 +86,21 @@ Dockerfile rules:
 1. The app MUST run in a single container.
 2. The Dockerfile MUST use EXPOSE to declare the port.
 3. The container MUST respond to HTTP GET on / or /health for health checks.
-4. Optimize for small images: prefer alpine base images and multi-stage builds.
+4. For simple (non-monorepo) projects, use multi-stage builds for smaller images. For pnpm monorepos, use a SINGLE stage (see rule 11).
 5. For monorepos, bundle everything into a single container. Identify the main application entry point.
 6. Use .dockerignore best practices (node_modules, .git, etc. are already excluded).
-7. Install only production dependencies when possible.
-8. Set appropriate WORKDIR, COPY, and CMD instructions.
-9. CRITICAL: The "dockerfile" field MUST contain ONLY valid Dockerfile instructions. Every line must start with a valid instruction (FROM, RUN, COPY, WORKDIR, EXPOSE, CMD, ENTRYPOINT, ENV, ARG, ADD, LABEL, VOLUME, USER, HEALTHCHECK, SHELL, STOPSIGNAL, ONBUILD) or be a comment starting with #. Do NOT include bare words like "alpine" or "node" on their own line — these cause parse errors.
-10. For the CMD instruction: check the package.json "scripts" section. Do NOT use "pnpm start" or "npm start" if there is no "start" script. Instead, use "node" to run the compiled entrypoint directly (e.g., CMD ["node", "packages/api/dist/index.js"]). Look at the "dev" script to find the entrypoint file (e.g., "tsx watch src/index.ts" means the entrypoint is "dist/index.js" after build).
+7. Set appropriate WORKDIR, COPY, and CMD instructions.
+8. CRITICAL: The "dockerfile" field MUST contain ONLY valid Dockerfile instructions. Every line must start with a valid instruction (FROM, RUN, COPY, WORKDIR, EXPOSE, CMD, ENTRYPOINT, ENV, ARG, ADD, LABEL, VOLUME, USER, HEALTHCHECK, SHELL, STOPSIGNAL, ONBUILD) or be a comment starting with #. Do NOT include bare words like "alpine" or "node" on their own line — these cause parse errors.
+9. For the CMD instruction: check the package.json "scripts" section. Do NOT use "pnpm start" or "npm start" if there is no "start" script. Instead, use "node" to run the compiled entrypoint directly (e.g., CMD ["node", "packages/api/dist/index.js"]). Look at the "dev" script to find the entrypoint file (e.g., "tsx watch src/index.ts" means the entrypoint is "dist/index.js" after build).
+10. Always set ENV CI=true early in the Dockerfile — pnpm commands like prune fail without a TTY unless CI=true.
+11. CRITICAL for pnpm monorepos (pnpm-workspace.yaml): Do NOT use multi-stage builds. pnpm uses symlinks in node_modules — COPY --from=builder breaks these symlinks and causes "Cannot find package" errors at runtime. Instead, use a SINGLE stage: install all deps → build → delete node_modules → reinstall with --prod. Example pattern:
+    RUN pnpm install --frozen-lockfile
+    COPY . .
+    RUN pnpm build
+    RUN rm -rf node_modules packages/*/node_modules
+    RUN pnpm install --frozen-lockfile --prod
+12. If the project has .test.ts/.spec.ts files inside src/ directories, delete them before build: RUN find packages -name "*.test.ts" -delete && find packages -name "*.test.tsx" -delete
+13. For Prisma: run "prisma generate" BEFORE the build step and BEFORE pruning to prod deps. After pruning, the generated client in node_modules/.prisma may be lost — if so, copy prisma/ schema and re-generate after prod install.
 
 LuxView Cloud managed services (available via platform):
 - PostgreSQL: env vars DATABASE_URL, PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
