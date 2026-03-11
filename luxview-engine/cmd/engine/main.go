@@ -107,6 +107,9 @@ func main() {
 	)
 	go analyticsWorker.Start(ctx)
 
+	aggregationWorker := worker.NewAggregationWorker(pageviewRepo, 24)
+	go aggregationWorker.Start(ctx)
+
 	// Router
 	router := api.NewRouter(api.Deps{
 		Config:      cfg,
@@ -127,6 +130,7 @@ func main() {
 		Docker:       docker,
 		AuditRepo:    auditRepo,
 		AuditSvc:     auditSvc,
+		PageviewRepo: pageviewRepo,
 	})
 
 	// HTTP server

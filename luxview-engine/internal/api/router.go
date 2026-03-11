@@ -34,6 +34,7 @@ type Deps struct {
 	Docker       *dockerclient.Client
 	AuditRepo    *repository.AuditLogRepo
 	AuditSvc     *service.AuditService
+	PageviewRepo *repository.PageviewRepo
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -79,6 +80,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	analyzeHandler := handlers.NewAnalyzeHandler(deps.AppRepo, deps.UserRepo, deps.DeployRepo, deps.SettingsRepo, deps.ServiceRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)
 	cleanupHandler := handlers.NewCleanupHandler(deps.SettingsRepo, deps.Docker, deps.AuditSvc)
 	auditHandler := handlers.NewAuditHandler(deps.AuditRepo)
+	analyticsHandler := handlers.NewAnalyticsHandler(deps.PageviewRepo, deps.AppRepo)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 
@@ -165,6 +167,16 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Get("/apps/{id}/alerts", alertHandler.List)
 			r.Patch("/alerts/{id}", alertHandler.Update)
 			r.Delete("/alerts/{id}", alertHandler.Delete)
+
+			// Analytics
+			r.Get("/analytics/overview", analyticsHandler.Overview)
+			r.Get("/analytics/pages", analyticsHandler.Pages)
+			r.Get("/analytics/geo", analyticsHandler.Geo)
+			r.Get("/analytics/browsers", analyticsHandler.Browsers)
+			r.Get("/analytics/os", analyticsHandler.OS)
+			r.Get("/analytics/devices", analyticsHandler.Devices)
+			r.Get("/analytics/referers", analyticsHandler.Referers)
+			r.Get("/analytics/live", analyticsHandler.Live)
 
 			// Admin
 			r.Group(func(r chi.Router) {
