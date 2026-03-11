@@ -116,6 +116,9 @@ export function Admin() {
   const [loading, setLoading] = useState(true);
   const [userSearch, setUserSearch] = useState('');
   const [appSearch, setAppSearch] = useState('');
+  const [userPage, setUserPage] = useState(0);
+  const [appPage, setAppPage] = useState(0);
+  const PAGE_SIZE = 20;
 
   // Modals
   const [roleChangeUser, setRoleChangeUser] = useState<AdminUser | null>(null);
@@ -455,6 +458,8 @@ export function Admin() {
       u.username.toLowerCase().includes(userSearch.toLowerCase()) ||
       u.email.toLowerCase().includes(userSearch.toLowerCase()),
   );
+  const userTotalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const paginatedUsers = filteredUsers.slice(userPage * PAGE_SIZE, (userPage + 1) * PAGE_SIZE);
 
   const filteredApps = apps.filter(
     (a) =>
@@ -462,6 +467,8 @@ export function Admin() {
       a.name.toLowerCase().includes(appSearch.toLowerCase()) ||
       a.subdomain.toLowerCase().includes(appSearch.toLowerCase()),
   );
+  const appTotalPages = Math.max(1, Math.ceil(filteredApps.length / PAGE_SIZE));
+  const paginatedApps = filteredApps.slice(appPage * PAGE_SIZE, (appPage + 1) * PAGE_SIZE);
 
   const ownerMap = new Map(users.map((u) => [u.id, u.username]));
 
@@ -771,7 +778,7 @@ export function Admin() {
                   type="text"
                   placeholder={t('admin.users.searchPlaceholder')}
                   value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
+                  onChange={(e) => { setUserSearch(e.target.value); setUserPage(0); }}
                   className={`flex-1 bg-transparent text-sm outline-none ${
                     isDark ? 'text-zinc-200 placeholder:text-zinc-600' : 'text-zinc-800 placeholder:text-zinc-400'
                   }`}
@@ -792,14 +799,14 @@ export function Admin() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredUsers.length === 0 ? (
+                      {paginatedUsers.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="text-center py-12 text-sm text-zinc-500">
                             {t('admin.users.noUsersFound')}
                           </td>
                         </tr>
                       ) : (
-                        filteredUsers.map((u) => (
+                        paginatedUsers.map((u) => (
                           <tr
                             key={u.id}
                             className={`border-t transition-colors ${
@@ -860,6 +867,25 @@ export function Admin() {
                   </table>
                 </div>
               </GlassCard>
+              {userTotalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 mt-4">
+                  <button
+                    disabled={userPage <= 0}
+                    onClick={() => setUserPage(userPage - 1)}
+                    className={`px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? 'border-zinc-700 hover:bg-zinc-800' : 'border-zinc-200 hover:bg-zinc-100'}`}
+                  >
+                    {t('common.previous')}
+                  </button>
+                  <span className="text-xs text-zinc-500">{userPage + 1} / {userTotalPages}</span>
+                  <button
+                    disabled={userPage >= userTotalPages - 1}
+                    onClick={() => setUserPage(userPage + 1)}
+                    className={`px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? 'border-zinc-700 hover:bg-zinc-800' : 'border-zinc-200 hover:bg-zinc-100'}`}
+                  >
+                    {t('common.next')}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -876,7 +902,7 @@ export function Admin() {
                   type="text"
                   placeholder={t('admin.apps.searchPlaceholder')}
                   value={appSearch}
-                  onChange={(e) => setAppSearch(e.target.value)}
+                  onChange={(e) => { setAppSearch(e.target.value); setAppPage(0); }}
                   className={`flex-1 bg-transparent text-sm outline-none ${
                     isDark ? 'text-zinc-200 placeholder:text-zinc-600' : 'text-zinc-800 placeholder:text-zinc-400'
                   }`}
@@ -898,14 +924,14 @@ export function Admin() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredApps.length === 0 ? (
+                      {paginatedApps.length === 0 ? (
                         <tr>
                           <td colSpan={7} className="text-center py-12 text-sm text-zinc-500">
                             {t('admin.apps.noAppsFound')}
                           </td>
                         </tr>
                       ) : (
-                        filteredApps.map((app) => (
+                        paginatedApps.map((app) => (
                           <tr
                             key={app.id}
                             className={`border-t transition-colors ${
@@ -1340,6 +1366,25 @@ export function Admin() {
                     </div>
                   </GlassCard>
                 </>
+              )}
+              {appTotalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 mt-4">
+                  <button
+                    disabled={appPage <= 0}
+                    onClick={() => setAppPage(appPage - 1)}
+                    className={`px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? 'border-zinc-700 hover:bg-zinc-800' : 'border-zinc-200 hover:bg-zinc-100'}`}
+                  >
+                    {t('common.previous')}
+                  </button>
+                  <span className="text-xs text-zinc-500">{appPage + 1} / {appTotalPages}</span>
+                  <button
+                    disabled={appPage >= appTotalPages - 1}
+                    onClick={() => setAppPage(appPage + 1)}
+                    className={`px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? 'border-zinc-700 hover:bg-zinc-800' : 'border-zinc-200 hover:bg-zinc-100'}`}
+                  >
+                    {t('common.next')}
+                  </button>
+                </div>
               )}
             </div>
           )}

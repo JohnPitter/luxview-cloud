@@ -30,6 +30,8 @@ export function formatRelativeTime(date: string | Date): string {
 }
 
 export function formatPercent(value: number): string {
+  if (value === 0) return '0%';
+  if (value < 1) return `${value.toFixed(2)}%`;
   return `${Math.round(value)}%`;
 }
 

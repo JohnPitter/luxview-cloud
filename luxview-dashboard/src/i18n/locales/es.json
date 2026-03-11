@@ -734,6 +734,7 @@
   "settings.toursReset": "Todos los tutoriales han sido reiniciados",
 
   "common.next": "Siguiente",
+  "common.previous": "Anterior",
   "common.finish": "Finalizar",
 
   "tour.skipTour": "Saltar recorrido",

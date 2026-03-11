@@ -31,6 +31,8 @@ export function Logs() {
   const [deployments, setDeployments] = useState<DeploymentWithApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 20;
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [logContent, setLogContent] = useState<Record<string, string>>({});
 
@@ -102,6 +104,8 @@ export function Logs() {
       d.commitMessage.toLowerCase().includes(filter.toLowerCase()) ||
       d.status.toLowerCase().includes(filter.toLowerCase()),
   );
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <div className="animate-fade-in">
@@ -142,7 +146,7 @@ export function Logs() {
             type="text"
             placeholder={t('logs.searchPlaceholder')}
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => { setFilter(e.target.value); setPage(0); }}
             className={`
               flex-1 bg-transparent text-sm outline-none
               ${isDark ? 'text-zinc-200 placeholder:text-zinc-600' : 'text-zinc-800 placeholder:text-zinc-400'}
@@ -155,13 +159,13 @@ export function Logs() {
       <GlassCard padding="none">
         {loading ? (
           <div className="py-16 text-center text-sm text-zinc-500">{t('logs.loadingDeployments')}</div>
-        ) : filtered.length === 0 ? (
+        ) : paginated.length === 0 ? (
           <div className="py-16 text-center text-sm text-zinc-500">
             {filter ? t('logs.noDeploymentsMatch') : t('logs.noDeploymentsFound')}
           </div>
         ) : (
           <div className="divide-y divide-zinc-800/30">
-            {filtered.map((dep) => (
+            {paginated.map((dep) => (
               <div key={dep.id}>
                 <button
                   onClick={() => toggleLog(dep.id)}
@@ -222,6 +226,26 @@ export function Logs() {
           </div>
         )}
       </GlassCard>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 mt-4">
+          <button
+            disabled={page <= 0}
+            onClick={() => setPage(page - 1)}
+            className={`px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? 'border-zinc-700 hover:bg-zinc-800' : 'border-zinc-200 hover:bg-zinc-100'}`}
+          >
+            {t('common.previous')}
+          </button>
+          <span className="text-xs text-zinc-500">{page + 1} / {totalPages}</span>
+          <button
+            disabled={page >= totalPages - 1}
+            onClick={() => setPage(page + 1)}
+            className={`px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? 'border-zinc-700 hover:bg-zinc-800' : 'border-zinc-200 hover:bg-zinc-100'}`}
+          >
+            {t('common.next')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

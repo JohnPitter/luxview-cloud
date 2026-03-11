@@ -734,6 +734,7 @@
   "settings.toursReset": "All tutorials have been reset",
 
   "common.next": "Next",
+  "common.previous": "Previous",
   "common.finish": "Finish",
 
   "tour.skipTour": "Skip tour",

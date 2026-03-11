@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GitCommit, Clock, RotateCcw, Check, X, Loader2, Bot, Cog } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
@@ -30,9 +31,14 @@ const statusColors: Record<DeployStatus, string> = {
   rolled_back: 'border-violet-500/30 bg-violet-500/5',
 };
 
+const PAGE_SIZE = 10;
+
 export function DeployHistory({ deployments, onRollback, onViewLog }: DeployHistoryProps) {
   const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const [page, setPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(deployments.length / PAGE_SIZE));
+  const paginated = deployments.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   if (deployments.length === 0) {
     return (
@@ -42,7 +48,7 @@ export function DeployHistory({ deployments, onRollback, onViewLog }: DeployHist
 
   return (
     <div className="space-y-3">
-      {deployments.map((deploy, i) => (
+      {paginated.map((deploy, i) => (
         <GlassCard
           key={deploy.id}
           padding="sm"
@@ -72,7 +78,7 @@ export function DeployHistory({ deployments, onRollback, onViewLog }: DeployHist
                       Auto
                     </span>
                   )}
-                  {i === 0 && deploy.status === 'live' && (
+                  {page === 0 && i === 0 && deploy.status === 'live' && (
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                       {t('deploy.history.current')}
                     </span>
@@ -99,7 +105,7 @@ export function DeployHistory({ deployments, onRollback, onViewLog }: DeployHist
                   </div>
                 )}
               </div>
-              {deploy.status === 'live' && i > 0 && (
+              {deploy.status === 'live' && (page > 0 || i > 0) && (
                 <PillButton
                   variant="ghost"
                   size="sm"
@@ -116,6 +122,25 @@ export function DeployHistory({ deployments, onRollback, onViewLog }: DeployHist
           </div>
         </GlassCard>
       ))}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 mt-4">
+          <button
+            disabled={page <= 0}
+            onClick={() => setPage(page - 1)}
+            className={`px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? 'border-zinc-700 hover:bg-zinc-800' : 'border-zinc-200 hover:bg-zinc-100'}`}
+          >
+            {t('common.previous')}
+          </button>
+          <span className="text-xs text-zinc-500">{page + 1} / {totalPages}</span>
+          <button
+            disabled={page >= totalPages - 1}
+            onClick={() => setPage(page + 1)}
+            className={`px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? 'border-zinc-700 hover:bg-zinc-800' : 'border-zinc-200 hover:bg-zinc-100'}`}
+          >
+            {t('common.next')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
