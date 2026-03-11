@@ -30,6 +30,9 @@ func (h *WebhookHandler) GitHubWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	eventType := r.Header.Get("X-GitHub-Event")
+	log.Debug().Str("event_type", eventType).Int("body_size", len(body)).Msg("incoming webhook event")
+
 	// Verify signature if secret is configured
 	if h.secret != "" {
 		signature := r.Header.Get("X-Hub-Signature-256")
@@ -38,14 +41,18 @@ func (h *WebhookHandler) GitHubWebhook(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, "invalid signature")
 			return
 		}
+		log.Debug().Msg("webhook signature verified")
+	} else {
+		log.Debug().Msg("webhook signature verification skipped (no secret configured)")
 	}
 
-	eventType := r.Header.Get("X-GitHub-Event")
 	if eventType != "push" {
+		log.Debug().Str("event_type", eventType).Msg("ignoring non-push event")
 		writeJSON(w, http.StatusOK, map[string]string{"message": "event ignored"})
 		return
 	}
 
+	log.Debug().Msg("calling ProcessPush")
 	if err := h.webhookSvc.ProcessPush(r.Context(), body); err != nil {
 		log.Error().Err(err).Msg("failed to process push event")
 		writeError(w, http.StatusInternalServerError, "failed to process webhook")

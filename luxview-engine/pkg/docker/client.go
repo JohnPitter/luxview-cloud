@@ -14,6 +14,7 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/luxview/engine/pkg/logger"
 )
 
 // Client wraps the Docker SDK client.
@@ -42,6 +43,9 @@ func (c *Client) Raw() *client.Client {
 
 // BuildImage builds a Docker image from a tar context.
 func (c *Client) BuildImage(ctx context.Context, buildContext io.Reader, tags []string, dockerfile string) (io.ReadCloser, error) {
+	log := logger.With("docker")
+	log.Debug().Strs("tags", tags).Str("dockerfile", dockerfile).Msg("building Docker image")
+
 	opts := types.ImageBuildOptions{
 		Tags:       tags,
 		Dockerfile: dockerfile,
@@ -57,6 +61,9 @@ func (c *Client) BuildImage(ctx context.Context, buildContext io.Reader, tags []
 
 // CreateContainer creates a container with the given configuration.
 func (c *Client) CreateContainer(ctx context.Context, config *container.Config, hostConfig *container.HostConfig, networkConfig *network.NetworkingConfig, name string) (string, error) {
+	log := logger.With("docker")
+	log.Debug().Str("name", name).Str("image", config.Image).Msg("creating container")
+
 	resp, err := c.cli.ContainerCreate(ctx, config, hostConfig, networkConfig, &ocispec.Platform{}, name)
 	if err != nil {
 		return "", err
@@ -140,6 +147,13 @@ func (c *Client) ConnectNetwork(ctx context.Context, networkID, containerID stri
 
 // ContainerExec runs a command inside a running container and returns the output.
 func (c *Client) ContainerExec(ctx context.Context, containerID string, cmd []string) (string, error) {
+	log := logger.With("docker")
+	shortID := containerID
+	if len(shortID) > 12 {
+		shortID = shortID[:12]
+	}
+	log.Debug().Str("container_id", shortID).Strs("cmd", cmd).Msg("exec in container")
+
 	execConfig := container.ExecOptions{
 		Cmd:          cmd,
 		AttachStdout: true,

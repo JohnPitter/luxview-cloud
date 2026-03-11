@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/luxview/engine/internal/agent"
+	"github.com/luxview/engine/pkg/logger"
 )
 
 // Detection holds the detected runtime, framework, and default port.
@@ -18,7 +19,10 @@ type Detection struct {
 // Analyze performs deterministic analysis of a repository directory
 // and returns an AnalysisResult without requiring AI.
 func Analyze(repoDir string) *agent.AnalysisResult {
+	log := logger.With("detector")
 	det := detect(repoDir)
+	log.Debug().Str("runtime", det.Runtime).Str("framework", det.Framework).Int("port", det.Port).Msg("detected stack")
+
 	envVars := detectEnvVars(repoDir)
 	services := detectServices(repoDir)
 	dockerfile := generateDockerfile(det, repoDir)
@@ -34,7 +38,13 @@ func Analyze(repoDir string) *agent.AnalysisResult {
 }
 
 func detect(repoDir string) Detection {
+	log := logger.With("detector")
+
+	isMonorepo := fileExists(repoDir, "pnpm-workspace.yaml") || fileExists(repoDir, "turbo.json")
+	log.Debug().Bool("is_monorepo", isMonorepo).Str("dir", repoDir).Msg("starting detection")
+
 	if fileExists(repoDir, "package.json") {
+		log.Debug().Msg("file check: package.json found")
 		pkg := readFile(repoDir, "package.json")
 		if strings.Contains(pkg, "\"next\"") {
 			return Detection{Runtime: "nodejs", Framework: "nextjs", Port: 3000}
@@ -55,6 +65,7 @@ func detect(repoDir string) Detection {
 	}
 
 	if fileExists(repoDir, "requirements.txt") || fileExists(repoDir, "pyproject.toml") || fileExists(repoDir, "Pipfile") {
+		log.Debug().Msg("file check: python project files found")
 		if fileExists(repoDir, "manage.py") {
 			return Detection{Runtime: "python", Framework: "django", Port: 8000}
 		}
@@ -69,6 +80,7 @@ func detect(repoDir string) Detection {
 	}
 
 	if fileExists(repoDir, "go.mod") {
+		log.Debug().Msg("file check: go.mod found")
 		content := readFile(repoDir, "go.mod")
 		if strings.Contains(content, "github.com/gin-gonic/gin") {
 			return Detection{Runtime: "go", Framework: "gin", Port: 8080}
@@ -80,6 +92,7 @@ func detect(repoDir string) Detection {
 	}
 
 	if fileExists(repoDir, "Gemfile") {
+		log.Debug().Msg("file check: Gemfile found")
 		content := readFile(repoDir, "Gemfile")
 		if strings.Contains(content, "rails") {
 			return Detection{Runtime: "ruby", Framework: "rails", Port: 3000}
@@ -88,20 +101,25 @@ func detect(repoDir string) Detection {
 	}
 
 	if fileExists(repoDir, "pom.xml") {
+		log.Debug().Msg("file check: pom.xml found")
 		return Detection{Runtime: "java", Framework: "maven", Port: 8080}
 	}
 	if fileExists(repoDir, "build.gradle") || fileExists(repoDir, "build.gradle.kts") {
+		log.Debug().Msg("file check: build.gradle found")
 		return Detection{Runtime: "java", Framework: "gradle", Port: 8080}
 	}
 
 	if fileExists(repoDir, "Cargo.toml") {
+		log.Debug().Msg("file check: Cargo.toml found")
 		return Detection{Runtime: "rust", Framework: "rust", Port: 8080}
 	}
 
 	if fileExists(repoDir, "index.html") {
+		log.Debug().Msg("file check: index.html found")
 		return Detection{Runtime: "static", Framework: "static", Port: 80}
 	}
 
+	log.Debug().Msg("no matching files found, defaulting to unknown")
 	return Detection{Runtime: "unknown", Framework: "unknown", Port: 3000}
 }
 

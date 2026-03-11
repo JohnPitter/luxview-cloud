@@ -169,6 +169,12 @@ func BuildContext(repoDir string) (string, error) {
 		log.Warn().Err(err).Msg("partial error reading key files")
 	}
 
+	// Check for monorepo indicators
+	_, hasPnpmWorkspace := files["pnpm-workspace.yaml"]
+	_, hasTurboJson := files["turbo.json"]
+	isMonorepo := hasPnpmWorkspace || hasTurboJson
+	log.Debug().Int("key_files_found", len(files)).Bool("is_monorepo", isMonorepo).Msg("key files read for context")
+
 	var sb strings.Builder
 	sb.WriteString("## Repository File Tree\n```\n")
 	sb.WriteString(tree)
@@ -182,6 +188,8 @@ func BuildContext(repoDir string) (string, error) {
 	}
 
 	sb.WriteString("Analyze this repository and generate an optimal Dockerfile for deployment on LuxView Cloud.")
+	totalContext := sb.Len()
+	log.Debug().Int("total_context_size", totalContext).Msg("context built for LLM")
 
 	return sb.String(), nil
 }
@@ -233,6 +241,7 @@ func BuildFailureContext(repoDir, buildLog, dockerfile string) (string, error) {
 
 // buildFileTree walks the repo and returns a text tree of files (max 200 files).
 func buildFileTree(repoDir string) (string, error) {
+	log := logger.With("deploy-agent")
 	var lines []string
 	count := 0
 
@@ -273,6 +282,7 @@ func buildFileTree(repoDir string) (string, error) {
 		return "", fmt.Errorf("walk repo: %w", err)
 	}
 
+	log.Debug().Int("total_files", count).Msg("file tree built")
 	return strings.Join(lines, "\n"), nil
 }
 
@@ -294,6 +304,7 @@ func readKeyFiles(repoDir string) (map[string]string, error) {
 		if len(content) == 0 {
 			continue
 		}
+		log.Debug().Str("file", name).Int("size", len(content)).Msg("key file found")
 		files[name] = content
 		totalSize += len(content)
 	}
@@ -322,6 +333,7 @@ func readKeyFiles(repoDir string) (map[string]string, error) {
 				continue
 			}
 			rel = filepath.ToSlash(rel)
+			log.Debug().Str("file", rel).Int("size", len(content)).Msg("monorepo file found")
 			files[rel] = content
 			totalSize += len(content)
 		}

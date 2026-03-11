@@ -126,6 +126,12 @@ func (h *DeploymentHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Debug().
+		Str("deploy_id", deployID.String()).
+		Str("commit_sha", deployment.CommitSHA).
+		Str("image_tag", deployment.ImageTag).
+		Msg("rolling back to deployment")
+
 	req := service.DeployRequest{
 		AppID:     app.ID,
 		UserID:    userID,

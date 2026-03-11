@@ -66,6 +66,7 @@ func (ws *WebhookService) ProcessPush(ctx context.Context, payload []byte) error
 		Str("repo", event.Repository.FullName).
 		Str("branch", branch).
 		Str("commit", event.HeadCommit.ID[:min(7, len(event.HeadCommit.ID))]).
+		Int64("sender_id", event.Sender.ID).
 		Msg("push event received")
 
 	// Find all apps that match this repo + branch with auto_deploy enabled
@@ -74,15 +75,22 @@ func (ws *WebhookService) ProcessPush(ctx context.Context, payload []byte) error
 		return fmt.Errorf("list apps: %w", err)
 	}
 
+	log.Debug().Int("total_apps", len(apps)).Msg("checking apps for auto-deploy match")
+
 	matched := 0
 	for _, app := range apps {
 		if !app.AutoDeploy {
+			log.Debug().Str("app", app.Subdomain).Msg("skipping app: auto_deploy disabled")
 			continue
 		}
-		if !matchesRepo(app.RepoURL, repoURL) {
+		repoMatch := matchesRepo(app.RepoURL, repoURL)
+		log.Debug().Str("app", app.Subdomain).Str("app_repo", app.RepoURL).Bool("repo_match", repoMatch).Msg("checking repo match")
+		if !repoMatch {
+			log.Debug().Str("app", app.Subdomain).Msg("skipping app: repo mismatch")
 			continue
 		}
 		if app.RepoBranch != branch {
+			log.Debug().Str("app", app.Subdomain).Str("app_branch", app.RepoBranch).Str("event_branch", branch).Msg("skipping app: branch mismatch")
 			continue
 		}
 

@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/luxview/engine/internal/service"
 	"github.com/luxview/engine/pkg/logger"
@@ -46,15 +47,26 @@ func (bw *BuildWorker) Start(ctx context.Context) {
 						wlog.Info().Msg("queue closed, worker exiting")
 						return
 					}
+					queueDepth := len(bw.queue)
 					wlog.Info().
 						Str("app_id", req.AppID.String()).
 						Str("commit", req.CommitSHA).
+						Int("queue_depth", queueDepth).
 						Msg("processing build")
 
-					if err := bw.deployer.Deploy(ctx, req); err != nil {
-						wlog.Error().Err(err).
+					deployStart := time.Now()
+					deployErr := bw.deployer.Deploy(ctx, req)
+					deployDuration := time.Since(deployStart)
+					if deployErr != nil {
+						wlog.Error().Err(deployErr).
 							Str("app_id", req.AppID.String()).
+							Dur("duration", deployDuration).
 							Msg("deploy failed")
+					} else {
+						wlog.Info().
+							Str("app_id", req.AppID.String()).
+							Dur("duration", deployDuration).
+							Msg("deploy completed")
 					}
 				}
 			}

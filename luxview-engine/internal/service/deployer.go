@@ -91,6 +91,12 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	log := logger.With("deployer")
 	start := time.Now()
 
+	log.Debug().
+		Str("app_id", req.AppID.String()).
+		Str("user_id", req.UserID.String()).
+		Str("commit_sha", req.CommitSHA).
+		Msg("deploy started")
+
 	app, err := d.appRepo.FindByID(ctx, req.AppID)
 	if err != nil || app == nil {
 		return fmt.Errorf("app not found: %w", err)
@@ -98,9 +104,18 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 
 	// Determine deploy source: AI-generated Dockerfile or auto-detected
 	deploySource := "auto"
-	if app.CustomDockerfile != nil && *app.CustomDockerfile != "" {
+	hasCustomDockerfile := app.CustomDockerfile != nil && *app.CustomDockerfile != ""
+	if hasCustomDockerfile {
 		deploySource = "ai"
 	}
+
+	log.Debug().
+		Str("app_subdomain", app.Subdomain).
+		Str("repo_url", app.RepoURL).
+		Str("repo_branch", app.RepoBranch).
+		Bool("has_custom_dockerfile", hasCustomDockerfile).
+		Str("deploy_source", deploySource).
+		Msg("app loaded")
 
 	// Create deployment record
 	deployment := &model.Deployment{
@@ -129,12 +144,19 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		return err
 	}
 
+	log.Debug().Str("build_dir", buildDir).Msg("repo cloned, build directory ready")
+
 	// If app has a custom Dockerfile (from AI agent or user), inject it into the build dir
 	if app.CustomDockerfile != nil && *app.CustomDockerfile != "" {
 		dockerfilePath := filepath.Join(buildDir, "Dockerfile")
 		if err := os.WriteFile(dockerfilePath, []byte(*app.CustomDockerfile), 0644); err != nil {
 			log.Warn().Err(err).Msg("failed to write custom Dockerfile, falling back to auto-detect")
 		} else {
+			preview := *app.CustomDockerfile
+			if len(preview) > 100 {
+				preview = preview[:100]
+			}
+			log.Debug().Str("app", app.Subdomain).Str("dockerfile_preview", preview).Msg("custom Dockerfile written to build dir")
 			log.Info().Str("app", app.Subdomain).Msg("using custom Dockerfile from AI agent")
 		}
 	}
@@ -148,9 +170,12 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	bp := result.Buildpack
 	buildDir = result.BuildDir
 
+	log.Debug().Str("buildpack", bp.Name()).Str("build_dir", buildDir).Msg("stack detected")
+
 	// If using a custom Dockerfile, detect the EXPOSE port
 	if dfp, ok := bp.(*buildpack.DockerfilePack); ok {
 		dfp.DetectPort(buildDir)
+		log.Debug().Str("app", app.Subdomain).Int("detected_port", bp.DefaultPort()).Msg("DockerfilePack port detected")
 	}
 
 	// Update app stack
@@ -160,11 +185,15 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	buildCtx, cancel := context.WithTimeout(ctx, d.buildTimeout)
 	defer cancel()
 
+	log.Debug().Str("image_tag", deployment.ImageTag).Dur("build_timeout", d.buildTimeout).Msg("starting image build")
+
 	buildLog, err := d.builder.Build(buildCtx, buildDir, bp, deployment.ImageTag)
 	if err != nil {
 		d.failDeploy(ctx, deployment, app, buildLog+"\n"+err.Error(), start)
 		return fmt.Errorf("build failed: %w", err)
 	}
+
+	log.Debug().Str("image_tag", deployment.ImageTag).Int("build_log_size", len(buildLog)).Msg("image build succeeded")
 
 	// Update deployment status
 	deployment.Status = model.DeployDeploying
@@ -242,6 +271,13 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		_ = d.container.Stop(ctx, oldContainerID)
 	}
 
+	log.Debug().
+		Int("assigned_port", app.AssignedPort).
+		Int("internal_port", app.InternalPort).
+		Int("env_vars", len(envVars)).
+		Int("service_env_vars", len(serviceEnvVars)).
+		Msg("starting container")
+
 	// Start new container
 	containerID, err := d.container.Start(ctx, app, deployment.ImageTag, envVars)
 	if err != nil {
@@ -253,12 +289,18 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		return fmt.Errorf("start container: %w", err)
 	}
 
+	log.Debug().Str("container_id", containerID[:min(12, len(containerID))]).Msg("container started")
+
 	// Health check — longer timeout for slow-starting stacks (Java, etc.)
 	healthTimeout := 120 * time.Second
 	switch bp.Name() {
 	case "java", "nextjs", "dockerfile":
 		healthTimeout = 180 * time.Second
 	}
+
+	log.Debug().Dur("health_timeout", healthTimeout).Str("stack", bp.Name()).Msg("starting health check")
+
+	healthStart := time.Now()
 	healthy := d.healthChecker.WaitForHealthy(ctx, app.ID, containerID, app.InternalPort, app.AssignedPort, healthTimeout)
 	if !healthy {
 		// Capture container logs to help user diagnose the issue
@@ -275,6 +317,8 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 			}
 		}
 
+		log.Debug().Int("fail_reason_len", len(failReason)).Msg("health check failed, rolling back")
+
 		// Append failure reason to build log so the user sees both
 		fullLog := buildLog + "\n\n--- DEPLOY FAILED ---\n" + failReason
 
@@ -288,6 +332,8 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		d.failDeploy(ctx, deployment, app, fullLog, start)
 		return fmt.Errorf("health check failed for app %s", app.Subdomain)
 	}
+
+	log.Debug().Dur("health_check_duration", time.Since(healthStart)).Msg("health check passed")
 
 	// Remove old container
 	if oldContainerID != "" {
@@ -322,6 +368,8 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 // Detects ORM/migration tools and runs the appropriate migration command.
 func (d *Deployer) runPostDeployHooks(ctx context.Context, containerID string, stack string) {
 	log := logger.With("deployer")
+
+	log.Debug().Str("stack", stack).Msg("checking migration tools for post-deploy hooks")
 
 	// First, check if package.json has a db:migrate script (monorepos, custom setups)
 	if d.tryMigration(ctx, containerID, log, "package.json db:migrate",
@@ -437,9 +485,17 @@ func (d *Deployer) cloneRepo(ctx context.Context, app *model.App, destDir string
 
 	// Build clone URL with token for authentication
 	cloneURL := app.RepoURL
+	maskedURL := app.RepoURL
 	if token != "" {
 		cloneURL = injectTokenInURL(app.RepoURL, token)
+		if len(token) >= 4 {
+			maskedURL = injectTokenInURL(app.RepoURL, "****"+token[len(token)-4:])
+		} else {
+			maskedURL = injectTokenInURL(app.RepoURL, "****")
+		}
 	}
+
+	log.Debug().Str("clone_url", maskedURL).Str("branch", app.RepoBranch).Str("dest_dir", destDir).Msg("cloning repo")
 
 	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--branch", app.RepoBranch, cloneURL, destDir)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
@@ -456,6 +512,8 @@ func (d *Deployer) cloneRepo(ctx context.Context, app *model.App, destDir string
 func (d *Deployer) failDeploy(ctx context.Context, deployment *model.Deployment, app *model.App, reason string, start time.Time) {
 	log := logger.With("deployer")
 	duration := int(time.Since(start).Milliseconds())
+
+	log.Debug().Str("deploy_id", deployment.ID.String()).Int("duration_ms", duration).Msg("marking deployment as failed")
 
 	_ = d.deployRepo.UpdateStatus(ctx, deployment.ID, model.DeployFailed, reason, duration)
 	_ = d.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusError, app.ContainerID)

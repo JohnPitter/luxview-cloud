@@ -153,6 +153,9 @@ func (h *AnalyzeHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cfg, aiErr := h.getAIConfig(ctx)
+	aiEnabled := aiErr == nil
+
+	log.Debug().Str("app_id", appID.String()).Bool("ai_enabled", aiEnabled).Msg("starting analysis")
 
 	lang := r.Header.Get("Accept-Language")
 	if lang == "" {
@@ -167,6 +170,8 @@ func (h *AnalyzeHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.RemoveAll(cloneDir)
 
+	log.Debug().Str("clone_dir", cloneDir).Msg("repo cloned for analysis")
+
 	if aiErr != nil {
 		// AI disabled — use deterministic detection
 		log.Info().Msg("AI unavailable, using deterministic analysis")
@@ -175,6 +180,8 @@ func (h *AnalyzeHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Debug().Str("model", cfg.model).Msg("running AI analysis")
+
 	// AI enabled — existing flow
 	result, err := h.agent.Analyze(ctx, cfg.apiKey, cfg.model, cloneDir, lang)
 	if err != nil {
@@ -182,6 +189,16 @@ func (h *AnalyzeHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "analysis failed: "+err.Error())
 		return
 	}
+
+	dockerfileLen := len(result.Dockerfile)
+	log.Debug().
+		Str("app", app.Subdomain).
+		Str("stack", result.Stack).
+		Int("port", result.Port).
+		Int("suggestions", len(result.Suggestions)).
+		Int("service_recommendations", len(result.ServiceRecommendations)).
+		Int("dockerfile_len", dockerfileLen).
+		Msg("analysis result")
 
 	log.Info().Str("app", app.Subdomain).Str("stack", result.Stack).Msg("analysis complete")
 	writeJSON(w, http.StatusOK, result)
@@ -239,6 +256,8 @@ func (h *AnalyzeHandler) AnalyzeFailure(w http.ResponseWriter, r *http.Request) 
 	if app.CustomDockerfile != nil {
 		dockerfile = *app.CustomDockerfile
 	}
+
+	log.Debug().Str("deploy_id", latestDeploy.ID.String()).Int("build_log_len", len(latestDeploy.BuildLog)).Msg("analyzing failure")
 
 	cloneDir, err := h.cloneRepo(ctx, appID, app.RepoURL, app.RepoBranch)
 	if err != nil {
@@ -365,6 +384,12 @@ func (h *AnalyzeHandler) ApplyAnalysis(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+
+	log.Debug().
+		Str("app_id", appID.String()).
+		Int("dockerfile_len", len(req.Dockerfile)).
+		Int("services_count", len(req.Services)).
+		Msg("applying analysis")
 
 	// Save Dockerfile
 	if req.Dockerfile != "" {

@@ -30,6 +30,17 @@ func (cm *ContainerManager) Start(ctx context.Context, app *model.App, imageTag 
 	log := logger.With("container")
 	containerName := fmt.Sprintf("luxview-%s", app.Subdomain)
 
+	cpuQuota, memory := parseResourceLimits(app.ResourceLimits)
+	log.Debug().
+		Str("container_name", containerName).
+		Str("image_tag", imageTag).
+		Int("env_vars", len(envVars)).
+		Int("assigned_port", app.AssignedPort).
+		Int("internal_port", app.InternalPort).
+		Int64("cpu_nano", cpuQuota).
+		Int64("memory_bytes", memory).
+		Msg("starting container")
+
 	// Build env var list
 	var envList []string
 	for k, v := range envVars {
@@ -39,9 +50,6 @@ func (cm *ContainerManager) Start(ctx context.Context, app *model.App, imageTag 
 
 	portStr := strconv.Itoa(app.InternalPort)
 	exposedPort := nat.Port(portStr + "/tcp")
-
-	// Parse resource limits
-	cpuQuota, memory := parseResourceLimits(app.ResourceLimits)
 
 	config := &container.Config{
 		Image:        imageTag,
@@ -72,6 +80,7 @@ func (cm *ContainerManager) Start(ctx context.Context, app *model.App, imageTag 
 	// Remove existing container with same name (if any)
 	_ = cm.docker.StopContainer(ctx, containerName, 10)
 	_ = cm.docker.RemoveContainer(ctx, containerName, true)
+	log.Debug().Str("container_name", containerName).Msg("removed existing container with same name (if any)")
 
 	containerID, err := cm.docker.CreateContainer(ctx, config, hostConfig, networkConfig, containerName)
 	if err != nil {
@@ -100,6 +109,7 @@ func (cm *ContainerManager) Stop(ctx context.Context, containerID string) error 
 	if containerID == "" {
 		return nil
 	}
+	log.Debug().Str("container_id", containerID[:min(12, len(containerID))]).Msg("stopping container")
 	err := cm.docker.StopContainer(ctx, containerID, 30)
 	if err != nil {
 		log.Warn().Err(err).Str("container", containerID).Msg("failed to stop container")
@@ -111,17 +121,21 @@ func (cm *ContainerManager) Stop(ctx context.Context, containerID string) error 
 
 // Remove removes a container.
 func (cm *ContainerManager) Remove(ctx context.Context, containerID string) error {
+	log := logger.With("container")
 	if containerID == "" {
 		return nil
 	}
+	log.Debug().Str("container_id", containerID[:min(12, len(containerID))]).Msg("removing container")
 	return cm.docker.RemoveContainer(ctx, containerID, true)
 }
 
 // Restart restarts a container.
 func (cm *ContainerManager) Restart(ctx context.Context, containerID string) error {
+	log := logger.With("container")
 	if containerID == "" {
 		return fmt.Errorf("no container to restart")
 	}
+	log.Debug().Str("container_id", containerID[:min(12, len(containerID))]).Msg("restarting container")
 	return cm.docker.RestartContainer(ctx, containerID, 30)
 }
 

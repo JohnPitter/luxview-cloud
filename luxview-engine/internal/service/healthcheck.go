@@ -114,13 +114,19 @@ func (hc *HealthChecker) WaitForHealthy(ctx context.Context, appID uuid.UUID, co
 
 	log.Debug().Strs("urls", urls).Str("app_id", appID.String()).Dur("timeout", timeout).Msg("starting health check")
 
+	attempt := 0
 	for time.Now().Before(deadline) {
+		attempt++
 		for _, url := range urls {
 			resp, err := hc.client.Get(url)
-			if err == nil {
+			if err != nil {
+				log.Debug().Str("app_id", appID.String()).Int("attempt", attempt).Str("url", url).Err(err).Msg("health check attempt failed")
+			} else {
+				statusCode := resp.StatusCode
 				resp.Body.Close()
-				if resp.StatusCode < 500 {
-					log.Info().Str("app_id", appID.String()).Str("url", url).Msg("app is healthy")
+				log.Debug().Str("app_id", appID.String()).Int("attempt", attempt).Str("url", url).Int("status_code", statusCode).Msg("health check attempt result")
+				if statusCode < 500 {
+					log.Info().Str("app_id", appID.String()).Str("url", url).Int("attempts", attempt).Msg("app is healthy")
 					return true
 				}
 			}
@@ -128,11 +134,12 @@ func (hc *HealthChecker) WaitForHealthy(ctx context.Context, appID uuid.UUID, co
 
 		select {
 		case <-ctx.Done():
+			log.Debug().Str("app_id", appID.String()).Int("total_attempts", attempt).Msg("health check context cancelled")
 			return false
 		case <-time.After(3 * time.Second):
 		}
 	}
 
-	log.Warn().Str("app_id", appID.String()).Msg("health check timed out")
+	log.Warn().Str("app_id", appID.String()).Int("total_attempts", attempt).Msg("health check timed out")
 	return false
 }

@@ -34,6 +34,8 @@ func (pm *PortManager) Allocate(ctx context.Context) (int, error) {
 
 	log := logger.With("portmanager")
 
+	log.Debug().Int("range_start", pm.start).Int("range_end", pm.end).Msg("searching for available port")
+
 	used, err := pm.appRepo.GetUsedPorts(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("get used ports: %w", err)
@@ -44,6 +46,8 @@ func (pm *PortManager) Allocate(ctx context.Context) (int, error) {
 		used[p] = true
 	}
 
+	log.Debug().Int("ports_in_use", len(used)).Msg("current port usage")
+
 	for port := pm.start; port <= pm.end; port++ {
 		if !used[port] {
 			pm.reserved[port] = true
@@ -52,6 +56,7 @@ func (pm *PortManager) Allocate(ctx context.Context) (int, error) {
 		}
 	}
 
+	log.Warn().Int("range_start", pm.start).Int("range_end", pm.end).Int("ports_in_use", len(used)).Msg("no available ports in range")
 	return 0, fmt.Errorf("no available ports in range %d-%d", pm.start, pm.end)
 }
 

@@ -47,6 +47,8 @@ func (a *DeployAgent) Analyze(ctx context.Context, apiKey, model, repoDir, lang 
 	}
 
 	localizedPrompt := systemPrompt + "\n\nIMPORTANT: All text content in your response (suggestions messages, reasons, manual steps, env hint descriptions) MUST be written in " + lang + " language. JSON keys stay in English."
+	log.Debug().Int("system_prompt_len", len(localizedPrompt)).Int("user_prompt_len", len(userPrompt)).Msg("built context for LLM")
+
 	result, err := a.callLLM(ctx, apiKey, model, localizedPrompt, userPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("analyze: %w", err)
@@ -187,6 +189,7 @@ func (a *DeployAgent) callLLM(ctx context.Context, apiKey, model, system, userPr
 
 	log.Debug().Str("model", model).Int("prompt_len", len(userPrompt)).Msg("calling OpenRouter API")
 
+	apiCallStart := time.Now()
 	resp, err := a.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("call OpenRouter API: %w", err)
@@ -197,6 +200,9 @@ func (a *DeployAgent) callLLM(ctx context.Context, apiKey, model, system, userPr
 	if err != nil {
 		return nil, fmt.Errorf("read response body: %w", err)
 	}
+
+	apiCallDuration := time.Since(apiCallStart)
+	log.Debug().Str("model", model).Dur("api_call_duration", apiCallDuration).Int("response_size", len(respBody)).Msg("OpenRouter API response received")
 
 	if resp.StatusCode != http.StatusOK {
 		log.Error().Int("status", resp.StatusCode).Str("body", string(respBody)).Msg("OpenRouter API error")
@@ -218,6 +224,7 @@ func (a *DeployAgent) callLLM(ctx context.Context, apiKey, model, system, userPr
 	}
 
 	text := apiResp.Choices[0].Message.Content
+	log.Debug().Int("raw_response_len", len(text)).Msg("raw LLM response before JSON extraction")
 
 	// Extract JSON from response (handles code fences and surrounding text)
 	text = extractJSON(text)

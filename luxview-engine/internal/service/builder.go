@@ -36,6 +36,12 @@ func (b *Builder) Build(ctx context.Context, sourceDir string, bp buildpack.Buil
 	dockerfileName := "Dockerfile"
 
 	if dockerfileContent != "" {
+		dfPreview := dockerfileContent
+		if len(dfPreview) > 200 {
+			dfPreview = dfPreview[:200]
+		}
+		log.Debug().Str("dockerfile_preview", dfPreview).Msg("generated Dockerfile content")
+
 		// Write generated Dockerfile to source dir
 		dfPath := filepath.Join(sourceDir, "Dockerfile.luxview")
 		if err := os.WriteFile(dfPath, []byte(dockerfileContent), 0644); err != nil {
@@ -51,6 +57,8 @@ func (b *Builder) Build(ctx context.Context, sourceDir string, bp buildpack.Buil
 		return "", fmt.Errorf("create tar archive: %w", err)
 	}
 
+	log.Debug().Int("tar_size_bytes", tarBuf.Len()).Str("dockerfile", dockerfileName).Msg("tar archive created, sending to Docker")
+
 	// Build the image
 	resp, err := b.docker.BuildImage(ctx, tarBuf, []string{imageTag}, dockerfileName)
 	if err != nil {
@@ -62,6 +70,7 @@ func (b *Builder) Build(ctx context.Context, sourceDir string, bp buildpack.Buil
 	var buildLog strings.Builder
 	decoder := json.NewDecoder(resp)
 	var lastErr string
+	lineCount := 0
 	for {
 		var msg struct {
 			Stream string `json:"stream"`
@@ -75,6 +84,12 @@ func (b *Builder) Build(ctx context.Context, sourceDir string, bp buildpack.Buil
 		}
 		if msg.Stream != "" {
 			buildLog.WriteString(msg.Stream)
+			lineCount++
+			linePreview := msg.Stream
+			if len(linePreview) > 200 {
+				linePreview = linePreview[:200]
+			}
+			log.Debug().Str("image", imageTag).Int("line", lineCount).Str("output", linePreview).Msg("build stream")
 		}
 		if msg.Error != "" {
 			lastErr = msg.Error
