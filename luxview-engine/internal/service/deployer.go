@@ -164,7 +164,11 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	// Detect stack
 	result := d.detector.Detect(buildDir)
 	if result == nil {
-		d.failDeploy(ctx, deployment, app, "no supported stack detected", start)
+		failMsg := "no supported stack detected — run AI analysis to generate a custom Dockerfile"
+		if d.detector.IsMonorepo(buildDir) {
+			failMsg = "monorepo detected (turbo/pnpm/lerna) — workspace:* dependencies require a custom Dockerfile. Run AI analysis first to generate one."
+		}
+		d.failDeploy(ctx, deployment, app, failMsg, start)
 		return fmt.Errorf("no buildpack detected for app %s", app.Subdomain)
 	}
 	bp := result.Buildpack

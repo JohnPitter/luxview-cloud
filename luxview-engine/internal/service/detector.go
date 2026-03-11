@@ -22,10 +22,8 @@ type DetectResult struct {
 }
 
 // Detect scans the source directory and returns the matching buildpack and build directory.
-// For monorepos (turbo/pnpm/lerna), it skips generic NodePack at root and instead
-// searches packages/ and apps/ subdirectories for a deployable backend service.
-// If no buildpack is found at root level, it searches one level deep for a
-// buildable subdirectory (e.g., monorepos with a single service in a subfolder).
+// Returns nil for monorepos (turbo/pnpm/lerna/nx) since workspace:* cross-dependencies
+// require a custom Dockerfile. For non-monorepos, searches one level deep if no match at root.
 func (d *Detector) Detect(sourceDir string) *DetectResult {
 	log := logger.With("detector")
 
@@ -40,15 +38,10 @@ func (d *Detector) Detect(sourceDir string) *DetectResult {
 		log.Debug().Str("file", f).Msg("root file")
 	}
 
-	// Check if this is a monorepo before running generic detection
-	isMonorepo := d.isMonorepo(sourceDir)
-	if isMonorepo {
-		log.Info().Str("dir", sourceDir).Msg("monorepo detected, scanning workspaces for deployable service")
-		result := d.detectMonorepoService(sourceDir)
-		if result != nil {
-			return result
-		}
-		log.Warn().Str("dir", sourceDir).Msg("monorepo detected but no deployable service found in workspaces — requires custom Dockerfile")
+	// Monorepos (turbo/pnpm/lerna/nx) have workspace:* cross-dependencies that
+	// generic buildpacks can't resolve. They always need a custom Dockerfile.
+	if d.IsMonorepo(sourceDir) {
+		log.Warn().Str("dir", sourceDir).Msg("monorepo detected — auto-detect not supported, requires AI analysis or custom Dockerfile")
 		return nil
 	}
 
@@ -83,7 +76,7 @@ func (d *Detector) Detect(sourceDir string) *DetectResult {
 }
 
 // isMonorepo checks if the source directory is a monorepo (turbo, pnpm workspaces, lerna, nx).
-func (d *Detector) isMonorepo(sourceDir string) bool {
+func (d *Detector) IsMonorepo(sourceDir string) bool {
 	monorepoMarkers := []string{
 		"turbo.json",
 		"pnpm-workspace.yaml",
@@ -96,82 +89,6 @@ func (d *Detector) isMonorepo(sourceDir string) bool {
 		}
 	}
 	return false
-}
-
-// detectMonorepoService scans monorepo workspace directories to find a deployable
-// backend service. It prioritizes backend apps (api, server, backend) over frontend.
-// Returns nil if no suitable service is found (monorepo needs a custom Dockerfile).
-func (d *Detector) detectMonorepoService(sourceDir string) *DetectResult {
-	log := logger.With("detector")
-
-	// Directories to scan for workspace packages
-	workspaceDirs := []string{"apps", "packages", "services"}
-
-	// Priority names for backend services (checked first)
-	backendNames := map[string]bool{
-		"api": true, "server": true, "backend": true,
-		"service": true, "web-api": true, "app": true,
-	}
-
-	var frontendResult *DetectResult
-
-	for _, wsDir := range workspaceDirs {
-		wsPath := filepath.Join(sourceDir, wsDir)
-		entries, err := os.ReadDir(wsPath)
-		if err != nil {
-			continue
-		}
-
-		for _, e := range entries {
-			if !e.IsDir() {
-				continue
-			}
-			subDir := filepath.Join(wsPath, e.Name())
-			subFiles, err := listRootEntries(subDir)
-			if err != nil {
-				continue
-			}
-
-			subBp := buildpack.DetectStack(subFiles)
-			if subBp == nil {
-				log.Debug().Str("workspace", wsDir+"/"+e.Name()).Msg("no buildpack detected in workspace package")
-				continue
-			}
-
-			log.Debug().
-				Str("workspace", wsDir+"/"+e.Name()).
-				Str("stack", subBp.Name()).
-				Bool("is_backend_name", backendNames[e.Name()]).
-				Msg("buildpack detected in workspace package")
-
-			// Skip Vite/static SPAs as primary deploy target — they need a combined Dockerfile
-			isFrontend := subBp.Name() == "vite" || subBp.Name() == "static"
-
-			if backendNames[e.Name()] && !isFrontend {
-				log.Info().
-					Str("stack", subBp.Name()).
-					Str("workspace", wsDir+"/"+e.Name()).
-					Msg("backend service detected in monorepo")
-				return &DetectResult{Buildpack: subBp, BuildDir: subDir}
-			}
-
-			// Remember first non-frontend match as fallback
-			if !isFrontend && frontendResult == nil {
-				frontendResult = &DetectResult{Buildpack: subBp, BuildDir: subDir}
-			}
-		}
-	}
-
-	// Fallback: use the first non-frontend service found
-	if frontendResult != nil {
-		log.Info().
-			Str("stack", frontendResult.Buildpack.Name()).
-			Str("dir", frontendResult.BuildDir).
-			Msg("using fallback non-frontend service from monorepo")
-		return frontendResult
-	}
-
-	return nil
 }
 
 // listRootEntries returns filenames (not dirs) in the root of the directory.
