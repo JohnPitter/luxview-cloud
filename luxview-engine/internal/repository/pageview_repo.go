@@ -98,7 +98,7 @@ func (r *PageviewRepo) Overview(ctx context.Context, appID *uuid.UUID, start, en
 
 	if useRaw {
 		// KPIs from raw
-		q := `SELECT COUNT(*), COUNT(DISTINCT ip_hash), COALESCE(AVG(response_ms), 0) FROM pageviews WHERE timestamp >= $1 AND timestamp < $2`
+		q := `SELECT COUNT(*), COUNT(DISTINCT ip_hash), COALESCE(AVG(response_ms)::int, 0) FROM pageviews WHERE timestamp >= $1 AND timestamp < $2`
 		args := []interface{}{start, end}
 		if appID != nil {
 			q += ` AND app_id = $3`
@@ -170,7 +170,7 @@ func (r *PageviewRepo) Overview(ctx context.Context, appID *uuid.UUID, start, en
 		}
 	} else {
 		// From aggregations
-		q := `SELECT COALESCE(SUM(views), 0), COALESCE(SUM(visitors), 0), COALESCE(AVG(avg_duration_ms), 0)
+		q := `SELECT COALESCE(SUM(views), 0), COALESCE(SUM(visitors), 0), COALESCE(AVG(avg_duration_ms)::int, 0)
 			FROM pageview_aggregations WHERE bucket >= $1 AND bucket < $2`
 		args := []interface{}{start, end}
 		if appID != nil {
