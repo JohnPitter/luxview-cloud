@@ -79,6 +79,16 @@ func (lp *LogParser) ParseLine(line []byte) *model.Pageview {
 		return nil
 	}
 
+	// Filter: skip scanner/probe paths (WordPress, phpMyAdmin, etc.)
+	if isScannerPath(entry.RequestPath) {
+		return nil
+	}
+
+	// Filter: skip empty or minimal User-Agent (automated tools)
+	if len(entry.UserAgent) < 20 {
+		return nil
+	}
+
 	// Parse User-Agent
 	ua := useragent.New(entry.UserAgent)
 
@@ -184,6 +194,28 @@ func isInternalPath(path string) bool {
 	lower := strings.ToLower(path)
 	for _, p := range internals {
 		if strings.HasPrefix(lower, p) || lower == p {
+			return true
+		}
+	}
+	return false
+}
+
+// isScannerPath detects automated vulnerability scanners probing for CMS/admin endpoints.
+func isScannerPath(path string) bool {
+	lower := strings.ToLower(path)
+	scannerPaths := []string{
+		"/wp-login", "/wp-admin", "/wp-content", "/wp-includes", "/wordpress",
+		"/xmlrpc.php", "/wp-cron.php", "/wp-config",
+		"/.env", "/.git", "/.well-known/security.txt",
+		"/admin", "/administrator", "/phpmyadmin", "/pma",
+		"/cgi-bin/", "/shell", "/eval", "/exec",
+		"/config.php", "/setup.php", "/install.php",
+		"/vendor/phpunit", "/.aws/credentials",
+		"/actuator", "/debug", "/console",
+		"/solr/", "/struts", "/jenkins", "/manager/html",
+	}
+	for _, p := range scannerPaths {
+		if strings.HasPrefix(lower, p) || strings.Contains(lower, p) {
 			return true
 		}
 	}
