@@ -337,6 +337,7 @@ export function DeployWizard({
               </div>
             ) : analysisResult ? (
               <DeployAnalysis
+                key={analysisResult.dockerfile}
                 result={analysisResult}
                 loading={false}
                 mode="first-deploy"
@@ -347,6 +348,7 @@ export function DeployWizard({
               />
             ) : (
               <DeployAnalysis
+                key="loading"
                 result={{ suggestions: [], dockerfile: '', port: 0, stack: '', envHints: [] }}
                 loading={analyzing}
                 mode="first-deploy"

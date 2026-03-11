@@ -136,6 +136,13 @@ export function DeployAnalysis({
 
   const [dockerfile, setDockerfile] = useState(result.dockerfile);
   const [editing, setEditing] = useState(false);
+
+  // Sync dockerfile state when result prop changes (e.g., loading -> real result)
+  useEffect(() => {
+    if (result.dockerfile && result.dockerfile !== dockerfile) {
+      setDockerfile(result.dockerfile);
+    }
+  }, [result.dockerfile]); // eslint-disable-line react-hooks/exhaustive-deps
   const [envValues, setEnvValues] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const hint of result.envHints) {
