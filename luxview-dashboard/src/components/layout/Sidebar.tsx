@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
   LayoutDashboard,
   Plus,
+  BarChart3,
   Settings,
   Shield,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ interface SidebarItem {
 const items: SidebarItem[] = [
   { icon: LayoutDashboard, labelKey: 'layout.sidebar.dashboard', path: '/dashboard' },
   { icon: Plus, labelKey: 'layout.sidebar.newApp', path: '/dashboard/new' },
+  { icon: BarChart3, labelKey: 'layout.sidebar.analytics', path: '/dashboard/analytics' },
   { icon: Settings, labelKey: 'layout.sidebar.settings', path: '/dashboard/settings' },
   { icon: Shield, labelKey: 'layout.sidebar.admin', path: '/dashboard/admin', adminOnly: true },
 ];

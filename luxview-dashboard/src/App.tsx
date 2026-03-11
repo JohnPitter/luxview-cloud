@@ -14,6 +14,7 @@ import { S3Explorer } from './pages/S3Explorer';
 import { Logs } from './pages/Logs';
 import { Settings } from './pages/Settings';
 import { Profile } from './pages/Profile';
+import { Analytics } from './pages/Analytics';
 import { Status } from './pages/Status';
 import { Docs } from './pages/Docs';
 import { MainLayout } from './components/layout/MainLayout';
@@ -55,6 +56,7 @@ export function App() {
         <Route path="resources/db/:serviceId" element={<DbExplorer />} />
         <Route path="resources/s3/:serviceId" element={<S3Explorer />} />
         <Route path="logs" element={<Logs />} />
+        <Route path="analytics" element={<Analytics />} />
         <Route path="settings" element={<Settings />} />
         <Route path="profile" element={<Profile />} />
       </Route>
