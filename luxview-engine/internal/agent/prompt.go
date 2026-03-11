@@ -92,6 +92,7 @@ Dockerfile rules:
 7. Install only production dependencies when possible.
 8. Set appropriate WORKDIR, COPY, and CMD instructions.
 9. CRITICAL: The "dockerfile" field MUST contain ONLY valid Dockerfile instructions. Every line must start with a valid instruction (FROM, RUN, COPY, WORKDIR, EXPOSE, CMD, ENTRYPOINT, ENV, ARG, ADD, LABEL, VOLUME, USER, HEALTHCHECK, SHELL, STOPSIGNAL, ONBUILD) or be a comment starting with #. Do NOT include bare words like "alpine" or "node" on their own line — these cause parse errors.
+10. For the CMD instruction: check the package.json "scripts" section. Do NOT use "pnpm start" or "npm start" if there is no "start" script. Instead, use "node" to run the compiled entrypoint directly (e.g., CMD ["node", "packages/api/dist/index.js"]). Look at the "dev" script to find the entrypoint file (e.g., "tsx watch src/index.ts" means the entrypoint is "dist/index.js" after build).
 
 LuxView Cloud managed services (available via platform):
 - PostgreSQL: env vars DATABASE_URL, PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
