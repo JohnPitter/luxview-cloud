@@ -96,6 +96,12 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		return fmt.Errorf("app not found: %w", err)
 	}
 
+	// Determine deploy source: AI-generated Dockerfile or auto-detected
+	deploySource := "auto"
+	if app.CustomDockerfile != nil && *app.CustomDockerfile != "" {
+		deploySource = "ai"
+	}
+
 	// Create deployment record
 	deployment := &model.Deployment{
 		AppID:         app.ID,
@@ -103,6 +109,7 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		CommitMessage: req.CommitMsg,
 		Status:        model.DeployBuilding,
 		ImageTag:      fmt.Sprintf("luxview/%s:%s", app.Subdomain, req.CommitSHA[:min(7, len(req.CommitSHA))]),
+		Source:        deploySource,
 	}
 	if err := d.deployRepo.Create(ctx, deployment); err != nil {
 		return fmt.Errorf("create deployment: %w", err)

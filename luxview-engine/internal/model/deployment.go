@@ -26,6 +26,7 @@ type Deployment struct {
 	BuildLog      string           `json:"build_log,omitempty"`
 	DurationMs    int              `json:"duration_ms"`
 	ImageTag      string           `json:"image_tag"`
+	Source        string           `json:"source"`
 	CreatedAt     time.Time        `json:"created_at"`
 	FinishedAt    *time.Time       `json:"finished_at,omitempty"`
 }

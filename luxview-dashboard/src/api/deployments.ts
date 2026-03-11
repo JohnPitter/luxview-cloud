@@ -11,6 +11,7 @@ export interface Deployment {
   buildLog: string;
   durationMs: number;
   imageTag: string;
+  source: 'ai' | 'auto';
   createdAt: string;
   finishedAt: string;
 }

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { GitCommit, Clock, RotateCcw, Check, X, Loader2 } from 'lucide-react';
+import { GitCommit, Clock, RotateCcw, Check, X, Loader2, Bot, Cog } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { PillButton } from '../common/PillButton';
 import { useThemeStore } from '../../stores/theme.store';
@@ -61,6 +61,17 @@ export function DeployHistory({ deployments, onRollback, onViewLog }: DeployHist
                   <span className="text-xs font-mono text-zinc-400">
                     {deploy.commitSha.slice(0, 7)}
                   </span>
+                  {deploy.source === 'ai' ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                      <Bot size={10} />
+                      AI
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+                      <Cog size={10} />
+                      Auto
+                    </span>
+                  )}
                   {i === 0 && deploy.status === 'live' && (
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                       {t('deploy.history.current')}

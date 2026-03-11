@@ -193,6 +193,8 @@ func (db *DB) migrate(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs(actor_id, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_logs(resource_type, resource_id)`,
+
+		`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS source VARCHAR(10) NOT NULL DEFAULT 'auto'`,
 	}
 
 	for i, m := range migrations {
