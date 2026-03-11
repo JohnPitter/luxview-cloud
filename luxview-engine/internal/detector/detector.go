@@ -18,8 +18,26 @@ type Detection struct {
 
 // Analyze performs deterministic analysis of a repository directory
 // and returns an AnalysisResult without requiring AI.
+// For monorepos (turbo/pnpm/lerna/nx), returns RequiresAI=true since
+// workspace:* cross-dependencies need AI-generated Dockerfiles.
 func Analyze(repoDir string) *agent.AnalysisResult {
 	log := logger.With("detector")
+
+	// Monorepos with workspace:* dependencies can't use generic Dockerfiles
+	if isMonorepo(repoDir) {
+		log.Info().Str("dir", repoDir).Msg("monorepo detected, AI analysis required")
+		return &agent.AnalysisResult{
+			Suggestions: []agent.Suggestion{
+				{Type: "error", Message: "Monorepo detected (turbo/pnpm workspaces). AI analysis is required to generate a proper Dockerfile that handles workspace:* dependencies."},
+			},
+			Dockerfile:  "",
+			Port:        0,
+			Stack:       "monorepo",
+			EnvHints:    detectEnvVars(repoDir),
+			RequiresAI:  true,
+		}
+	}
+
 	det := detect(repoDir)
 	log.Debug().Str("runtime", det.Runtime).Str("framework", det.Framework).Int("port", det.Port).Msg("detected stack")
 
@@ -35,6 +53,17 @@ func Analyze(repoDir string) *agent.AnalysisResult {
 		EnvHints:               envVars,
 		ServiceRecommendations: services,
 	}
+}
+
+// isMonorepo checks for monorepo markers in the repository root.
+func isMonorepo(repoDir string) bool {
+	markers := []string{"turbo.json", "pnpm-workspace.yaml", "lerna.json", "nx.json"}
+	for _, m := range markers {
+		if fileExists(repoDir, m) {
+			return true
+		}
+	}
+	return false
 }
 
 func detect(repoDir string) Detection {

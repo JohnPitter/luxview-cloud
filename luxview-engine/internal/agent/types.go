@@ -9,6 +9,7 @@ type AnalysisResult struct {
 	EnvHints               []EnvHint               `json:"envHints"`
 	Diagnosis              string                  `json:"diagnosis,omitempty"`
 	ServiceRecommendations []ServiceRecommendation `json:"serviceRecommendations,omitempty"`
+	RequiresAI             bool                    `json:"requiresAi,omitempty"`
 }
 
 // Suggestion represents a single recommendation from the agent.

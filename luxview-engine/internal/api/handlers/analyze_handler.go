@@ -176,8 +176,18 @@ func (h *AnalyzeHandler) Analyze(w http.ResponseWriter, r *http.Request) {
 		// AI disabled — use deterministic detection
 		log.Info().Msg("AI unavailable, using deterministic analysis")
 		result := detector.Analyze(cloneDir)
+		if result.RequiresAI {
+			log.Warn().Msg("monorepo detected but AI is disabled — returning requiresAi flag")
+		}
 		writeJSON(w, http.StatusOK, result)
 		return
+	}
+
+	// AI is available — check if it's a monorepo that needs AI
+	// (deterministic detection can't handle workspace:* dependencies)
+	deterministicResult := detector.Analyze(cloneDir)
+	if deterministicResult.RequiresAI {
+		log.Info().Msg("monorepo detected, forcing AI analysis for Dockerfile generation")
 	}
 
 	log.Debug().Str("model", cfg.model).Msg("running AI analysis")

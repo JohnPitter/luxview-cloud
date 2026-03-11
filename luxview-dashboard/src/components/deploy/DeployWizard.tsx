@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronRight, ChevronLeft, Rocket, Plus, Trash2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Check, ChevronRight, ChevronLeft, Rocket, Plus, Trash2, AlertCircle, RefreshCw, Bot, Settings } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { PillButton } from '../common/PillButton';
 import { RepoSelector } from '../apps/RepoSelector';
@@ -62,29 +62,22 @@ export function DeployWizard({
   const [appCreated, setAppCreated] = useState(false);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
-  const steps = aiEnabled
-    ? [
-        t('deploy.wizard.steps.selectRepository'),
-        t('deploy.wizard.steps.configure'),
-        t('deploy.wizard.steps.environment'),
-        t('deploy.wizard.steps.aiAnalysis'),
-        t('deploy.wizard.steps.reviewDeploy'),
-      ]
-    : [
-        t('deploy.wizard.steps.selectRepository'),
-        t('deploy.wizard.steps.configure'),
-        t('deploy.wizard.steps.environment'),
-        t('deploy.wizard.steps.reviewDeploy'),
-      ];
+  const steps = [
+    t('deploy.wizard.steps.selectRepository'),
+    t('deploy.wizard.steps.configure'),
+    t('deploy.wizard.steps.environment'),
+    t('deploy.wizard.steps.aiAnalysis'),
+    t('deploy.wizard.steps.reviewDeploy'),
+  ];
 
   const reviewStepIndex = steps.length - 1;
 
-  // Auto-advance when provisioning completes (AI enabled: step 3 -> step 4)
+  // Auto-advance when provisioning completes (step 3 -> step 4)
   useEffect(() => {
-    if (provisioningDone && aiEnabled && step === 3) {
+    if (provisioningDone && step === 3) {
       setStep(4);
     }
-  }, [provisioningDone, step, aiEnabled]);
+  }, [provisioningDone, step]);
 
   const handleRepoSelect = useCallback(
     (repo: GithubRepo) => {
@@ -110,8 +103,7 @@ export function DeployWizard({
       case 1: return !!branch && !!subdomain && subdomainAvailable;
       case 2: return true;
       case 3:
-        if (aiEnabled) return !!analysisResult && !analyzing;
-        return true; // review step when AI disabled
+        return !!analysisResult && !analyzing;
       default: return true;
     }
   };
@@ -297,7 +289,7 @@ export function DeployWizard({
           </div>
         )}
 
-        {aiEnabled && step === 3 && (
+        {step === 3 && (
           <div>
             {analysisError ? (
               <div className="flex flex-col items-center gap-4 py-8">
@@ -313,6 +305,33 @@ export function DeployWizard({
                   </PillButton>
                   <PillButton variant="ghost" size="sm" onClick={() => setStep(reviewStepIndex)}>
                     {t('analyze.skipAnalysis')}
+                  </PillButton>
+                </div>
+              </div>
+            ) : analysisResult?.requiresAi && !aiEnabled ? (
+              <div className="flex flex-col items-center gap-4 py-8">
+                <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-amber-500/10">
+                  <Bot size={24} className="text-amber-400" />
+                </div>
+                <div className="text-center">
+                  <p className={`text-sm font-medium mb-1 ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                    {t('analyze.monorepoDetected')}
+                  </p>
+                  <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                    {t('analyze.monorepoRequiresAi')}
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <PillButton
+                    variant="primary"
+                    size="sm"
+                    onClick={() => window.open('/dashboard/admin?tab=ai', '_blank')}
+                    icon={<Settings size={14} />}
+                  >
+                    {t('analyze.configureAi')}
+                  </PillButton>
+                  <PillButton variant="ghost" size="sm" onClick={onRetryAnalysis} icon={<RefreshCw size={14} />}>
+                    {t('common.refresh')}
                   </PillButton>
                 </div>
               </div>
@@ -375,8 +394,8 @@ export function DeployWizard({
         )}
       </GlassCard>
 
-      {/* Navigation — hidden on step 3 when it's the AI analysis step */}
-      {!(aiEnabled && step === 3) && (
+      {/* Navigation — hidden on step 3 (analysis step has its own controls) */}
+      {step !== 3 && (
         <div className="flex items-center justify-between mt-6">
           <PillButton
             variant="ghost"

@@ -124,9 +124,7 @@ export function NewApp() {
       });
       createdAppIdRef.current = app.id;
       wizardEnvVarsRef.current = config.envVars;
-      if (aiEnabled) {
-        await runAnalysis(app.id);
-      }
+      await runAnalysis(app.id);
     } catch {
       addNotification({
         type: 'error',

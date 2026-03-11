@@ -27,6 +27,7 @@ export interface AnalysisResult {
   envHints: EnvHint[];
   diagnosis?: string;
   serviceRecommendations?: ServiceRecommendation[];
+  requiresAi?: boolean;
 }
 
 export interface AISettings {
