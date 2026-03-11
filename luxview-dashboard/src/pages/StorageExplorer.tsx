@@ -13,6 +13,12 @@ import {
   RefreshCw,
   AlertCircle,
   Search,
+  Eye,
+  X,
+  FileText,
+  Image as ImageIcon,
+  FileVideo,
+  FileAudio,
 } from 'lucide-react';
 import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
@@ -26,6 +32,40 @@ function formatSize(bytes: number): string {
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
 }
+
+function getFileType(key: string): 'image' | 'video' | 'audio' | 'text' | 'pdf' | 'other' {
+  const ext = key.split('.').pop()?.toLowerCase() || '';
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext)) return 'image';
+  if (['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext)) return 'video';
+  if (['mp3', 'wav', 'ogg', 'aac', 'flac', 'wma'].includes(ext)) return 'audio';
+  if (['txt', 'log', 'csv', 'json', 'xml', 'html', 'css', 'js', 'ts', 'md', 'yml', 'yaml', 'env', 'sh'].includes(ext)) return 'text';
+  if (ext === 'pdf') return 'pdf';
+  return 'other';
+}
+
+function getFileIcon(key: string, isDark: boolean) {
+  const type = getFileType(key);
+  switch (type) {
+    case 'image':
+      return <ImageIcon size={16} className="text-emerald-400 flex-shrink-0" />;
+    case 'video':
+      return <FileVideo size={16} className="text-blue-400 flex-shrink-0" />;
+    case 'audio':
+      return <FileAudio size={16} className="text-purple-400 flex-shrink-0" />;
+    case 'text':
+    case 'pdf':
+      return <FileText size={16} className="text-amber-400 flex-shrink-0" />;
+    default:
+      return <FileIcon size={16} className={`flex-shrink-0 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`} />;
+  }
+}
+
+function isPreviewable(key: string): boolean {
+  const type = getFileType(key);
+  return type !== 'other';
+}
+
+const MAX_TEXT_PREVIEW = 512 * 1024; // 512KB max for text preview
 
 export function StorageExplorer() {
   const { serviceId } = useParams<{ serviceId: string }>();
@@ -43,6 +83,12 @@ export function StorageExplorer() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState('');
+
+  // Preview state
+  const [previewFile, setPreviewFile] = useState<StorageFileInfo | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const formatDate = (dateStr: string): string => {
     if (!dateStr) return '-';
@@ -74,6 +120,13 @@ export function StorageExplorer() {
   useEffect(() => {
     fetchFiles();
   }, [fetchFiles]);
+
+  // Cleanup preview URL on unmount or when closing
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   const navigateToFolder = (key: string) => {
     setPrefix(key);
@@ -130,6 +183,46 @@ export function StorageExplorer() {
       setError(t('resources.storage.failedToDownloadFile'));
     } finally {
       setDownloadingKey(null);
+    }
+  };
+
+  const handlePreview = async (file: StorageFileInfo) => {
+    if (!serviceId) return;
+    setPreviewFile(file);
+    setPreviewLoading(true);
+    setPreviewText(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+    try {
+      const blob = await servicesApi.downloadFile(serviceId, file.key);
+      const type = getFileType(file.key);
+      if (type === 'text') {
+        if (file.size > MAX_TEXT_PREVIEW) {
+          const sliced = blob.slice(0, MAX_TEXT_PREVIEW);
+          const text = await sliced.text();
+          setPreviewText(text + '\n\n… (truncated)');
+        } else {
+          setPreviewText(await blob.text());
+        }
+      } else {
+        setPreviewUrl(URL.createObjectURL(blob));
+      }
+    } catch {
+      setError(t('resources.storage.failedToDownloadFile'));
+      closePreview();
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closePreview = () => {
+    setPreviewFile(null);
+    setPreviewText(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
     }
   };
 
@@ -305,6 +398,7 @@ export function StorageExplorer() {
             {filteredFiles.map((file) => {
               const name = file.key.replace(prefix, '');
               if (!name) return null;
+              const canPreview = !file.isDir && isPreviewable(file.key);
               return (
                 <div
                   key={file.key}
@@ -327,19 +421,19 @@ export function StorageExplorer() {
                       </span>
                     </button>
                   ) : (
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <FileIcon
-                        size={16}
-                        className={`flex-shrink-0 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}
-                      />
+                    <button
+                      onClick={() => canPreview ? handlePreview(file) : handleDownload(file.key)}
+                      className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                    >
+                      {getFileIcon(file.key, isDark)}
                       <span
                         className={`text-sm truncate ${
                           isDark ? 'text-zinc-300' : 'text-zinc-700'
-                        }`}
+                        } ${canPreview ? 'hover:underline' : ''}`}
                       >
                         {name}
                       </span>
-                    </div>
+                    </button>
                   )}
                   <span className="text-xs text-zinc-500 flex-shrink-0 w-20 text-right">
                     {formatSize(file.size)}
@@ -349,6 +443,17 @@ export function StorageExplorer() {
                   </span>
                   {!file.isDir && (
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                      {canPreview && (
+                        <button
+                          onClick={() => handlePreview(file)}
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            isDark ? 'hover:bg-zinc-700' : 'hover:bg-zinc-200'
+                          }`}
+                          title={t('resources.storage.preview')}
+                        >
+                          <Eye size={14} className={isDark ? 'text-zinc-400' : 'text-zinc-500'} />
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDownload(file.key)}
                         disabled={downloadingKey === file.key}
@@ -383,6 +488,112 @@ export function StorageExplorer() {
           </div>
         )}
       </GlassCard>
+
+      {/* Preview Modal */}
+      {previewFile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={closePreview}
+        >
+          <div
+            className={`relative w-full max-w-4xl max-h-[90vh] mx-4 rounded-2xl overflow-hidden shadow-2xl flex flex-col ${
+              isDark ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-zinc-200'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className={`flex items-center justify-between px-5 py-3 border-b ${borderColor}`}>
+              <div className="flex items-center gap-3 min-w-0">
+                {getFileIcon(previewFile.key, isDark)}
+                <div className="min-w-0">
+                  <p className={`text-sm font-semibold truncate ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+                    {previewFile.key.split('/').pop()}
+                  </p>
+                  <p className="text-[11px] text-zinc-500">
+                    {formatSize(previewFile.size)} · {formatDate(previewFile.lastModified)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleDownload(previewFile.key)}
+                  className={`p-2 rounded-lg transition-colors ${
+                    isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-zinc-100 text-zinc-500'
+                  }`}
+                  title={t('resources.storage.download')}
+                >
+                  <Download size={16} />
+                </button>
+                <button
+                  onClick={closePreview}
+                  className={`p-2 rounded-lg transition-colors ${
+                    isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-zinc-100 text-zinc-500'
+                  }`}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal content */}
+            <div className="flex-1 overflow-auto flex items-center justify-center p-4 min-h-[200px]">
+              {previewLoading ? (
+                <div className="text-center py-12">
+                  <Loader2 size={28} className="mx-auto text-amber-400 animate-spin mb-3" />
+                  <p className="text-xs text-zinc-500">{t('resources.storage.loadingPreview')}</p>
+                </div>
+              ) : previewText !== null ? (
+                <pre
+                  className={`w-full h-full max-h-[70vh] overflow-auto rounded-xl p-4 text-xs font-mono leading-relaxed whitespace-pre-wrap break-all ${
+                    isDark ? 'bg-zinc-950 text-zinc-300 border border-zinc-800' : 'bg-zinc-50 text-zinc-700 border border-zinc-200'
+                  }`}
+                >
+                  {previewText}
+                </pre>
+              ) : previewUrl ? (
+                (() => {
+                  const type = getFileType(previewFile.key);
+                  switch (type) {
+                    case 'image':
+                      return (
+                        <img
+                          src={previewUrl}
+                          alt={previewFile.key.split('/').pop()}
+                          className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                        />
+                      );
+                    case 'video':
+                      return (
+                        <video
+                          src={previewUrl}
+                          controls
+                          className="max-w-full max-h-[70vh] rounded-lg"
+                        />
+                      );
+                    case 'audio':
+                      return (
+                        <div className="flex flex-col items-center gap-4 py-8">
+                          <FileAudio size={48} className="text-purple-400" />
+                          <audio src={previewUrl} controls className="w-full max-w-md" />
+                        </div>
+                      );
+                    case 'pdf':
+                      return (
+                        <iframe
+                          src={previewUrl}
+                          className="w-full h-[70vh] rounded-lg border-0"
+                          title={previewFile.key.split('/').pop()}
+                        />
+                      );
+                    default:
+                      return null;
+                  }
+                })()
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirm */}
       <ConfirmDialog

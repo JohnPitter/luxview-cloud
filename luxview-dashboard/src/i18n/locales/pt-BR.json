@@ -569,6 +569,8 @@
   "resources.storage.deleteDialog.deleting": "Excluindo...",
   "resources.storage.download": "Baixar",
   "resources.storage.delete": "Excluir",
+  "resources.storage.preview": "Visualizar",
+  "resources.storage.loadingPreview": "Carregando visualização...",
 
   "deploy.wizard.steps.selectRepository": "Selecionar repositório",
   "deploy.wizard.steps.configure": "Configurar",
