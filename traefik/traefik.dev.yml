@@ -39,4 +39,11 @@ log:
   format: common
 
 accessLog:
-  format: common
+  filePath: /var/log/traefik/access.json
+  format: json
+  fields:
+    headers:
+      defaultMode: drop
+      names:
+        User-Agent: keep
+        Referer: keep

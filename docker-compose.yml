@@ -22,6 +22,7 @@ services:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
       - traefik-certs:/letsencrypt
+      - traefik-logs:/var/log/traefik
     networks:
       - traefik-public
       - luxview-net
@@ -43,6 +44,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - build-cache:/tmp/builds
+      - traefik-logs:/var/log/traefik:ro
     environment:
       - PORT=${ENGINE_PORT:-8080}
       - DATABASE_URL=postgres://luxview:${DB_PASSWORD}@pg-platform:5432/luxview_platform?sslmode=disable
@@ -72,6 +74,7 @@ services:
       - SHARED_MINIO_PASSWORD=${SHARED_MINIO_PASSWORD}
       - BUILD_CONCURRENCY=${BUILD_CONCURRENCY:-3}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - TRAEFIK_LOG_PATH=/var/log/traefik/access.json
     networks:
       - luxview-net
       - traefik-public
@@ -233,3 +236,4 @@ volumes:
   minio-shared-data:
   traefik-certs:
   build-cache:
+  traefik-logs:

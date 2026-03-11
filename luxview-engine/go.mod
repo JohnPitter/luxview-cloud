@@ -41,7 +41,9 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/morikuni/aec v1.1.0 // indirect
+	github.com/mssola/useragent v1.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
+	github.com/oschwald/maxminddb-golang v1.13.1 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect

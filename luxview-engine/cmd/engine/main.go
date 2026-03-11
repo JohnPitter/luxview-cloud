@@ -91,6 +91,22 @@ func main() {
 	alertWorker := worker.NewAlertWorker(alerter, cfg.AlertInterval)
 	go alertWorker.Start(ctx)
 
+	// Analytics (GeoIP + log parser + worker)
+	geoipSvc := service.NewGeoIP(cfg.GeoLite2Path)
+	defer geoipSvc.Close()
+
+	logParser := service.NewLogParser(geoipSvc, cfg.Domain)
+	pageviewRepo := repository.NewPageviewRepo(db)
+
+	analyticsWorker := worker.NewAnalyticsWorker(
+		cfg.TraefikLogPath,
+		logParser,
+		pageviewRepo,
+		appRepo,
+		cfg.AnalyticsInterval,
+	)
+	go analyticsWorker.Start(ctx)
+
 	// Router
 	router := api.NewRouter(api.Deps{
 		Config:      cfg,

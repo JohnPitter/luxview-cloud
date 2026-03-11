@@ -57,6 +57,11 @@ type Config struct {
 
 	AppNetwork    string // Docker network for user app containers
 	InternalToken string
+
+	// Analytics
+	GeoLite2Path      string
+	TraefikLogPath    string
+	AnalyticsInterval int // seconds
 }
 
 func Load() (*Config, error) {
@@ -109,6 +114,10 @@ func Load() (*Config, error) {
 
 		AppNetwork:    envStr("APP_NETWORK", "luxview-net"),
 		InternalToken: envStr("INTERNAL_TOKEN", ""),
+
+		GeoLite2Path:      envStr("GEOLITE2_PATH", "/usr/share/GeoIP/GeoLite2-City.mmdb"),
+		TraefikLogPath:    envStr("TRAEFIK_LOG_PATH", ""),
+		AnalyticsInterval: envInt("ANALYTICS_INTERVAL", 60),
 	}
 
 	// Derive BaseURL from DOMAIN if not explicitly set

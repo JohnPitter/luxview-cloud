@@ -195,6 +195,54 @@ func (db *DB) migrate(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_logs(resource_type, resource_id)`,
 
 		`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS source VARCHAR(10) NOT NULL DEFAULT 'auto'`,
+
+		// Analytics tables
+		`CREATE TABLE IF NOT EXISTS pageviews (
+			id          BIGSERIAL PRIMARY KEY,
+			app_id      UUID REFERENCES apps(id) ON DELETE CASCADE,
+			timestamp   TIMESTAMPTZ NOT NULL,
+			path        VARCHAR(2048) NOT NULL,
+			method      VARCHAR(10) NOT NULL DEFAULT 'GET',
+			status_code SMALLINT NOT NULL,
+			ip_hash     VARCHAR(64) NOT NULL,
+			country     VARCHAR(2),
+			city        VARCHAR(128),
+			region      VARCHAR(128),
+			browser     VARCHAR(64),
+			browser_ver VARCHAR(32),
+			os          VARCHAR(64),
+			device_type VARCHAR(16),
+			referer     VARCHAR(2048),
+			response_ms INTEGER
+		)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_pv_app_ts ON pageviews(app_id, timestamp DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_pv_app_ip ON pageviews(app_id, ip_hash, timestamp)`,
+		`CREATE INDEX IF NOT EXISTS idx_pv_ts ON pageviews(timestamp DESC)`,
+
+		`CREATE TABLE IF NOT EXISTS pageview_aggregations (
+			id              BIGSERIAL PRIMARY KEY,
+			app_id          UUID REFERENCES apps(id) ON DELETE CASCADE,
+			bucket          TIMESTAMPTZ NOT NULL,
+			granularity     VARCHAR(4) NOT NULL,
+			path            VARCHAR(2048),
+			views           INTEGER NOT NULL DEFAULT 0,
+			visitors        INTEGER NOT NULL DEFAULT 0,
+			bounces         INTEGER NOT NULL DEFAULT 0,
+			avg_duration_ms INTEGER,
+			country         VARCHAR(2),
+			browser         VARCHAR(64),
+			os              VARCHAR(64),
+			device_type     VARCHAR(16),
+			referer_domain  VARCHAR(256)
+		)`,
+
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_pva_unique ON pageview_aggregations(
+			app_id, bucket, granularity,
+			COALESCE(path, ''), COALESCE(country, ''), COALESCE(browser, ''),
+			COALESCE(os, ''), COALESCE(device_type, ''), COALESCE(referer_domain, ''))`,
+
+		`CREATE INDEX IF NOT EXISTS idx_pva_app_bucket ON pageview_aggregations(app_id, bucket DESC, granularity)`,
 	}
 
 	for i, m := range migrations {

@@ -188,6 +188,26 @@ func (r *AppRepo) ListAll(ctx context.Context, limit, offset int) ([]model.App, 
 	return apps, total, nil
 }
 
+// ListAllSubdomains returns all app id+subdomain pairs for analytics subdomain resolution.
+func (r *AppRepo) ListAllSubdomains(ctx context.Context) ([]model.App, error) {
+	rows, err := r.db.Pool.Query(ctx,
+		`SELECT id, subdomain FROM apps`)
+	if err != nil {
+		return nil, fmt.Errorf("list all subdomains: %w", err)
+	}
+	defer rows.Close()
+
+	var apps []model.App
+	for rows.Next() {
+		var app model.App
+		if err := rows.Scan(&app.ID, &app.Subdomain); err != nil {
+			return nil, err
+		}
+		apps = append(apps, app)
+	}
+	return apps, nil
+}
+
 func (r *AppRepo) Update(ctx context.Context, app *model.App) error {
 	_, err := r.db.Pool.Exec(ctx,
 		`UPDATE apps SET name=$2, subdomain=$3, repo_url=$4, repo_branch=$5,

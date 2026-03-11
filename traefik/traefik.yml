@@ -60,7 +60,14 @@ log:
   format: json
 
 accessLog:
+  filePath: /var/log/traefik/access.json
   format: json
   filters:
     statusCodes:
-      - "400-599"
+      - "200-599"
+  fields:
+    headers:
+      defaultMode: drop
+      names:
+        User-Agent: keep
+        Referer: keep
