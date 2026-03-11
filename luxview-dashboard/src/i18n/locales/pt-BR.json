@@ -679,6 +679,8 @@
   "services.card.port": "Porta",
   "services.card.user": "Usuário",
   "services.card.database": "Banco de dados",
+  "services.card.storagePath": "Caminho de montagem",
+  "services.card.storageDescription": "Arquivos enviados para este caminho são preservados entre deploys.",
   "services.dialog.title": "Adicionar serviço",
   "services.dialog.cancel": "Cancelar",
   "services.dialog.add": "Adicionar serviço",

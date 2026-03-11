@@ -679,6 +679,8 @@
   "services.card.port": "Port",
   "services.card.user": "User",
   "services.card.database": "Database",
+  "services.card.storagePath": "Mount Path",
+  "services.card.storageDescription": "Files uploaded to this path are persisted across deploys.",
   "services.dialog.title": "Add Service",
   "services.dialog.cancel": "Cancel",
   "services.dialog.add": "Add Service",

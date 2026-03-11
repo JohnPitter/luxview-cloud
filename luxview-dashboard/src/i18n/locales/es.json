@@ -679,6 +679,8 @@
   "services.card.port": "Puerto",
   "services.card.user": "Usuario",
   "services.card.database": "Base de datos",
+  "services.card.storagePath": "Ruta de montaje",
+  "services.card.storageDescription": "Los archivos subidos a esta ruta se conservan entre despliegues.",
   "services.dialog.title": "Agregar servicio",
   "services.dialog.cancel": "Cancelar",
   "services.dialog.add": "Agregar servicio",

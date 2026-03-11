@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Database, Eye, EyeOff, Copy, Trash2, Check } from 'lucide-react';
+import { Database, Eye, EyeOff, Copy, Trash2, Check, HardDrive } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { useThemeStore } from '../../stores/theme.store';
 import type { AppService, ServiceType } from '../../api/services';
@@ -61,64 +61,88 @@ export function ServiceCard({ service, onDelete }: ServiceCardProps) {
         </button>
       </div>
 
-      {/* Connection URL */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
-            {t('services.card.connectionUrl')}
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setShowCreds(!showCreds)}
-              className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
-              title={showCreds ? t('services.card.hideCredentials') : t('services.card.showCredentials')}
-            >
-              {showCreds ? <EyeOff size={14} /> : <Eye size={14} />}
-            </button>
-            <button
-              onClick={copyUrl}
-              className="p-1 text-zinc-500 hover:text-amber-400 transition-colors"
-              title={t('services.card.copyToClipboard')}
-            >
-              {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-            </button>
+      {service.serviceType === 'storage' ? (
+        /* Storage-specific layout */
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <HardDrive size={14} className="text-purple-400" />
+            <span className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
+              {t('services.card.storagePath')}
+            </span>
           </div>
+          <div
+            className={`
+              px-3 py-2 rounded-lg font-mono text-xs
+              ${isDark ? 'bg-zinc-900/50 border border-zinc-800 text-zinc-300' : 'bg-zinc-50 border border-zinc-200 text-zinc-700'}
+            `}
+          >
+            {service.credentials?.container_path || '/storage'}
+          </div>
+          <p className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+            {t('services.card.storageDescription')}
+          </p>
         </div>
-        <div
-          className={`
-            px-3 py-2 rounded-lg font-mono text-xs break-all
-            ${isDark ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-zinc-50 border border-zinc-200'}
-            ${showCreds ? (isDark ? 'text-zinc-300' : 'text-zinc-700') : 'text-zinc-600'}
-          `}
-        >
-          {showCreds
-            ? (service.credentials?.url || "")
-            : (service.credentials?.url || '').replace(
-                /\/\/.*@/,
-                '//****:****@',
-              )}
-        </div>
-      </div>
-
-      {/* Individual creds */}
-      {showCreds && (
-        <div className="grid grid-cols-2 gap-2 mt-3">
-          {[
-            { label: t('services.card.host'), value: service.credentials.host },
-            { label: t('services.card.port'), value: String(service.credentials.port) },
-            { label: t('services.card.user'), value: service.credentials.username },
-            { label: t('services.card.database'), value: service.credentials.database },
-          ].map(({ label, value }) => (
-            <div key={label}>
-              <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
-                {label}
+      ) : (
+        /* Database-type services */
+        <>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
+                {t('services.card.connectionUrl')}
               </span>
-              <p className={`text-xs font-mono ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                {value}
-              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowCreds(!showCreds)}
+                  className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+                  title={showCreds ? t('services.card.hideCredentials') : t('services.card.showCredentials')}
+                >
+                  {showCreds ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+                <button
+                  onClick={copyUrl}
+                  className="p-1 text-zinc-500 hover:text-amber-400 transition-colors"
+                  title={t('services.card.copyToClipboard')}
+                >
+                  {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                </button>
+              </div>
             </div>
-          ))}
-        </div>
+            <div
+              className={`
+                px-3 py-2 rounded-lg font-mono text-xs break-all
+                ${isDark ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-zinc-50 border border-zinc-200'}
+                ${showCreds ? (isDark ? 'text-zinc-300' : 'text-zinc-700') : 'text-zinc-600'}
+              `}
+            >
+              {showCreds
+                ? (service.credentials?.url || "")
+                : (service.credentials?.url || '').replace(
+                    /\/\/.*@/,
+                    '//****:****@',
+                  )}
+            </div>
+          </div>
+
+          {showCreds && (
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              {[
+                { label: t('services.card.host'), value: service.credentials.host },
+                { label: t('services.card.port'), value: String(service.credentials.port) },
+                { label: t('services.card.user'), value: service.credentials.username },
+                { label: t('services.card.database'), value: service.credentials.database },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
+                    {label}
+                  </span>
+                  <p className={`text-xs font-mono ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </GlassCard>
   );
