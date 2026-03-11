@@ -166,6 +166,18 @@ export function AppDetail() {
     return () => clearInterval(interval);
   }, [appId, app?.status, actionPending, fetchApp]);
 
+  // Background poll: check for status changes every 15s (catches webhook-triggered deploys)
+  useEffect(() => {
+    if (!appId || !app) return;
+    const transitional = ['building', 'deploying'];
+    // Skip if already fast-polling
+    if (actionPending || transitional.includes(app.status)) return;
+
+    const bgPoll = () => fetchApp(appId);
+    const interval = setInterval(bgPoll, 15000);
+    return () => clearInterval(interval);
+  }, [appId, app?.status, actionPending, fetchApp]);
+
   // Detect status transitions and notify user
   useEffect(() => {
     if (!app) return;
