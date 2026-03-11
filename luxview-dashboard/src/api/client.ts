@@ -53,7 +53,7 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => {
-    if (response.data && typeof response.data === 'object') {
+    if (response.data && typeof response.data === 'object' && !(response.data instanceof Blob) && !(response.data instanceof ArrayBuffer)) {
       response.data = transformKeys(response.data, snakeToCamel);
     }
     return response;
