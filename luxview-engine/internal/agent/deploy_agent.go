@@ -235,6 +235,11 @@ func (a *DeployAgent) callLLM(ctx context.Context, apiKey, model, system, userPr
 		return nil, fmt.Errorf("parse agent response: %w", err)
 	}
 
+	// Sanitize Dockerfile — remove lines that aren't valid Dockerfile instructions
+	if result.Dockerfile != "" {
+		result.Dockerfile = sanitizeDockerfile(result.Dockerfile)
+	}
+
 	return &result, nil
 }
 
@@ -301,6 +306,58 @@ func (a *DeployAgent) callLLMRaw(ctx context.Context, apiKey, model, system, use
 	}
 
 	return stripCodeFences(apiResp.Choices[0].Message.Content), nil
+}
+
+// validDockerfileInstructions is the set of valid Dockerfile instruction prefixes.
+var validDockerfileInstructions = map[string]bool{
+	"FROM": true, "RUN": true, "CMD": true, "LABEL": true, "MAINTAINER": true,
+	"EXPOSE": true, "ENV": true, "ADD": true, "COPY": true, "ENTRYPOINT": true,
+	"VOLUME": true, "USER": true, "WORKDIR": true, "ARG": true, "ONBUILD": true,
+	"STOPSIGNAL": true, "HEALTHCHECK": true, "SHELL": true,
+}
+
+// sanitizeDockerfile removes lines that are not valid Dockerfile instructions.
+// This catches LLM hallucinations like bare words ("alpine", "node") on their own line.
+func sanitizeDockerfile(dockerfile string) string {
+	log := logger.With("deploy-agent")
+	lines := strings.Split(dockerfile, "\n")
+	var clean []string
+	removed := 0
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Keep empty lines, comments, and continuation lines
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			clean = append(clean, line)
+			continue
+		}
+
+		// Check if line starts with a valid Dockerfile instruction
+		firstWord := strings.ToUpper(strings.Fields(trimmed)[0])
+		if validDockerfileInstructions[firstWord] {
+			clean = append(clean, line)
+			continue
+		}
+
+		// Could be a continuation of a previous multi-line instruction (backslash)
+		if len(clean) > 0 {
+			prevTrimmed := strings.TrimSpace(clean[len(clean)-1])
+			if strings.HasSuffix(prevTrimmed, "\\") {
+				clean = append(clean, line)
+				continue
+			}
+		}
+
+		// Invalid line — remove it
+		log.Warn().Str("line", trimmed).Msg("removed invalid Dockerfile line (LLM hallucination)")
+		removed++
+	}
+
+	if removed > 0 {
+		log.Info().Int("removed_lines", removed).Msg("sanitized Dockerfile")
+	}
+	return strings.Join(clean, "\n")
 }
 
 // extractJSON attempts to find a JSON object in a string that may contain surrounding text.

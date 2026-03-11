@@ -91,6 +91,7 @@ Dockerfile rules:
 6. Use .dockerignore best practices (node_modules, .git, etc. are already excluded).
 7. Install only production dependencies when possible.
 8. Set appropriate WORKDIR, COPY, and CMD instructions.
+9. CRITICAL: The "dockerfile" field MUST contain ONLY valid Dockerfile instructions. Every line must start with a valid instruction (FROM, RUN, COPY, WORKDIR, EXPOSE, CMD, ENTRYPOINT, ENV, ARG, ADD, LABEL, VOLUME, USER, HEALTHCHECK, SHELL, STOPSIGNAL, ONBUILD) or be a comment starting with #. Do NOT include bare words like "alpine" or "node" on their own line — these cause parse errors.
 
 LuxView Cloud managed services (available via platform):
 - PostgreSQL: env vars DATABASE_URL, PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
