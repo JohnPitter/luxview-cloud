@@ -186,8 +186,8 @@ func scanPlans(rows pgx.Rows) ([]model.Plan, error) {
 		var featuresRaw json.RawMessage
 		if err := rows.Scan(&plan.ID, &plan.Name, &plan.Description, &plan.Price, &plan.Currency,
 			&plan.BillingCycle, &plan.MaxApps, &plan.MaxCPUPerApp, &plan.MaxMemoryPerApp,
-			&plan.MaxDiskPerApp, &plan.MaxServicesPerApp, &plan.AutoDeployEnabled,
-			&plan.CustomDomainEnabled, &plan.PriorityBuilds, &plan.Highlighted,
+			&plan.MaxDiskPerApp, &plan.MaxServicesPerApp, &plan.MaxMailboxesPerApp, &plan.MaxMailboxStorage,
+			&plan.AutoDeployEnabled, &plan.CustomDomainEnabled, &plan.PriorityBuilds, &plan.Highlighted,
 			&plan.SortOrder, &featuresRaw, &plan.IsActive, &plan.IsDefault,
 			&plan.CreatedAt, &plan.UpdatedAt); err != nil {
 			return nil, err
