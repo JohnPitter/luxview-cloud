@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bell, X, CheckCircle, AlertCircle, AlertTriangle, Info, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useNotificationsStore, type Notification } from '../../stores/notifications.store';
+import { useNotificationsStore } from '../../stores/notifications.store';
 import { useThemeStore } from '../../stores/theme.store';
+import { formatRelativeTime } from '../../lib/format';
 
 const icons: Record<string, React.ReactNode> = {
   success: <CheckCircle size={14} className="text-emerald-400" />,
@@ -16,9 +17,12 @@ export function NotificationsDropdown() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const notifications = useNotificationsStore((s) => s.notifications);
   const removeNotification = useNotificationsStore((s) => s.remove);
+  const markAllRead = useNotificationsStore((s) => s.markAllRead);
   const clearAll = useNotificationsStore((s) => s.clear);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -30,10 +34,17 @@ export function NotificationsDropdown() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+  const handleOpen = () => {
+    setOpen(!open);
+    if (!open && unreadCount > 0) {
+      markAllRead();
+    }
+  };
+
   return (
     <div ref={ref} className="relative">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={handleOpen}
         className={`
           relative flex items-center justify-center w-10 h-10 rounded-xl
           backdrop-blur-md transition-all duration-200
@@ -42,9 +53,9 @@ export function NotificationsDropdown() {
         title={t('common.notifications')}
       >
         <Bell size={18} />
-        {notifications.length > 0 && (
+        {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 text-zinc-950 text-[10px] font-bold rounded-full flex items-center justify-center">
-            {notifications.length}
+            {unreadCount}
           </span>
         )}
       </button>
@@ -86,6 +97,7 @@ export function NotificationsDropdown() {
                     className={`
                       flex items-start gap-2.5 px-4 py-3 transition-colors
                       ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-zinc-50'}
+                      ${!n.read ? (isDark ? 'bg-zinc-800/20' : 'bg-amber-50/30') : ''}
                     `}
                   >
                     <span className="flex-shrink-0 mt-0.5">{icons[n.type]}</span>
@@ -96,6 +108,9 @@ export function NotificationsDropdown() {
                       {n.message && (
                         <p className="text-[11px] text-zinc-500 mt-0.5 truncate">{n.message}</p>
                       )}
+                      <p className="text-[10px] text-zinc-600 mt-1">
+                        {formatRelativeTime(new Date(n.createdAt).toISOString())}
+                      </p>
                     </div>
                     <button
                       onClick={() => removeNotification(n.id)}

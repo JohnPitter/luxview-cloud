@@ -22,7 +22,7 @@ const sizeMap = {
 };
 
 export function StatusDot({ status, size = 'md', showLabel = false }: StatusDotProps) {
-  const config = statusConfig[status];
+  const config = statusConfig[status] ?? { color: 'bg-zinc-500', pulse: false, label: status };
 
   return (
     <span className="inline-flex items-center gap-2">

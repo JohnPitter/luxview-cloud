@@ -99,6 +99,7 @@ func (ws *WebhookService) ProcessPush(ctx context.Context, payload []byte) error
 			UserID:    app.UserID,
 			CommitSHA: event.HeadCommit.ID,
 			CommitMsg: event.HeadCommit.Message,
+			Source:    "webhook",
 		}
 
 		select {

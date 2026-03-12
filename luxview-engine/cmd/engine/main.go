@@ -92,6 +92,9 @@ func main() {
 	alertWorker := worker.NewAlertWorker(alerter, cfg.AlertInterval)
 	go alertWorker.Start(ctx)
 
+	staleDeployWorker := worker.NewStaleDeployWorker(deployRepo, 60, cfg.BuildTimeout*2)
+	go staleDeployWorker.Start(ctx)
+
 	// Analytics (GeoIP + log parser + worker)
 	geoipSvc := service.NewGeoIP(cfg.GeoLite2Path)
 	defer geoipSvc.Close()

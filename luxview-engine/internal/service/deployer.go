@@ -28,6 +28,7 @@ type DeployRequest struct {
 	UserID    uuid.UUID
 	CommitSHA string
 	CommitMsg string
+	Source    string // "manual", "webhook", "rollback" — empty defaults to auto/ai detection
 }
 
 // Deployer orchestrates the full deploy flow.
@@ -103,11 +104,14 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		return fmt.Errorf("app not found: %w", err)
 	}
 
-	// Determine deploy source: AI-generated Dockerfile or auto-detected
-	deploySource := "auto"
+	// Determine deploy source
 	hasCustomDockerfile := app.CustomDockerfile != nil && *app.CustomDockerfile != ""
-	if hasCustomDockerfile {
-		deploySource = "ai"
+	deploySource := req.Source
+	if deploySource == "" {
+		deploySource = "auto"
+		if hasCustomDockerfile {
+			deploySource = "ai"
+		}
 	}
 
 	log.Debug().

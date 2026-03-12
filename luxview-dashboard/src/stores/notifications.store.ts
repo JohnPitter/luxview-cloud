@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export type NotificationType = 'success' | 'error' | 'warning' | 'info';
 
@@ -8,39 +9,57 @@ export interface Notification {
   title: string;
   message?: string;
   duration?: number;
+  createdAt: number;
+  read: boolean;
 }
 
 interface NotificationsState {
   notifications: Notification[];
-  add: (notification: Omit<Notification, 'id'>) => void;
+  add: (notification: Omit<Notification, 'id' | 'createdAt' | 'read'>) => void;
   remove: (id: string) => void;
+  markRead: (id: string) => void;
+  markAllRead: () => void;
   clear: () => void;
 }
 
 let notifId = 0;
 
-export const useNotificationsStore = create<NotificationsState>((set) => ({
-  notifications: [],
+export const useNotificationsStore = create<NotificationsState>()(
+  persist(
+    (set) => ({
+      notifications: [],
 
-  add: (notification) => {
-    const id = `notif-${++notifId}`;
-    const duration = notification.duration ?? 5000;
-    set((state) => ({
-      notifications: [...state.notifications, { ...notification, id }],
-    }));
-    if (duration > 0) {
-      setTimeout(() => {
+      add: (notification) => {
+        const id = `notif-${Date.now()}-${++notifId}`;
+        set((state) => ({
+          notifications: [
+            { ...notification, id, createdAt: Date.now(), read: false },
+            ...state.notifications,
+          ].slice(0, 50), // keep max 50 notifications
+        }));
+      },
+
+      remove: (id) =>
         set((state) => ({
           notifications: state.notifications.filter((n) => n.id !== id),
-        }));
-      }, duration);
-    }
-  },
+        })),
 
-  remove: (id) =>
-    set((state) => ({
-      notifications: state.notifications.filter((n) => n.id !== id),
-    })),
+      markRead: (id) =>
+        set((state) => ({
+          notifications: state.notifications.map((n) =>
+            n.id === id ? { ...n, read: true } : n,
+          ),
+        })),
 
-  clear: () => set({ notifications: [] }),
-}));
+      markAllRead: () =>
+        set((state) => ({
+          notifications: state.notifications.map((n) => ({ ...n, read: true })),
+        })),
+
+      clear: () => set({ notifications: [] }),
+    }),
+    {
+      name: 'luxview-notifications',
+    },
+  ),
+);

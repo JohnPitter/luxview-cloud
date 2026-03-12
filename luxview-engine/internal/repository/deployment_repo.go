@@ -98,6 +98,37 @@ func (r *DeploymentRepo) FindLastLive(ctx context.Context, appID uuid.UUID, excl
 	return &d, nil
 }
 
+// FailStale marks deployments stuck in pending/building for longer than the given
+// timeout as failed, and resets the corresponding app status from building to error.
+// Returns the number of deployment rows affected.
+func (r *DeploymentRepo) FailStale(ctx context.Context, maxAge int) (int64, error) {
+	interval := fmt.Sprintf("%d seconds", maxAge)
+
+	// Reset app status for apps that have stale deployments.
+	_, _ = r.db.Pool.Exec(ctx,
+		`UPDATE apps SET status = 'error', updated_at = NOW()
+		 WHERE status = 'building'
+		   AND id IN (
+		     SELECT app_id FROM deployments
+		     WHERE status IN ('pending', 'building')
+		       AND created_at < NOW() - $1::interval
+		   )`,
+		interval)
+
+	tag, err := r.db.Pool.Exec(ctx,
+		`UPDATE deployments
+		 SET status = 'failed',
+		     build_log = COALESCE(build_log, '') || E'\n[timeout] Automatically marked as failed — stuck for over ' || $1,
+		     finished_at = NOW()
+		 WHERE status IN ('pending', 'building')
+		   AND created_at < NOW() - $1::interval`,
+		interval)
+	if err != nil {
+		return 0, fmt.Errorf("fail stale deployments: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 func (r *DeploymentRepo) CountAll(ctx context.Context) (int, error) {
 	var count int
 	err := r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM deployments`).Scan(&count)

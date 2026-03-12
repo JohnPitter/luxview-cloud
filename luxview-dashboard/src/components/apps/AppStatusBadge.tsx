@@ -31,11 +31,11 @@ export function AppStatusBadge({ status, size = 'sm' }: AppStatusBadgeProps) {
     <span
       className={`
         inline-flex items-center font-medium border rounded-full capitalize
-        ${statusStyles[status]}
+        ${statusStyles[status] ?? 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'}
         ${size === 'sm' ? 'text-[11px] px-2.5 py-0.5' : 'text-xs px-3 py-1'}
       `}
     >
-      {t(statusLabelKeys[status])}
+      {t(statusLabelKeys[status] ?? status)}
     </span>
   );
 }

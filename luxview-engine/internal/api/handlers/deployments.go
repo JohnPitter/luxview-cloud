@@ -137,6 +137,7 @@ func (h *DeploymentHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 		UserID:    userID,
 		CommitSHA: deployment.CommitSHA,
 		CommitMsg: "rollback to " + deployment.CommitSHA,
+		Source:    "rollback",
 	}
 
 	select {

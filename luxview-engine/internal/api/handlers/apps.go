@@ -539,6 +539,7 @@ func (h *AppHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		UserID:    userID,
 		CommitSHA: commitSHA,
 		CommitMsg: commitMsg,
+		Source:    "manual",
 	}
 
 	select {
