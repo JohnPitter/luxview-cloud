@@ -113,6 +113,15 @@ func (db *DB) migrate(ctx context.Context) error {
 
 		`CREATE INDEX IF NOT EXISTS idx_app_services_app_id ON app_services(app_id)`,
 
+		`CREATE TABLE IF NOT EXISTS mailboxes (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			service_id UUID NOT NULL REFERENCES app_services(id) ON DELETE CASCADE,
+			address VARCHAR(255) NOT NULL UNIQUE,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_mailboxes_service_id ON mailboxes(service_id)`,
+
 		`CREATE TABLE IF NOT EXISTS metrics (
 			id BIGSERIAL PRIMARY KEY,
 			app_id UUID NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
@@ -151,6 +160,8 @@ func (db *DB) migrate(ctx context.Context) error {
 			max_memory_per_app VARCHAR(10) NOT NULL DEFAULT '512m',
 			max_disk_per_app VARCHAR(10) NOT NULL DEFAULT '1g',
 			max_services_per_app INT NOT NULL DEFAULT 1,
+			max_mailboxes_per_app INT NOT NULL DEFAULT 0,
+			max_mailbox_storage VARCHAR(20) NOT NULL DEFAULT '500m',
 			auto_deploy_enabled BOOLEAN NOT NULL DEFAULT false,
 			custom_domain_enabled BOOLEAN NOT NULL DEFAULT false,
 			priority_builds BOOLEAN NOT NULL DEFAULT false,

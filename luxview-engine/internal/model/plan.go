@@ -18,6 +18,8 @@ type Plan struct {
 	MaxMemoryPerApp     string    `json:"max_memory_per_app"`
 	MaxDiskPerApp       string    `json:"max_disk_per_app"`
 	MaxServicesPerApp   int       `json:"max_services_per_app"`
+	MaxMailboxesPerApp  int       `json:"max_mailboxes_per_app"`
+	MaxMailboxStorage   string    `json:"max_mailbox_storage"`
 	AutoDeployEnabled   bool      `json:"auto_deploy_enabled"`
 	CustomDomainEnabled bool      `json:"custom_domain_enabled"`
 	PriorityBuilds      bool      `json:"priority_builds"`
@@ -41,6 +43,8 @@ type CreatePlanRequest struct {
 	MaxMemoryPerApp     string   `json:"max_memory_per_app"`
 	MaxDiskPerApp       string   `json:"max_disk_per_app"`
 	MaxServicesPerApp   int      `json:"max_services_per_app"`
+	MaxMailboxesPerApp  int      `json:"max_mailboxes_per_app"`
+	MaxMailboxStorage   string   `json:"max_mailbox_storage"`
 	AutoDeployEnabled   bool     `json:"auto_deploy_enabled"`
 	CustomDomainEnabled bool     `json:"custom_domain_enabled"`
 	PriorityBuilds      bool     `json:"priority_builds"`
@@ -60,6 +64,8 @@ type UpdatePlanRequest struct {
 	MaxMemoryPerApp     *string  `json:"max_memory_per_app,omitempty"`
 	MaxDiskPerApp       *string  `json:"max_disk_per_app,omitempty"`
 	MaxServicesPerApp   *int     `json:"max_services_per_app,omitempty"`
+	MaxMailboxesPerApp  *int     `json:"max_mailboxes_per_app,omitempty"`
+	MaxMailboxStorage   *string  `json:"max_mailbox_storage,omitempty"`
 	AutoDeployEnabled   *bool    `json:"auto_deploy_enabled,omitempty"`
 	CustomDomainEnabled *bool    `json:"custom_domain_enabled,omitempty"`
 	PriorityBuilds      *bool    `json:"priority_builds,omitempty"`

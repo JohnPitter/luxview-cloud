@@ -90,6 +90,8 @@ func (h *PlanHandler) Create(w http.ResponseWriter, r *http.Request) {
 		MaxMemoryPerApp:     req.MaxMemoryPerApp,
 		MaxDiskPerApp:       req.MaxDiskPerApp,
 		MaxServicesPerApp:   req.MaxServicesPerApp,
+		MaxMailboxesPerApp:  req.MaxMailboxesPerApp,
+		MaxMailboxStorage:   req.MaxMailboxStorage,
 		AutoDeployEnabled:   req.AutoDeployEnabled,
 		CustomDomainEnabled: req.CustomDomainEnabled,
 		PriorityBuilds:      req.PriorityBuilds,
@@ -177,6 +179,12 @@ func (h *PlanHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.MaxServicesPerApp != nil {
 		plan.MaxServicesPerApp = *req.MaxServicesPerApp
+	}
+	if req.MaxMailboxesPerApp != nil {
+		plan.MaxMailboxesPerApp = *req.MaxMailboxesPerApp
+	}
+	if req.MaxMailboxStorage != nil {
+		plan.MaxMailboxStorage = *req.MaxMailboxStorage
 	}
 	if req.AutoDeployEnabled != nil {
 		plan.AutoDeployEnabled = *req.AutoDeployEnabled

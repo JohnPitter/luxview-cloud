@@ -40,7 +40,8 @@ func (r *UserRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.User, err
 	var planID *uuid.UUID
 	var pName, pDescription, pCurrency, pBillingCycle, pMaxMemory, pMaxDisk *string
 	var pPrice *float64
-	var pMaxApps, pMaxServicesPerApp, pSortOrder *int
+	var pMaxApps, pMaxServicesPerApp, pMaxMailboxesPerApp, pSortOrder *int
+	var pMaxMailboxStorage *string
 	var pMaxCPU *float64
 	var pAutoDeploy, pCustomDomain, pPriorityBuilds, pHighlighted, pIsActive, pIsDefault *bool
 	var pFeatures json.RawMessage
@@ -49,14 +50,14 @@ func (r *UserRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.User, err
 	err := r.db.Pool.QueryRow(ctx,
 		`SELECT u.id, u.github_id, u.username, u.email, u.avatar_url, u.github_token, u.role, u.created_at, u.last_login_at, u.plan_id,
 		        p.id, p.name, p.description, p.price, p.currency, p.billing_cycle, p.max_apps, p.max_cpu_per_app,
-		        p.max_memory_per_app, p.max_disk_per_app, p.max_services_per_app, p.auto_deploy_enabled,
+		        p.max_memory_per_app, p.max_disk_per_app, p.max_services_per_app, p.max_mailboxes_per_app, p.max_mailbox_storage, p.auto_deploy_enabled,
 		        p.custom_domain_enabled, p.priority_builds, p.highlighted, p.sort_order, p.features,
 		        p.is_active, p.is_default, p.created_at, p.updated_at
 		 FROM users u LEFT JOIN plans p ON u.plan_id = p.id
 		 WHERE u.id = $1`, id,
 	).Scan(&u.ID, &u.GitHubID, &u.Username, &u.Email, &u.AvatarURL, &u.GitHubToken, &u.Role, &u.CreatedAt, &u.LastLoginAt, &u.PlanID,
 		&planID, &pName, &pDescription, &pPrice, &pCurrency, &pBillingCycle, &pMaxApps, &pMaxCPU,
-		&pMaxMemory, &pMaxDisk, &pMaxServicesPerApp, &pAutoDeploy,
+		&pMaxMemory, &pMaxDisk, &pMaxServicesPerApp, &pMaxMailboxesPerApp, &pMaxMailboxStorage, &pAutoDeploy,
 		&pCustomDomain, &pPriorityBuilds, &pHighlighted, &pSortOrder, &pFeatures,
 		&pIsActive, &pIsDefault, &pCreatedAt, &pUpdatedAt)
 	if err == pgx.ErrNoRows {
@@ -79,6 +80,8 @@ func (r *UserRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.User, err
 			MaxMemoryPerApp:     derefStr(pMaxMemory),
 			MaxDiskPerApp:       derefStr(pMaxDisk),
 			MaxServicesPerApp:   derefInt(pMaxServicesPerApp),
+			MaxMailboxesPerApp:  derefInt(pMaxMailboxesPerApp),
+			MaxMailboxStorage:   derefStr(pMaxMailboxStorage),
 			AutoDeployEnabled:   derefBool(pAutoDeploy),
 			CustomDomainEnabled: derefBool(pCustomDomain),
 			PriorityBuilds:      derefBool(pPriorityBuilds),

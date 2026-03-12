@@ -26,13 +26,14 @@ func (r *PlanRepo) Create(ctx context.Context, plan *model.Plan) error {
 
 	err = r.db.Pool.QueryRow(ctx,
 		`INSERT INTO plans (name, description, price, currency, billing_cycle, max_apps, max_cpu_per_app,
-		 max_memory_per_app, max_disk_per_app, max_services_per_app, auto_deploy_enabled, custom_domain_enabled,
+		 max_memory_per_app, max_disk_per_app, max_services_per_app, max_mailboxes_per_app, max_mailbox_storage, auto_deploy_enabled, custom_domain_enabled,
 		 priority_builds, highlighted, sort_order, features, is_active, is_default)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		 RETURNING id, created_at, updated_at`,
 		plan.Name, plan.Description, plan.Price, plan.Currency, plan.BillingCycle,
 		plan.MaxApps, plan.MaxCPUPerApp, plan.MaxMemoryPerApp, plan.MaxDiskPerApp,
-		plan.MaxServicesPerApp, plan.AutoDeployEnabled, plan.CustomDomainEnabled,
+		plan.MaxServicesPerApp, plan.MaxMailboxesPerApp, plan.MaxMailboxStorage,
+		plan.AutoDeployEnabled, plan.CustomDomainEnabled,
 		plan.PriorityBuilds, plan.Highlighted, plan.SortOrder, featuresJSON,
 		plan.IsActive, plan.IsDefault,
 	).Scan(&plan.ID, &plan.CreatedAt, &plan.UpdatedAt)
@@ -47,12 +48,12 @@ func (r *PlanRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.Plan, err
 	var featuresRaw json.RawMessage
 	err := r.db.Pool.QueryRow(ctx,
 		`SELECT id, name, description, price, currency, billing_cycle, max_apps, max_cpu_per_app,
-		 max_memory_per_app, max_disk_per_app, max_services_per_app, auto_deploy_enabled, custom_domain_enabled,
+		 max_memory_per_app, max_disk_per_app, max_services_per_app, max_mailboxes_per_app, max_mailbox_storage, auto_deploy_enabled, custom_domain_enabled,
 		 priority_builds, highlighted, sort_order, features, is_active, is_default, created_at, updated_at
 		 FROM plans WHERE id = $1`, id,
 	).Scan(&plan.ID, &plan.Name, &plan.Description, &plan.Price, &plan.Currency, &plan.BillingCycle,
 		&plan.MaxApps, &plan.MaxCPUPerApp, &plan.MaxMemoryPerApp, &plan.MaxDiskPerApp,
-		&plan.MaxServicesPerApp, &plan.AutoDeployEnabled, &plan.CustomDomainEnabled,
+		&plan.MaxServicesPerApp, &plan.MaxMailboxesPerApp, &plan.MaxMailboxStorage, &plan.AutoDeployEnabled, &plan.CustomDomainEnabled,
 		&plan.PriorityBuilds, &plan.Highlighted, &plan.SortOrder, &featuresRaw,
 		&plan.IsActive, &plan.IsDefault, &plan.CreatedAt, &plan.UpdatedAt)
 	if err == pgx.ErrNoRows {
@@ -77,13 +78,15 @@ func (r *PlanRepo) Update(ctx context.Context, plan *model.Plan) error {
 	_, err = r.db.Pool.Exec(ctx,
 		`UPDATE plans SET name=$2, description=$3, price=$4, currency=$5, billing_cycle=$6,
 		 max_apps=$7, max_cpu_per_app=$8, max_memory_per_app=$9, max_disk_per_app=$10,
-		 max_services_per_app=$11, auto_deploy_enabled=$12, custom_domain_enabled=$13,
-		 priority_builds=$14, highlighted=$15, sort_order=$16, features=$17,
-		 is_active=$18, is_default=$19, updated_at=NOW()
+		 max_services_per_app=$11, max_mailboxes_per_app=$12, max_mailbox_storage=$13,
+		 auto_deploy_enabled=$14, custom_domain_enabled=$15,
+		 priority_builds=$16, highlighted=$17, sort_order=$18, features=$19,
+		 is_active=$20, is_default=$21, updated_at=NOW()
 		 WHERE id=$1`,
 		plan.ID, plan.Name, plan.Description, plan.Price, plan.Currency, plan.BillingCycle,
 		plan.MaxApps, plan.MaxCPUPerApp, plan.MaxMemoryPerApp, plan.MaxDiskPerApp,
-		plan.MaxServicesPerApp, plan.AutoDeployEnabled, plan.CustomDomainEnabled,
+		plan.MaxServicesPerApp, plan.MaxMailboxesPerApp, plan.MaxMailboxStorage,
+		plan.AutoDeployEnabled, plan.CustomDomainEnabled,
 		plan.PriorityBuilds, plan.Highlighted, plan.SortOrder, featuresJSON,
 		plan.IsActive, plan.IsDefault,
 	)
@@ -104,7 +107,7 @@ func (r *PlanRepo) Delete(ctx context.Context, id uuid.UUID) error {
 func (r *PlanRepo) ListAll(ctx context.Context) ([]model.Plan, error) {
 	rows, err := r.db.Pool.Query(ctx,
 		`SELECT id, name, description, price, currency, billing_cycle, max_apps, max_cpu_per_app,
-		 max_memory_per_app, max_disk_per_app, max_services_per_app, auto_deploy_enabled, custom_domain_enabled,
+		 max_memory_per_app, max_disk_per_app, max_services_per_app, max_mailboxes_per_app, max_mailbox_storage, auto_deploy_enabled, custom_domain_enabled,
 		 priority_builds, highlighted, sort_order, features, is_active, is_default, created_at, updated_at
 		 FROM plans ORDER BY sort_order`)
 	if err != nil {
@@ -118,7 +121,7 @@ func (r *PlanRepo) ListAll(ctx context.Context) ([]model.Plan, error) {
 func (r *PlanRepo) ListActive(ctx context.Context) ([]model.Plan, error) {
 	rows, err := r.db.Pool.Query(ctx,
 		`SELECT id, name, description, price, currency, billing_cycle, max_apps, max_cpu_per_app,
-		 max_memory_per_app, max_disk_per_app, max_services_per_app, auto_deploy_enabled, custom_domain_enabled,
+		 max_memory_per_app, max_disk_per_app, max_services_per_app, max_mailboxes_per_app, max_mailbox_storage, auto_deploy_enabled, custom_domain_enabled,
 		 priority_builds, highlighted, sort_order, features, is_active, is_default, created_at, updated_at
 		 FROM plans WHERE is_active = true ORDER BY sort_order`)
 	if err != nil {
@@ -155,12 +158,12 @@ func (r *PlanRepo) FindDefault(ctx context.Context) (*model.Plan, error) {
 	var featuresRaw json.RawMessage
 	err := r.db.Pool.QueryRow(ctx,
 		`SELECT id, name, description, price, currency, billing_cycle, max_apps, max_cpu_per_app,
-		 max_memory_per_app, max_disk_per_app, max_services_per_app, auto_deploy_enabled, custom_domain_enabled,
+		 max_memory_per_app, max_disk_per_app, max_services_per_app, max_mailboxes_per_app, max_mailbox_storage, auto_deploy_enabled, custom_domain_enabled,
 		 priority_builds, highlighted, sort_order, features, is_active, is_default, created_at, updated_at
 		 FROM plans WHERE is_default = true AND is_active = true LIMIT 1`,
 	).Scan(&plan.ID, &plan.Name, &plan.Description, &plan.Price, &plan.Currency, &plan.BillingCycle,
 		&plan.MaxApps, &plan.MaxCPUPerApp, &plan.MaxMemoryPerApp, &plan.MaxDiskPerApp,
-		&plan.MaxServicesPerApp, &plan.AutoDeployEnabled, &plan.CustomDomainEnabled,
+		&plan.MaxServicesPerApp, &plan.MaxMailboxesPerApp, &plan.MaxMailboxStorage, &plan.AutoDeployEnabled, &plan.CustomDomainEnabled,
 		&plan.PriorityBuilds, &plan.Highlighted, &plan.SortOrder, &featuresRaw,
 		&plan.IsActive, &plan.IsDefault, &plan.CreatedAt, &plan.UpdatedAt)
 	if err == pgx.ErrNoRows {

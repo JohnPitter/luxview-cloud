@@ -62,11 +62,12 @@ func main() {
 	settingsRepo := repository.NewSettingsRepo(db, encryptionKey)
 	auditRepo := repository.NewAuditLogRepo(db)
 	auditSvc := service.NewAuditService(auditRepo)
+	mailboxRepo := repository.NewMailboxRepo(db)
 
 	// Services
 	portManager := service.NewPortManager(appRepo, cfg.PortRangeStart, cfg.PortRangeEnd)
 	containerMgr := service.NewContainerManager(docker, cfg.AppNetwork)
-	provisioner := service.NewProvisioner(serviceRepo, cfg, encryptionKey)
+	provisioner := service.NewProvisioner(serviceRepo, mailboxRepo, cfg, encryptionKey)
 	routerSvc := service.NewRouterService(appRepo, cfg.Domain)
 	deployer := service.NewDeployer(appRepo, deployRepo, userRepo, serviceRepo, provisioner, docker, portManager, encryptionKey, time.Duration(cfg.BuildTimeout)*time.Second, cfg.AppNetwork)
 	metricsCollector := service.NewMetricsCollector(appRepo, metricRepo, docker)
@@ -131,6 +132,7 @@ func main() {
 		AuditRepo:    auditRepo,
 		AuditSvc:     auditSvc,
 		PageviewRepo: pageviewRepo,
+		MailboxRepo:  mailboxRepo,
 	})
 
 	// HTTP server

@@ -35,6 +35,7 @@ type Deps struct {
 	AuditRepo    *repository.AuditLogRepo
 	AuditSvc     *service.AuditService
 	PageviewRepo *repository.PageviewRepo
+	MailboxRepo  *repository.MailboxRepo
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -82,6 +83,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	cleanupHandler := handlers.NewCleanupHandler(deps.SettingsRepo, deps.Docker, deps.AuditSvc)
 	auditHandler := handlers.NewAuditHandler(deps.AuditRepo)
 	analyticsHandler := handlers.NewAnalyticsHandler(deps.PageviewRepo, deps.AppRepo)
+	mailboxHandler := handlers.NewMailboxHandler(deps.MailboxRepo, deps.ServiceRepo, deps.AppRepo, deps.Provisioner, deps.AuditSvc, deps.Config.Domain)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 
@@ -149,6 +151,12 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Post("/apps/{id}/services", serviceHandler.Create)
 			r.Get("/apps/{id}/services", serviceHandler.List)
 			r.Delete("/services/{id}", serviceHandler.Delete)
+
+			// Mailboxes
+			r.Get("/services/{id}/mailboxes", mailboxHandler.List)
+			r.Post("/services/{id}/mailboxes", mailboxHandler.Create)
+			r.Delete("/mailboxes/{id}", mailboxHandler.Delete)
+			r.Post("/mailboxes/{id}/reset-password", mailboxHandler.ResetPassword)
 
 			// Explorer (DB + S3)
 			r.Get("/services/{id}/tables", explorerHandler.ListTables)

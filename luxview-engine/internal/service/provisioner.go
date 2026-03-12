@@ -28,13 +28,15 @@ import (
 // Provisioner creates and manages shared services (databases, caches).
 type Provisioner struct {
 	serviceRepo   *repository.ServiceRepo
+	mailboxRepo   *repository.MailboxRepo
 	cfg           *config.Config
 	encryptionKey []byte
 }
 
-func NewProvisioner(serviceRepo *repository.ServiceRepo, cfg *config.Config, encryptionKey []byte) *Provisioner {
+func NewProvisioner(serviceRepo *repository.ServiceRepo, mailboxRepo *repository.MailboxRepo, cfg *config.Config, encryptionKey []byte) *Provisioner {
 	return &Provisioner{
 		serviceRepo:   serviceRepo,
+		mailboxRepo:   mailboxRepo,
 		cfg:           cfg,
 		encryptionKey: encryptionKey,
 	}
@@ -136,6 +138,18 @@ func (p *Provisioner) Provision(ctx context.Context, appID uuid.UUID, serviceTyp
 			"container_path": "/storage",
 		}
 		log.Info().Str("path", hostPath).Msg("storage provisioned")
+
+	case model.ServiceEmail:
+		dbName = fmt.Sprintf("email_%s", sanitizedID)
+		// Email service stores SMTP/IMAP connection details; mailboxes are managed separately
+		creds = map[string]string{
+			"smtp_host": p.cfg.MailContainerName,
+			"smtp_port": "587",
+			"imap_host": p.cfg.MailContainerName,
+			"imap_port": "993",
+			"webmail":   "https://mail.luxview.cloud",
+		}
+		log.Info().Str("name", dbName).Msg("email service provisioned")
 
 	default:
 		return nil, fmt.Errorf("unsupported service type: %s", serviceType)
@@ -247,6 +261,10 @@ func (p *Provisioner) Deprovision(ctx context.Context, svc *model.AppService) er
 	case model.ServiceStorage:
 		if err := p.deprovisionStorage(svc.DBName); err != nil {
 			log.Warn().Err(err).Str("storage", svc.DBName).Msg("failed to deprovision storage")
+		}
+	case model.ServiceEmail:
+		if err := p.deprovisionEmail(ctx, svc.ID); err != nil {
+			log.Warn().Err(err).Str("email", svc.DBName).Msg("failed to deprovision email")
 		}
 	}
 
@@ -416,6 +434,83 @@ func (p *Provisioner) deprovisionStorage(storageName string) error {
 	return os.RemoveAll(absPath)
 }
 
+// deprovisionEmail removes all mailboxes from docker-mailserver and the DB.
+func (p *Provisioner) deprovisionEmail(ctx context.Context, serviceID uuid.UUID) error {
+	log := logger.With("provisioner")
+
+	mailboxes, err := p.mailboxRepo.ListByServiceID(ctx, serviceID)
+	if err != nil {
+		return fmt.Errorf("list mailboxes: %w", err)
+	}
+
+	for _, mb := range mailboxes {
+		if err := p.MailserverDeleteEmail(ctx, mb.Address); err != nil {
+			log.Warn().Err(err).Str("address", mb.Address).Msg("failed to delete mailbox from mailserver")
+		}
+	}
+
+	if err := p.mailboxRepo.DeleteByServiceID(ctx, serviceID); err != nil {
+		return fmt.Errorf("delete mailboxes from db: %w", err)
+	}
+	return nil
+}
+
+// MailserverAddEmail creates a mailbox in docker-mailserver.
+func (p *Provisioner) MailserverAddEmail(ctx context.Context, address, password string) error {
+	execCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(execCtx, "docker", "exec", p.cfg.MailContainerName,
+		"setup", "email", "add", address, password)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("setup email add: %s — %w", string(output), err)
+	}
+	return nil
+}
+
+// MailserverSetQuota sets the mailbox quota in docker-mailserver.
+func (p *Provisioner) MailserverSetQuota(ctx context.Context, address, quota string) error {
+	execCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(execCtx, "docker", "exec", p.cfg.MailContainerName,
+		"setup", "quota", "set", address, quota)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("setup quota set: %s — %w", string(output), err)
+	}
+	return nil
+}
+
+// MailserverDeleteEmail removes a mailbox from docker-mailserver.
+func (p *Provisioner) MailserverDeleteEmail(ctx context.Context, address string) error {
+	execCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(execCtx, "docker", "exec", p.cfg.MailContainerName,
+		"setup", "email", "del", address)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("setup email del: %s — %w", string(output), err)
+	}
+	return nil
+}
+
+// MailserverUpdatePassword changes a mailbox password in docker-mailserver.
+func (p *Provisioner) MailserverUpdatePassword(ctx context.Context, address, password string) error {
+	execCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(execCtx, "docker", "exec", p.cfg.MailContainerName,
+		"setup", "email", "update", address, password)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("setup email update: %s — %w", string(output), err)
+	}
+	return nil
+}
+
 func (p *Provisioner) deprovisionPostgres(ctx context.Context, dbName string) error {
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/postgres?sslmode=disable",
 		p.cfg.SharedPGUser, p.cfg.SharedPGPassword, p.cfg.SharedPGHost, p.cfg.SharedPGPort)
@@ -462,6 +557,11 @@ func (p *Provisioner) GetEnvVarsForService(svc *model.AppService, creds map[stri
 		envVars["AMQP_URL"] = creds["url"]
 	case model.ServiceStorage:
 		envVars["STORAGE_PATH"] = creds["container_path"]
+	case model.ServiceEmail:
+		envVars["SMTP_HOST"] = creds["smtp_host"]
+		envVars["SMTP_PORT"] = creds["smtp_port"]
+		envVars["IMAP_HOST"] = creds["imap_host"]
+		envVars["IMAP_PORT"] = creds["imap_port"]
 	}
 	return envVars
 }
