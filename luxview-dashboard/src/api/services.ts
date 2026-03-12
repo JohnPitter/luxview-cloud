@@ -1,6 +1,6 @@
 import { api } from './client';
 
-export type ServiceType = 'postgres' | 'redis' | 'mongodb' | 'rabbitmq' | 'storage';
+export type ServiceType = 'postgres' | 'redis' | 'mongodb' | 'rabbitmq' | 'storage' | 'email';
 
 export interface AppService {
   id: string;
@@ -53,6 +53,18 @@ export interface StorageFileInfo {
   size: number;
   lastModified: string;
   isDir: boolean;
+}
+
+// Mailbox types
+export interface Mailbox {
+  id: string;
+  service_id: string;
+  address: string;
+  created_at: string;
+}
+
+export interface MailboxCreated extends Mailbox {
+  password: string;
 }
 
 export const servicesApi = {
@@ -123,6 +135,26 @@ export const servicesApi = {
 
   async getServiceUsage(serviceId: string): Promise<StorageUsageInfo> {
     const { data } = await api.get<StorageUsageInfo>(`/services/${serviceId}/usage`);
+    return data;
+  },
+
+  // Mailbox API
+  async listMailboxes(serviceId: string): Promise<Mailbox[]> {
+    const { data } = await api.get<Mailbox[]>(`/services/${serviceId}/mailboxes`);
+    return data ?? [];
+  },
+
+  async createMailbox(serviceId: string, localPart: string): Promise<MailboxCreated> {
+    const { data } = await api.post<MailboxCreated>(`/services/${serviceId}/mailboxes`, { local_part: localPart });
+    return data;
+  },
+
+  async deleteMailbox(mailboxId: string): Promise<void> {
+    await api.delete(`/mailboxes/${mailboxId}`);
+  },
+
+  async resetMailboxPassword(mailboxId: string): Promise<{ address: string; password: string }> {
+    const { data } = await api.post<{ address: string; password: string }>(`/mailboxes/${mailboxId}/reset-password`);
     return data;
   },
 };

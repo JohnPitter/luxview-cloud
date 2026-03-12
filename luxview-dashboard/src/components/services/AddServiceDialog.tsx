@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Database, Zap } from 'lucide-react';
+import { X } from 'lucide-react';
 import { PillButton } from '../common/PillButton';
 import { useThemeStore } from '../../stores/theme.store';
 import type { ServiceType } from '../../api/services';
@@ -25,6 +25,7 @@ const services: Array<{
   { type: 'mongodb', labelKey: 'services.dialog.mongodb.label', descriptionKey: 'services.dialog.mongodb.description', icon: 'MG', color: 'border-emerald-500/30 hover:border-emerald-500/60' },
   { type: 'rabbitmq', labelKey: 'services.dialog.rabbitmq.label', descriptionKey: 'services.dialog.rabbitmq.description', icon: 'RQ', color: 'border-orange-500/30 hover:border-orange-500/60' },
   { type: 'storage', labelKey: 'services.dialog.storage.label', descriptionKey: 'services.dialog.storage.description', icon: 'ST', color: 'border-purple-500/30 hover:border-purple-500/60' },
+  { type: 'email', labelKey: 'services.dialog.email.label', descriptionKey: 'services.dialog.email.description', icon: 'EM', color: 'border-cyan-500/30 hover:border-cyan-500/60' },
 ];
 
 export function AddServiceDialog({ open, onClose, onAdd, existingTypes, loading }: AddServiceDialogProps) {

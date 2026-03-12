@@ -11,6 +11,7 @@ import { Admin } from './pages/Admin';
 import { Resources } from './pages/Resources';
 import { DbExplorer } from './pages/DbExplorer';
 import { StorageExplorer } from './pages/StorageExplorer';
+import { EmailManager } from './pages/EmailManager';
 import { Logs } from './pages/Logs';
 import { Settings } from './pages/Settings';
 import { Profile } from './pages/Profile';
@@ -55,6 +56,7 @@ export function App() {
         <Route path="resources" element={<Resources />} />
         <Route path="resources/db/:serviceId" element={<DbExplorer />} />
         <Route path="resources/storage/:serviceId" element={<StorageExplorer />} />
+        <Route path="resources/email/:serviceId" element={<EmailManager />} />
         <Route path="logs" element={<Logs />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="settings" element={<Settings />} />

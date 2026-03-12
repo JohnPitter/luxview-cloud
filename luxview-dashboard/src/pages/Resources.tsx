@@ -16,6 +16,7 @@ import {
   Terminal,
   FolderOpen,
   Crown,
+  Mail,
 } from 'lucide-react';
 import { GlassCard } from '../components/common/GlassCard';
 import { PageTour } from '../components/common/PageTour';
@@ -72,6 +73,14 @@ const serviceConfig: Record<
     borderColor: 'border-purple-500/20',
     explorable: true,
   },
+  email: {
+    labelKey: 'resources.service.email',
+    icon: 'EM',
+    color: 'text-cyan-400',
+    bgColor: 'bg-cyan-500/10',
+    borderColor: 'border-cyan-500/20',
+    explorable: true,
+  },
 };
 
 export function Resources() {
@@ -109,6 +118,13 @@ export function Resources() {
       description: t('resources.categories.objectStorageDescription'),
       icon: HardDriveIcon,
       types: ['storage'] as ServiceType[],
+    },
+    {
+      key: 'email',
+      label: t('resources.categories.email'),
+      description: t('resources.categories.emailDescription'),
+      icon: Mail,
+      types: ['email'] as ServiceType[],
     },
   ];
 
@@ -444,6 +460,8 @@ export function Resources() {
                                 onClick={() => {
                                   if (svc.serviceType === 'storage') {
                                     navigate(`/dashboard/resources/storage/${svc.id}`);
+                                  } else if (svc.serviceType === 'email') {
+                                    navigate(`/dashboard/resources/email/${svc.id}`);
                                   } else {
                                     navigate(`/dashboard/resources/db/${svc.id}`);
                                   }
@@ -462,6 +480,11 @@ export function Resources() {
                                   <>
                                     <FolderOpen size={14} />
                                     {t('resources.explorer.browseFiles')}
+                                  </>
+                                ) : svc.serviceType === 'email' ? (
+                                  <>
+                                    <Mail size={14} />
+                                    {t('resources.explorer.manageMailboxes')}
                                   </>
                                 ) : (
                                   <>

@@ -16,6 +16,7 @@ const serviceConfig: Record<ServiceType, { labelKey: string; color: string; icon
   mongodb: { labelKey: 'resources.service.mongodb', color: 'text-emerald-400', icon: 'MG' },
   rabbitmq: { labelKey: 'resources.service.rabbitmq', color: 'text-orange-400', icon: 'RQ' },
   storage: { labelKey: 'resources.service.storage', color: 'text-purple-400', icon: 'ST' },
+  email: { labelKey: 'resources.service.email', color: 'text-cyan-400', icon: 'EM' },
 };
 
 function formatStorageSize(bytes: number): string {
@@ -73,7 +74,52 @@ export function ServiceCard({ service, onDelete }: ServiceCardProps) {
         </button>
       </div>
 
-      {service.serviceType === 'storage' ? (
+      {service.serviceType === 'email' ? (
+        /* Email-specific layout */
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
+              {t('services.card.emailWebmail')}
+            </span>
+          </div>
+          <a
+            href={service.credentials?.webmail || 'https://mail.luxview.cloud'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`
+              block px-3 py-2 rounded-lg font-mono text-xs transition-colors
+              ${isDark ? 'bg-zinc-900/50 border border-zinc-800 text-cyan-400 hover:text-cyan-300' : 'bg-zinc-50 border border-zinc-200 text-cyan-600 hover:text-cyan-500'}
+            `}
+          >
+            {service.credentials?.webmail || 'https://mail.luxview.cloud'}
+          </a>
+
+          {showCreds && (
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              {[
+                { label: 'SMTP', value: `${service.credentials?.smtp_host}:${service.credentials?.smtp_port}` },
+                { label: 'IMAP', value: `${service.credentials?.imap_host}:${service.credentials?.imap_port}` },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</span>
+                  <p className={`text-xs font-mono ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>{value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={() => setShowCreds(!showCreds)}
+            className={`text-[11px] transition-colors ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-400 hover:text-zinc-600'}`}
+          >
+            {showCreds ? t('services.card.hideCredentials') : t('services.card.showCredentials')}
+          </button>
+
+          <p className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+            {t('services.card.emailDescription')}
+          </p>
+        </div>
+      ) : service.serviceType === 'storage' ? (
         /* Storage-specific layout */
         <div className="space-y-3">
           <div className="flex items-center gap-2">
