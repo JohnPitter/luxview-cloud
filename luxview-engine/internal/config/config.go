@@ -44,7 +44,8 @@ type Config struct {
 	SharedMinioUser     string
 	SharedMinioPassword string
 
-	StorageBasePath string // base path for local storage volumes
+	StorageBasePath    string // base path for local storage volumes
+	MailContainerName  string // docker-mailserver container name
 
 	BuildConcurrency int
 	PortRangeStart   int
@@ -103,7 +104,8 @@ func Load() (*Config, error) {
 		SharedMinioUser:     envStr("SHARED_MINIO_USER", "luxview_admin"),
 		SharedMinioPassword: envStr("SHARED_MINIO_PASSWORD", ""),
 
-		StorageBasePath: envStr("STORAGE_BASE_PATH", "/data/luxview/storage"),
+		StorageBasePath:   envStr("STORAGE_BASE_PATH", "/data/luxview/storage"),
+		MailContainerName: envStr("MAIL_CONTAINER_NAME", "luxview-mailserver"),
 
 		BuildConcurrency: envInt("BUILD_CONCURRENCY", 3),
 		PortRangeStart:   envInt("PORT_RANGE_START", 10000),

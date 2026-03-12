@@ -73,6 +73,7 @@ services:
       - BUILD_CONCURRENCY=${BUILD_CONCURRENCY:-3}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - TRAEFIK_LOG_PATH=/var/log/traefik/access.json
+      - MAIL_CONTAINER_NAME=luxview-mailserver
     networks:
       - luxview-net
       - traefik-public
@@ -189,6 +190,69 @@ services:
       timeout: 10s
       retries: 5
 
+  # ---------------------------------------------------------------------------
+  # Mail Server — Shared (Postfix + Dovecot + Rspamd)
+  # ---------------------------------------------------------------------------
+  mailserver:
+    image: ghcr.io/docker-mailserver/docker-mailserver:latest
+    container_name: luxview-mailserver
+    hostname: mail.luxview.cloud
+    restart: unless-stopped
+    ports:
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+    volumes:
+      - mail-data:/var/mail
+      - mail-state:/var/mail-state
+      - mail-logs:/var/log/mail
+      - mail-config:/tmp/docker-mailserver
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - ENABLE_RSPAMD=1
+      - ENABLE_CLAMAV=0
+      - ENABLE_FAIL2BAN=1
+      - ENABLE_SPAMASSASSIN=0
+      - SSL_TYPE=manual
+      - SSL_CERT_PATH=/tmp/docker-mailserver/ssl/cert.pem
+      - SSL_KEY_PATH=/tmp/docker-mailserver/ssl/key.pem
+      - PERMIT_DOCKER=connected-networks
+      - POSTMASTER_ADDRESS=admin@luxview.cloud
+      - OVERRIDE_HOSTNAME=mail.luxview.cloud
+      - ONE_DIR=1
+      - ENABLE_UPDATE_CHECK=0
+      - SUPERVISOR_LOGLEVEL=warn
+    networks:
+      - luxview-net
+    healthcheck:
+      test: ["CMD-SHELL", "ss -tlnp | grep -q ':25 '"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Roundcube — Webmail UI
+  # ---------------------------------------------------------------------------
+  roundcube:
+    image: roundcube/roundcubemail:latest
+    container_name: luxview-roundcube
+    restart: unless-stopped
+    environment:
+      - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://luxview-mailserver
+      - ROUNDCUBEMAIL_DEFAULT_PORT=993
+      - ROUNDCUBEMAIL_SMTP_SERVER=tls://luxview-mailserver
+      - ROUNDCUBEMAIL_SMTP_PORT=587
+      - ROUNDCUBEMAIL_UPLOAD_MAX_FILESIZE=25M
+      - ROUNDCUBEMAIL_SKIN=elastic
+    volumes:
+      - roundcube-data:/var/roundcube/db
+    depends_on:
+      - mailserver
+    networks:
+      - luxview-net
+      - traefik-public
+
 # =============================================================================
 # Networks
 # =============================================================================
@@ -213,3 +277,8 @@ volumes:
   traefik-certs:
   build-cache:
   traefik-logs:
+  mail-data:
+  mail-state:
+  mail-logs:
+  mail-config:
+  roundcube-data:

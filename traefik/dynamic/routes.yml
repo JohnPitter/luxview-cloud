@@ -40,6 +40,18 @@ http:
         - gzip-compress
       priority: 1
 
+    # Webmail → Roundcube
+    webmail:
+      rule: "Host(`mail.luxview.cloud`)"
+      entryPoints:
+        - websecure
+      service: roundcube-svc
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+      priority: 10
+
     # Catch-all for deleted/unknown *.luxview.cloud subdomains
     # Priority must be lower than dynamic app routes (which default to rule length)
     app-not-found:
@@ -73,3 +85,8 @@ http:
       loadBalancer:
         servers:
           - url: "http://luxview-dashboard:80"
+
+    roundcube-svc:
+      loadBalancer:
+        servers:
+          - url: "http://luxview-roundcube:80"
