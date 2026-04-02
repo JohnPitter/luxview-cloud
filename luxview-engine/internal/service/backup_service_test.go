@@ -23,43 +23,23 @@ func TestBuildBackupDirName(t *testing.T) {
 	}
 }
 
-func TestDumpCommand(t *testing.T) {
-	tests := []struct {
-		db      string
-		wantBin string
-	}{
-		{"pg-platform", "docker"},
-		{"pg-shared", "docker"},
-		{"mongo-shared", "docker"},
-		{"redis-shared", "docker"},
+func TestExecDumpUnknownDB(t *testing.T) {
+	err := execDump("unknown", "/tmp/test", testContainerConfig())
+	if err == nil {
+		t.Error("expected error for unknown database")
 	}
-	for _, tt := range tests {
-		cmd := dumpCommand(tt.db, "/backups/test", testContainerConfig())
-		if cmd == nil {
-			t.Fatalf("dumpCommand(%q) returned nil", tt.db)
-		}
-		if cmd.Path == "" {
-			t.Errorf("dumpCommand(%q) has empty Path", tt.db)
-		}
+	if err.Error() != "unknown database: unknown" {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
-func TestRestoreCommand(t *testing.T) {
-	tests := []struct {
-		db      string
-		wantNil bool
-	}{
-		{"pg-platform", false},
-		{"pg-shared", false},
-		{"mongo-shared", false},
-		{"redis-shared", false},
-		{"unknown", true},
+func TestExecRestoreUnknownDB(t *testing.T) {
+	err := execRestore("unknown", "/tmp/test", testContainerConfig())
+	if err == nil {
+		t.Error("expected error for unknown database")
 	}
-	for _, tt := range tests {
-		cmd := restoreCommand(tt.db, "/backups/test", testContainerConfig())
-		if (cmd == nil) != tt.wantNil {
-			t.Errorf("restoreCommand(%q) nil=%v, want nil=%v", tt.db, cmd == nil, tt.wantNil)
-		}
+	if err.Error() != "unknown database: unknown" {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 

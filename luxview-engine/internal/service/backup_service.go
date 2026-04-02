@@ -106,15 +106,9 @@ func (s *BackupService) Run(ctx context.Context, databases []string, trigger mod
 	var backupErr error
 
 	for _, db := range databases {
-		cmd := dumpCommand(db, backupPath, s.containers)
-		if cmd == nil {
-			continue
-		}
-
 		log.Info().Str("database", db).Msg("backing up database")
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			backupErr = fmt.Errorf("backup %s failed: %w — %s", db, err, string(output))
+		if err := execDump(db, backupPath, s.containers); err != nil {
+			backupErr = fmt.Errorf("backup %s failed: %w", db, err)
 			log.Error().Err(backupErr).Str("database", db).Msg("database backup failed")
 			break
 		}
@@ -194,16 +188,10 @@ func (s *BackupService) Restore(ctx context.Context, backupID uuid.UUID) error {
 	_ = s.repo.UpdateStatus(ctx, backupID, model.BackupStatusRestoring, "", backup.FileSize, backup.DurationMs)
 
 	for _, db := range backup.Databases {
-		cmd := restoreCommand(db, backup.FilePath, s.containers)
-		if cmd == nil {
-			continue
-		}
-
 		log.Info().Str("database", db).Msg("restoring database")
-		output, err := cmd.CombinedOutput()
-		if err != nil {
+		if err := execRestore(db, backup.FilePath, s.containers); err != nil {
 			_ = s.repo.UpdateStatus(ctx, backupID, model.BackupStatusCompleted, "", backup.FileSize, backup.DurationMs)
-			return fmt.Errorf("restore %s failed: %w — %s", db, err, string(output))
+			return fmt.Errorf("restore %s failed: %w", db, err)
 		}
 		log.Info().Str("database", db).Msg("database restore completed")
 	}
@@ -331,53 +319,166 @@ func buildBackupDirName(t time.Time, trigger model.BackupTrigger) string {
 	return fmt.Sprintf("%s_%s", t.Format("2006-01-02_150405"), string(trigger))
 }
 
-func dumpCommand(db string, backupPath string, cfg ContainerConfig) *exec.Cmd {
+// execDump safely executes a database backup without shell interpolation (CWE-78).
+func execDump(db string, backupPath string, cfg ContainerConfig) error {
 	switch db {
 	case "pg-platform":
-		outFile := filepath.Join(backupPath, "pg-platform.sql.gz")
-		return exec.Command("bash", "-c",
-			fmt.Sprintf("docker exec %s pg_dumpall -U %s | gzip > %s",
-				cfg.PGPlatformContainer, cfg.PGPlatformUser, outFile))
+		return pipeToGzip(
+			exec.Command("docker", "exec", cfg.PGPlatformContainer, "pg_dumpall", "-U", cfg.PGPlatformUser),
+			filepath.Join(backupPath, "pg-platform.sql.gz"),
+		)
 	case "pg-shared":
-		outFile := filepath.Join(backupPath, "pg-shared.sql.gz")
-		return exec.Command("bash", "-c",
-			fmt.Sprintf("docker exec %s pg_dumpall -U %s | gzip > %s",
-				cfg.PGSharedContainer, cfg.PGSharedUser, outFile))
+		return pipeToGzip(
+			exec.Command("docker", "exec", cfg.PGSharedContainer, "pg_dumpall", "-U", cfg.PGSharedUser),
+			filepath.Join(backupPath, "pg-shared.sql.gz"),
+		)
 	case "mongo-shared":
 		outFile := filepath.Join(backupPath, "mongo-shared.archive.gz")
-		return exec.Command("bash", "-c",
-			fmt.Sprintf("docker exec %s mongodump --authenticationDatabase admin -u %s -p %s --archive --gzip > %s",
-				cfg.MongoContainer, cfg.MongoUser, cfg.MongoPassword, outFile))
+		cmd := exec.Command("docker", "exec", cfg.MongoContainer,
+			"mongodump", "--authenticationDatabase", "admin",
+			"-u", cfg.MongoUser, "-p", cfg.MongoPassword,
+			"--archive", "--gzip")
+		f, err := os.Create(outFile)
+		if err != nil {
+			return fmt.Errorf("create output file: %w", err)
+		}
+		defer f.Close()
+		cmd.Stdout = f
+		return cmd.Run()
 	case "redis-shared":
-		return exec.Command("bash", "-c",
-			fmt.Sprintf("docker exec %s redis-cli -a %s BGSAVE && sleep 2 && docker cp %s:/data/dump.rdb %s/redis-shared.rdb",
-				cfg.RedisContainer, cfg.RedisPassword, cfg.RedisContainer, backupPath))
+		// BGSAVE
+		bgsave := exec.Command("docker", "exec", cfg.RedisContainer,
+			"redis-cli", "-a", cfg.RedisPassword, "BGSAVE")
+		if out, err := bgsave.CombinedOutput(); err != nil {
+			return fmt.Errorf("redis BGSAVE: %w — %s", err, string(out))
+		}
+		time.Sleep(2 * time.Second)
+		// Copy RDB file out
+		cp := exec.Command("docker", "cp",
+			cfg.RedisContainer+":/data/dump.rdb",
+			filepath.Join(backupPath, "redis-shared.rdb"))
+		if out, err := cp.CombinedOutput(); err != nil {
+			return fmt.Errorf("redis copy rdb: %w — %s", err, string(out))
+		}
+		return nil
+	}
+	return fmt.Errorf("unknown database: %s", db)
+}
+
+// execRestore safely restores a database from backup without shell interpolation (CWE-78).
+func execRestore(db string, backupPath string, cfg ContainerConfig) error {
+	switch db {
+	case "pg-platform":
+		return gunzipPipeTo(
+			filepath.Join(backupPath, "pg-platform.sql.gz"),
+			exec.Command("docker", "exec", "-i", cfg.PGPlatformContainer, "psql", "-U", cfg.PGPlatformUser),
+		)
+	case "pg-shared":
+		return gunzipPipeTo(
+			filepath.Join(backupPath, "pg-shared.sql.gz"),
+			exec.Command("docker", "exec", "-i", cfg.PGSharedContainer, "psql", "-U", cfg.PGSharedUser),
+		)
+	case "mongo-shared":
+		inFile := filepath.Join(backupPath, "mongo-shared.archive.gz")
+		f, err := os.Open(inFile)
+		if err != nil {
+			return fmt.Errorf("open archive: %w", err)
+		}
+		defer f.Close()
+		cmd := exec.Command("docker", "exec", "-i", cfg.MongoContainer,
+			"mongorestore", "--authenticationDatabase", "admin",
+			"-u", cfg.MongoUser, "-p", cfg.MongoPassword,
+			"--archive", "--gzip", "--drop")
+		cmd.Stdin = f
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("mongorestore: %w — %s", err, string(out))
+		}
+		return nil
+	case "redis-shared":
+		rdbFile := filepath.Join(backupPath, "redis-shared.rdb")
+		cp := exec.Command("docker", "cp", rdbFile, cfg.RedisContainer+":/data/dump.rdb")
+		if out, err := cp.CombinedOutput(); err != nil {
+			return fmt.Errorf("redis copy rdb: %w — %s", err, string(out))
+		}
+		restart := exec.Command("docker", "restart", cfg.RedisContainer)
+		if out, err := restart.CombinedOutput(); err != nil {
+			return fmt.Errorf("redis restart: %w — %s", err, string(out))
+		}
+		return nil
+	}
+	return fmt.Errorf("unknown database: %s", db)
+}
+
+// pipeToGzip runs a command and pipes its stdout through gzip to a file.
+func pipeToGzip(cmd *exec.Cmd, outPath string) error {
+	f, err := os.Create(outPath)
+	if err != nil {
+		return fmt.Errorf("create output file: %w", err)
+	}
+	defer f.Close()
+
+	gzipCmd := exec.Command("gzip")
+	gzipCmd.Stdout = f
+
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		return fmt.Errorf("create pipe: %w", err)
+	}
+	cmd.Stdout = pw
+	gzipCmd.Stdin = pr
+
+	if err := gzipCmd.Start(); err != nil {
+		pw.Close()
+		pr.Close()
+		return fmt.Errorf("start gzip: %w", err)
+	}
+
+	if err := cmd.Run(); err != nil {
+		pw.Close()
+		pr.Close()
+		return fmt.Errorf("run dump: %w", err)
+	}
+	pw.Close()
+
+	if err := gzipCmd.Wait(); err != nil {
+		return fmt.Errorf("gzip: %w", err)
 	}
 	return nil
 }
 
-func restoreCommand(db string, backupPath string, cfg ContainerConfig) *exec.Cmd {
-	switch db {
-	case "pg-platform":
-		inFile := filepath.Join(backupPath, "pg-platform.sql.gz")
-		return exec.Command("bash", "-c",
-			fmt.Sprintf("gunzip -c %s | docker exec -i %s psql -U %s",
-				inFile, cfg.PGPlatformContainer, cfg.PGPlatformUser))
-	case "pg-shared":
-		inFile := filepath.Join(backupPath, "pg-shared.sql.gz")
-		return exec.Command("bash", "-c",
-			fmt.Sprintf("gunzip -c %s | docker exec -i %s psql -U %s",
-				inFile, cfg.PGSharedContainer, cfg.PGSharedUser))
-	case "mongo-shared":
-		inFile := filepath.Join(backupPath, "mongo-shared.archive.gz")
-		return exec.Command("bash", "-c",
-			fmt.Sprintf("cat %s | docker exec -i %s mongorestore --authenticationDatabase admin -u %s -p %s --archive --gzip --drop",
-				inFile, cfg.MongoContainer, cfg.MongoUser, cfg.MongoPassword))
-	case "redis-shared":
-		rdbFile := filepath.Join(backupPath, "redis-shared.rdb")
-		return exec.Command("bash", "-c",
-			fmt.Sprintf("docker cp %s %s:/data/dump.rdb && docker restart %s",
-				rdbFile, cfg.RedisContainer, cfg.RedisContainer))
+// gunzipPipeTo decompresses a gzip file and pipes it to a command's stdin.
+func gunzipPipeTo(inPath string, cmd *exec.Cmd) error {
+	f, err := os.Open(inPath)
+	if err != nil {
+		return fmt.Errorf("open file: %w", err)
+	}
+	defer f.Close()
+
+	gunzipCmd := exec.Command("gunzip", "-c")
+	gunzipCmd.Stdin = f
+
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		return fmt.Errorf("create pipe: %w", err)
+	}
+	gunzipCmd.Stdout = pw
+	cmd.Stdin = pr
+
+	if err := cmd.Start(); err != nil {
+		pw.Close()
+		pr.Close()
+		return fmt.Errorf("start restore: %w", err)
+	}
+
+	if err := gunzipCmd.Run(); err != nil {
+		pw.Close()
+		pr.Close()
+		return fmt.Errorf("gunzip: %w", err)
+	}
+	pw.Close()
+
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("restore: %w", err)
 	}
 	return nil
 }
