@@ -102,7 +102,7 @@ func (h *AuthHandler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If maintenance mode is active, only admins can log in
-	if val, err := h.settingsRepo.Get(ctx, "platform_require_auth"); err == nil && val == "false" {
+	if val, err := h.settingsRepo.Get(ctx, settingRequireAuth); err == nil && val == "false" {
 		if user.Role != model.RoleAdmin {
 			log.Warn().Str("user", user.Username).Msg("non-admin login blocked during maintenance")
 			http.Error(w, "Login is temporarily disabled for maintenance", http.StatusServiceUnavailable)

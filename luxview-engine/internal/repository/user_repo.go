@@ -107,7 +107,7 @@ func (r *UserRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.User, err
 }
 
 func (r *UserRepo) Upsert(ctx context.Context, u *model.User) error {
-	_, err := r.db.Pool.Exec(ctx,
+	err := r.db.Pool.QueryRow(ctx,
 		`INSERT INTO users (github_id, username, email, avatar_url, github_token, role, last_login_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, NOW())
 		 ON CONFLICT (github_id) DO UPDATE SET
@@ -116,18 +116,11 @@ func (r *UserRepo) Upsert(ctx context.Context, u *model.User) error {
 		   avatar_url = EXCLUDED.avatar_url,
 		   github_token = EXCLUDED.github_token,
 		   last_login_at = NOW()
-		 RETURNING id`,
+		 RETURNING id, role`,
 		u.GitHubID, u.Username, u.Email, u.AvatarURL, u.GitHubToken, u.Role,
-	)
+	).Scan(&u.ID, &u.Role)
 	if err != nil {
 		return fmt.Errorf("upsert user: %w", err)
-	}
-
-	// Re-read the ID and role after upsert (role is preserved from DB, not overwritten)
-	if err := r.db.Pool.QueryRow(ctx,
-		`SELECT id, role FROM users WHERE github_id = $1`, u.GitHubID,
-	).Scan(&u.ID, &u.Role); err != nil {
-		return fmt.Errorf("read user after upsert: %w", err)
 	}
 
 	// Assign default plan if user has no plan

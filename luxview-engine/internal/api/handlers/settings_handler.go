@@ -11,6 +11,8 @@ import (
 	"github.com/luxview/engine/pkg/logger"
 )
 
+const settingRequireAuth = "platform_require_auth"
+
 type SettingsHandler struct {
 	settingsRepo *repository.SettingsRepo
 	auditSvc     *service.AuditService
@@ -196,7 +198,7 @@ func (h *SettingsHandler) TestAIConnection(w http.ResponseWriter, r *http.Reques
 // GetAuthSettings returns platform auth configuration.
 func (h *SettingsHandler) GetAuthSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	val, _ := h.settingsRepo.Get(ctx, "platform_require_auth")
+	val, _ := h.settingsRepo.Get(ctx, settingRequireAuth)
 	requireAuth := val != "false" // default true
 	writeJSON(w, http.StatusOK, map[string]bool{"require_auth": requireAuth})
 }
@@ -215,7 +217,7 @@ func (h *SettingsHandler) UpdateAuthSettings(w http.ResponseWriter, r *http.Requ
 	if !req.RequireAuth {
 		val = "false"
 	}
-	if err := h.settingsRepo.Set(ctx, "platform_require_auth", val, false); err != nil {
+	if err := h.settingsRepo.Set(ctx, settingRequireAuth, val, false); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update auth settings")
 		return
 	}
