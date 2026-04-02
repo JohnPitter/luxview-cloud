@@ -374,6 +374,8 @@ export function Landing() {
 
   const [plans, setPlans] = useState<Plan[]>([]);
   const [plansLoading, setPlansLoading] = useState(true);
+  const [authDisabled, setAuthDisabled] = useState(false);
+  const [authSettingsLoaded, setAuthSettingsLoaded] = useState(false);
 
   const fetchPlans = useCallback(() => {
     setPlansLoading(true);
@@ -382,6 +384,12 @@ export function Landing() {
 
   useEffect(() => {
     fetchPlans();
+    // Check if auth is disabled (maintenance mode)
+    fetch('/api/auth/settings')
+      .then((r) => r.json())
+      .then((d) => { if (d.require_auth === false || d.requireAuth === false) setAuthDisabled(true); })
+      .catch(() => {})
+      .finally(() => setAuthSettingsLoaded(true));
   }, [fetchPlans]);
 
   useEffect(() => {
@@ -393,6 +401,7 @@ export function Landing() {
   };
 
   const handleAuth = () => {
+    if (authDisabled) return;
     window.location.href = '/api/auth/github';
   };
 
@@ -578,13 +587,15 @@ export function Landing() {
             >
               {isDark ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <button
-              onClick={handleAuth}
-              className="inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-4 py-3 text-sm font-semibold text-zinc-950 shadow-[0_14px_40px_rgba(245,158,11,0.28)] transition-all duration-200 hover:bg-amber-400"
-            >
-              <Github size={16} />
-              <span className="hidden sm:inline">{t('landing.nav.signIn')}</span>
-            </button>
+            {authSettingsLoaded && !authDisabled && (
+              <button
+                onClick={handleAuth}
+                className="inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-4 py-3 text-sm font-semibold text-zinc-950 shadow-[0_14px_40px_rgba(245,158,11,0.28)] transition-all duration-200 hover:bg-amber-400"
+              >
+                <Github size={16} />
+                <span className="hidden sm:inline">{t('landing.nav.signIn')}</span>
+              </button>
+            )}
           </div>
         </nav>
       </div>
@@ -621,10 +632,12 @@ export function Landing() {
 
             <Reveal variant="fade-up" delay={360}>
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-                <button onClick={handleAuth} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-500 px-7 py-4 text-base font-semibold text-zinc-950 shadow-[0_18px_50px_rgba(245,158,11,0.28)] transition-all duration-200 hover:bg-amber-400">
-                  <Github size={18} />
-                  {t('landing.hero.ctaPrimary')}
-                </button>
+                {authSettingsLoaded && !authDisabled && (
+                  <button onClick={handleAuth} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-500 px-7 py-4 text-base font-semibold text-zinc-950 shadow-[0_18px_50px_rgba(245,158,11,0.28)] transition-all duration-200 hover:bg-amber-400">
+                    <Github size={18} />
+                    {t('landing.hero.ctaPrimary')}
+                  </button>
+                )}
                 <button
                   onClick={() => scrollTo('how-it-works')}
                   className={`inline-flex items-center justify-center gap-2 rounded-2xl px-7 py-4 text-base font-medium transition-all duration-200 ${
@@ -862,15 +875,17 @@ export function Landing() {
                           </div>
                         )}
 
-                        <button
-                          onClick={handleAuth}
-                          className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold transition-all duration-200 ${
-                            plan.highlighted ? 'bg-amber-500 text-zinc-950 hover:bg-amber-400' : isDark ? 'bg-zinc-100 text-zinc-950 hover:bg-white' : 'bg-zinc-950 text-white hover:bg-zinc-800'
-                          }`}
-                        >
-                          <Github size={16} />
-                          {t('landing.pricing.cta')}
-                        </button>
+                        {authSettingsLoaded && !authDisabled && (
+                          <button
+                            onClick={handleAuth}
+                            className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold transition-all duration-200 ${
+                              plan.highlighted ? 'bg-amber-500 text-zinc-950 hover:bg-amber-400' : isDark ? 'bg-zinc-100 text-zinc-950 hover:bg-white' : 'bg-zinc-950 text-white hover:bg-zinc-800'
+                            }`}
+                          >
+                            <Github size={16} />
+                            {t('landing.pricing.cta')}
+                          </button>
+                        )}
                       </div>
                     </GlassCard>
                   ))}

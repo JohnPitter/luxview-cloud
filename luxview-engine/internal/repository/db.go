@@ -258,6 +258,9 @@ func (db *DB) migrate(ctx context.Context) error {
 		`ALTER TABLE apps ADD COLUMN IF NOT EXISTS webhook_id BIGINT DEFAULT NULL`,
 
 		`UPDATE app_services SET service_type = 'storage' WHERE service_type = 's3'`,
+
+		`ALTER TABLE apps ADD COLUMN IF NOT EXISTS custom_domain VARCHAR(255) DEFAULT NULL`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_apps_custom_domain ON apps(custom_domain) WHERE custom_domain IS NOT NULL`,
 	}
 
 	for i, m := range migrations {

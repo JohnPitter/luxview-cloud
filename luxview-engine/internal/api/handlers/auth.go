@@ -17,15 +17,17 @@ import (
 type AuthHandler struct {
 	cfg           *config.Config
 	userRepo      *repository.UserRepo
+	settingsRepo  *repository.SettingsRepo
 	github        *service.GitHubClient
 	encryptionKey []byte
 	auditSvc      *service.AuditService
 }
 
-func NewAuthHandler(cfg *config.Config, userRepo *repository.UserRepo, encryptionKey []byte, auditSvc *service.AuditService) *AuthHandler {
+func NewAuthHandler(cfg *config.Config, userRepo *repository.UserRepo, settingsRepo *repository.SettingsRepo, encryptionKey []byte, auditSvc *service.AuditService) *AuthHandler {
 	return &AuthHandler{
 		cfg:           cfg,
 		userRepo:      userRepo,
+		settingsRepo:  settingsRepo,
 		github:        service.NewGitHubClient(),
 		encryptionKey: encryptionKey,
 		auditSvc:      auditSvc,
@@ -33,7 +35,15 @@ func NewAuthHandler(cfg *config.Config, userRepo *repository.UserRepo, encryptio
 }
 
 // GitHubLogin redirects to GitHub OAuth authorization page.
+// If auth is disabled (maintenance mode), block login for non-admins.
 func (h *AuthHandler) GitHubLogin(w http.ResponseWriter, r *http.Request) {
+	// Check if auth is disabled (maintenance mode) — admins can bypass with ?admin=1
+	if r.URL.Query().Get("admin") != "1" {
+		if val, err := h.settingsRepo.Get(r.Context(), "platform_require_auth"); err == nil && val == "false" {
+			http.Error(w, "Login is temporarily disabled for maintenance", http.StatusServiceUnavailable)
+			return
+		}
+	}
 	url := fmt.Sprintf(
 		"https://github.com/login/oauth/authorize?client_id=%s&scope=repo,user:email&redirect_uri=%s/api/auth/github/callback",
 		h.cfg.GitHubClientID,

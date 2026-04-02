@@ -1,6 +1,6 @@
 import { api } from './client';
 
-export type AppStatus = 'building' | 'running' | 'stopped' | 'error' | 'sleeping' | 'deploying';
+export type AppStatus = 'building' | 'running' | 'stopped' | 'error' | 'sleeping' | 'deploying' | 'maintenance';
 export type Stack = 'node' | 'python' | 'go' | 'rust' | 'static' | 'docker';
 
 export interface App {
@@ -22,6 +22,7 @@ export interface App {
     disk: string;
   };
   autoDeploy: boolean;
+  customDomain?: string | null;
   createdAt: string;
   updatedAt: string;
   // Computed fields from API
@@ -66,12 +67,16 @@ export const appsApi = {
     await api.delete(`/apps/${id}`);
   },
 
-  async deploy(id: string): Promise<void> {
-    await api.post(`/apps/${id}/deploy`);
+  async deploy(id: string, source?: 'manual' | 'ai'): Promise<void> {
+    await api.post(`/apps/${id}/deploy`, source ? { source } : {});
   },
 
   async stop(id: string): Promise<void> {
     await api.post(`/apps/${id}/stop`);
+  },
+
+  async setMaintenance(id: string, enabled: boolean): Promise<void> {
+    await api.put(`/apps/${id}/maintenance`, { enabled });
   },
 
   async restart(id: string): Promise<void> {

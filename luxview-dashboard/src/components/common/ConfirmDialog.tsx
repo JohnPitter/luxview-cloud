@@ -49,8 +49,9 @@ export function ConfirmDialog({
       <dialog
         ref={dialogRef}
         className={`
-          relative z-10 rounded-2xl p-0 m-0 max-w-md w-full
+          relative z-10 rounded-2xl p-0 max-w-md w-full
           backdrop-blur-md shadow-2xl animate-slide-up
+          fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
           ${isDark ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-zinc-200'}
         `}
         onClose={onCancel}

@@ -10,7 +10,7 @@ interface AppsState {
   fetchApp: (id: string) => Promise<void>;
   createApp: (payload: CreateAppPayload) => Promise<App>;
   deleteApp: (id: string) => Promise<void>;
-  deployApp: (id: string) => Promise<void>;
+  deployApp: (id: string, source?: 'manual' | 'ai') => Promise<void>;
   stopApp: (id: string) => Promise<void>;
   restartApp: (id: string) => Promise<void>;
   setSelectedApp: (app: App | null) => void;
@@ -61,8 +61,8 @@ export const useAppsStore = create<AppsState>((set, get) => ({
     }));
   },
 
-  deployApp: async (id) => {
-    await appsApi.deploy(id);
+  deployApp: async (id, source) => {
+    await appsApi.deploy(id, source);
     const existing = get().apps.find((a) => a.id === id);
     if (existing) {
       get().updateAppInList({ ...existing, status: 'building' });

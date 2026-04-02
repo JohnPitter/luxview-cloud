@@ -14,11 +14,12 @@ import (
 
 // CleanupWorker periodically removes old images, builds, and stale metrics.
 type CleanupWorker struct {
-	docker       *dockerclient.Client
-	metricRepo   *repository.MetricRepo
-	settingsRepo *repository.SettingsRepo
-	auditRepo    *repository.AuditLogRepo
-	interval     time.Duration
+	docker        *dockerclient.Client
+	metricRepo    *repository.MetricRepo
+	settingsRepo  *repository.SettingsRepo
+	auditRepo     *repository.AuditLogRepo
+	interval      time.Duration
+	lastDockerRun time.Time
 }
 
 func NewCleanupWorker(docker *dockerclient.Client, metricRepo *repository.MetricRepo, settingsRepo *repository.SettingsRepo, auditRepo *repository.AuditLogRepo, intervalSec int) *CleanupWorker {
@@ -82,6 +83,15 @@ func (cw *CleanupWorker) cleanup(ctx context.Context) {
 		return
 	}
 
+	// Check if enough time has passed since last Docker cleanup (respects interval_hours setting)
+	intervalHours := 24
+	if v, parseErr := strconv.Atoi(settings["interval_hours"]); parseErr == nil && v > 0 {
+		intervalHours = v
+	}
+	if !cw.lastDockerRun.IsZero() && time.Since(cw.lastDockerRun) < time.Duration(intervalHours)*time.Hour {
+		return
+	}
+
 	// Check disk threshold
 	thresholdStr := settings["threshold_percent"]
 	if thresholdStr == "" {
@@ -104,6 +114,8 @@ func (cw *CleanupWorker) cleanup(ctx context.Context) {
 		log.Error().Err(err).Msg("docker system prune failed")
 		return
 	}
+
+	cw.lastDockerRun = time.Now()
 
 	log.Info().
 		Int("images_removed", result.ImagesRemoved).

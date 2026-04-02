@@ -36,17 +36,27 @@ func NewHealthChecker(appRepo *repository.AppRepo, container *ContainerManager) 
 func (hc *HealthChecker) CheckAll(ctx context.Context) {
 	log := logger.With("healthcheck")
 
-	apps, err := hc.appRepo.ListAllRunning(ctx)
+	// Check both running and error apps (error apps may have recovered)
+	apps, err := hc.appRepo.ListAllRunningOrError(ctx)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to list running apps")
+		log.Error().Err(err).Msg("failed to list apps for health check")
 		return
 	}
 
 	for _, app := range apps {
+		// Skip health checks for maintenance/building/deploying apps
+		if app.Status == model.AppStatusMaintenance || app.Status == model.AppStatusBuilding || app.Status == "deploying" {
+			continue
+		}
 		healthy := hc.CheckApp(ctx, &app)
-		if !healthy {
+		if !healthy && app.Status == model.AppStatusRunning {
 			log.Warn().Str("app", app.Subdomain).Msg("app is unhealthy")
 			if err := hc.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusError, app.ContainerID); err != nil {
+				log.Error().Err(err).Str("app", app.Subdomain).Msg("failed to update app status")
+			}
+		} else if healthy && app.Status == model.AppStatusError {
+			log.Info().Str("app", app.Subdomain).Msg("app recovered, marking as running")
+			if err := hc.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusRunning, app.ContainerID); err != nil {
 				log.Error().Err(err).Str("app", app.Subdomain).Msg("failed to update app status")
 			}
 		}

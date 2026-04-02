@@ -38,8 +38,8 @@ export function AppCard({ app, metrics }: AppCardProps) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const cpuPercent = metrics?.cpuPercent ?? 0;
   const memoryMB = metrics?.memoryBytes ? metrics.memoryBytes / (1024 * 1024) : 0;
-  const memoryLimit = parseInt(app.resourceLimits?.memory || '512') || 512;
-  const memoryPercent = (memoryMB / memoryLimit) * 100;
+  const memoryLimitMB = (() => { const m = app.resourceLimits?.memory || '512m'; const n = parseFloat(m); return m.endsWith('g') ? n * 1024 : n; })();
+  const memoryPercent = (memoryMB / memoryLimitMB) * 100;
 
   return (
     <GlassCard

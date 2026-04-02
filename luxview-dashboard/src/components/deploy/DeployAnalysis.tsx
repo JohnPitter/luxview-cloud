@@ -15,6 +15,7 @@ import {
   FileSearch,
   FileCode,
   CheckCircle,
+  KeyRound,
 } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { useThemeStore } from '../../stores/theme.store';
@@ -150,6 +151,24 @@ export function DeployAnalysis({
     }
     return initial;
   });
+
+  const isSecretKey = (key: string) => {
+    const upper = key.toUpperCase();
+    return (
+      upper.includes('SECRET') ||
+      upper.includes('ENCRYPTION') ||
+      upper.includes('JWT') ||
+      (upper.includes('KEY') && !upper.includes('API_KEY'))
+    );
+  };
+
+  const generateSecretKey = (key: string) => {
+    const upper = key.toUpperCase();
+    const bytes = new Uint8Array(upper.includes('ENCRYPTION') ? 32 : 64);
+    crypto.getRandomValues(bytes);
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    setEnvValues((prev) => ({ ...prev, [key]: hex }));
+  };
 
   const [serviceModes, setServiceModes] = useState<Record<string, MigrationMode>>(() => {
     const initial: Record<string, MigrationMode> = {};
@@ -348,13 +367,13 @@ export function DeployAnalysis({
             {result.envHints.map((hint) => (
               <div
                 key={hint.key}
-                className={`flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border p-3 ${
+                className={`rounded-lg border p-3 ${
                   isDark
                     ? 'border-zinc-700/50 bg-zinc-800/30'
                     : 'border-zinc-200 bg-zinc-50/50'
                 }`}
               >
-                <div className="flex items-center gap-2 sm:w-1/3">
+                <div className="flex items-center gap-2 mb-1.5">
                   <span className="font-mono text-xs font-semibold text-primary">
                     {hint.key}
                   </span>
@@ -365,7 +384,7 @@ export function DeployAnalysis({
                   )}
                 </div>
                 <p
-                  className={`text-[12px] sm:w-1/3 ${
+                  className={`text-[12px] mb-2 ${
                     isDark ? 'text-zinc-500' : 'text-zinc-500'
                   }`}
                 >
@@ -381,12 +400,26 @@ export function DeployAnalysis({
                     }))
                   }
                   placeholder={hint.key}
-                  className={`sm:w-1/3 font-mono text-xs rounded-lg border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 ${
+                  className={`w-full font-mono text-xs rounded-lg border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 ${
                     isDark
                       ? 'bg-zinc-900 border-zinc-700 text-zinc-300 placeholder:text-zinc-600'
                       : 'bg-white border-zinc-200 text-zinc-800 placeholder:text-zinc-400'
                   }`}
                 />
+                {isSecretKey(hint.key) && (
+                  <button
+                    type="button"
+                    onClick={() => generateSecretKey(hint.key)}
+                    className={`flex items-center gap-1.5 mt-1.5 text-[11px] transition-colors duration-200 ${
+                      isDark
+                        ? 'text-zinc-500 hover:text-primary'
+                        : 'text-zinc-400 hover:text-primary'
+                    }`}
+                  >
+                    <KeyRound size={12} />
+                    {t('analyze.generateKey')}
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -394,7 +427,7 @@ export function DeployAnalysis({
       )}
 
       {/* Service Recommendations */}
-      {!isFailure && hasRecommendations && (
+      {hasRecommendations && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Database size={16} className="text-primary" />

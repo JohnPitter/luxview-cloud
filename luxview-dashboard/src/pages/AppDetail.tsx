@@ -89,6 +89,7 @@ export function AppDetail() {
   const [settingsName, setSettingsName] = useState('');
   const [settingsBranch, setSettingsBranch] = useState('');
   const [settingsAutoDeploy, setSettingsAutoDeploy] = useState(true);
+  const [settingsCustomDomain, setSettingsCustomDomain] = useState('');
 
   // Failure analysis state
   const [analyzingFailure, setAnalyzingFailure] = useState(false);
@@ -214,6 +215,7 @@ export function AppDetail() {
       setSettingsName(app.name);
       setSettingsBranch(app.repoBranch);
       setSettingsAutoDeploy(app.autoDeploy);
+      setSettingsCustomDomain(app.customDomain || '');
     }
   }, [app]);
 
@@ -278,6 +280,7 @@ export function AppDetail() {
         name: settingsName,
         repoBranch: settingsBranch,
         autoDeploy: settingsAutoDeploy,
+        customDomain: settingsCustomDomain || null,
       });
       addNotification({ type: 'success', title: t('app.notifications.settingsSaved') });
       fetchApp(appId);
@@ -302,10 +305,12 @@ export function AppDetail() {
     }
   };
 
-  const handleApproveFailureAnalysis = async (dockerfile: string, envVars: Record<string, string>) => {
+  const handleApproveFailureAnalysis = async (dockerfile: string, envVars: Record<string, string>, services: string[]) => {
     if (!appId) return;
     try {
-      if (dockerfile) {
+      if (services.length > 0) {
+        await analyzeApi.applyAnalysis(appId, { dockerfile, envVars, services });
+      } else if (dockerfile) {
         await analyzeApi.saveDockerfile(appId, dockerfile);
       }
       const hasEnvVars = Object.keys(envVars).some((k) => envVars[k]);
@@ -315,7 +320,7 @@ export function AppDetail() {
       }
       sawTransitionalRef.current = false;
       setActionPending(true);
-      await deployApp(appId);
+      await deployApp(appId!, 'ai');
       setShowAnalysisModal(false);
       setFailureAnalysisResult(null);
     } catch {
@@ -332,13 +337,20 @@ export function AppDetail() {
   const currentCpu = latestMetric?.cpuPercent ?? 0;
   const currentMemory = latestMetric?.memoryBytes ?? 0;
 
-  const metricsData = metrics.map((m) => ({
-    time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    cpu: m.cpuPercent,
-    memory: m.memoryBytes / (1024 * 1024),
-    networkRx: m.networkRx / 1024,
-    networkTx: m.networkTx / 1024,
-  }));
+  const metricsData = metrics.map((m, i) => {
+    // Network values are cumulative — compute delta between consecutive readings
+    const prev = i > 0 ? metrics[i - 1] : null;
+    const timeDelta = prev ? (new Date(m.timestamp).getTime() - new Date(prev.timestamp).getTime()) / 1000 : 1;
+    const rxDelta = prev ? Math.max(0, m.networkRx - prev.networkRx) : 0;
+    const txDelta = prev ? Math.max(0, m.networkTx - prev.networkTx) : 0;
+    return {
+      time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      cpu: m.cpuPercent,
+      memory: m.memoryBytes / (1024 * 1024),
+      networkRx: timeDelta > 0 ? rxDelta / 1024 / timeDelta : 0,
+      networkTx: timeDelta > 0 ? txDelta / 1024 / timeDelta : 0,
+    };
+  });
 
   // Mock uptime data
   const uptimeDays = Array.from({ length: 30 }, (_, i) => ({
@@ -618,7 +630,7 @@ export function AppDetail() {
                       className="h-full rounded-full bg-blue-400 transition-all duration-500"
                       style={{
                         width: `${Math.min(
-                          (currentMemory / (parseInt(app.resourceLimits?.memory || '512') * 1024 * 1024)) * 100,
+                          (currentMemory / (() => { const m = app.resourceLimits?.memory || '512m'; const n = parseFloat(m); return m.endsWith('g') ? n * 1024 * 1024 * 1024 : n * 1024 * 1024; })()) * 100,
                           100,
                         )}%`,
                       }}
@@ -633,11 +645,11 @@ export function AppDetail() {
                   </div>
                   <div className="flex justify-between text-[11px]">
                     <span className="text-zinc-500">{t('app.resources.memoryLimit')}</span>
-                    <span className="text-zinc-400">{(app.resourceLimits?.memory || '512m').replace(/[mg]/i, '')} MB</span>
+                    <span className="text-zinc-400">{(() => { const m = app.resourceLimits?.memory || '512m'; return m.endsWith('g') ? m.replace('g', '') + ' GB' : m.replace('m', '') + ' MB'; })()}</span>
                   </div>
                   <div className="flex justify-between text-[11px]">
                     <span className="text-zinc-500">{t('app.resources.diskLimit')}</span>
-                    <span className="text-zinc-400">{(app.resourceLimits?.disk || '1g').replace(/[mg]/i, '')} GB</span>
+                    <span className="text-zinc-400">{(() => { const d = app.resourceLimits?.disk || '1g'; return d.endsWith('g') ? d.replace('g', '') + ' GB' : d.replace('m', '') + ' MB'; })()}</span>
                   </div>
                 </div>
               </div>
@@ -1031,11 +1043,64 @@ export function AppDetail() {
                     />
                   </button>
                 </div>
+                <div>
+                  <label className="block text-xs text-zinc-500 mb-1.5">{t('app.settings.customDomain')}</label>
+                  <input
+                    type="text"
+                    value={settingsCustomDomain}
+                    onChange={(e) => setSettingsCustomDomain(e.target.value)}
+                    placeholder={t('app.settings.customDomainPlaceholder')}
+                    className={inputClass}
+                  />
+                  <p className="text-[10px] text-zinc-500 mt-1">
+                    {t('app.settings.customDomainDescription', { subdomain: app.subdomain })}
+                  </p>
+                </div>
               </div>
               <div className="flex justify-end mt-6">
                 <PillButton variant="primary" size="sm" onClick={handleSaveSettings} icon={<Save size={14} />}>
                   {t('app.settings.saveSettings')}
                 </PillButton>
+              </div>
+            </GlassCard>
+
+            {/* Maintenance Mode */}
+            <GlassCard className={app.status === 'maintenance' ? '!border-amber-500/20' : ''}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                    {t('app.settings.maintenanceMode')}
+                  </p>
+                  <p className="text-[11px] text-zinc-500">
+                    {t('app.settings.maintenanceModeDescription')}
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    const enabling = app.status !== 'maintenance';
+                    try {
+                      await appsApi.setMaintenance(appId!, enabling);
+                      fetchApp(appId!);
+                      addNotification({
+                        type: 'success',
+                        title: enabling ? t('app.settings.maintenanceEnabled') : t('app.settings.maintenanceDisabled'),
+                      });
+                    } catch {
+                      addNotification({ type: 'error', title: t('app.notifications.settingsSaveFailed') });
+                    }
+                  }}
+                  className={`
+                    w-11 h-6 rounded-full transition-all duration-200 relative
+                    ${app.status === 'maintenance' ? 'bg-amber-400' : isDark ? 'bg-zinc-700' : 'bg-zinc-300'}
+                  `}
+                >
+                  <span
+                    className={`
+                      absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200
+                      ${app.status === 'maintenance' ? 'left-[22px]' : 'left-0.5'}
+                    `}
+                  />
+                </button>
               </div>
             </GlassCard>
 

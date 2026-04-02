@@ -1,9 +1,39 @@
-import { LogOut } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { LogOut, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/auth.store';
 import { useThemeStore } from '../../stores/theme.store';
 import { NotificationsDropdown } from './NotificationsDropdown';
+
+function LiveClock({ isDark }: { isDark: boolean }) {
+  const [time, setTime] = useState(new Date());
+  const { i18n } = useTranslation();
+
+  useEffect(() => {
+    const timer = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatted = time.toLocaleTimeString(i18n.language, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+
+  return (
+    <div
+      className={`
+        flex items-center gap-2 h-10 px-3 rounded-xl
+        backdrop-blur-md font-mono text-xs tabular-nums
+        ${isDark ? 'bg-zinc-900/60 text-zinc-400 border border-zinc-800/50' : 'bg-white/60 text-zinc-500 border border-zinc-200/60'}
+      `}
+    >
+      <Clock size={14} className="opacity-50" />
+      {formatted}
+    </div>
+  );
+}
 
 export function Header() {
   const navigate = useNavigate();
@@ -19,6 +49,9 @@ export function Header() {
         flex items-center gap-3
       `}
     >
+      {/* Clock */}
+      <LiveClock isDark={isDark} />
+
       {/* Notifications */}
       <NotificationsDropdown />
 

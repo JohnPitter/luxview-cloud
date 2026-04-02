@@ -169,6 +169,22 @@ func (cm *ContainerManager) IsRunning(ctx context.Context, containerID string) (
 	return info.State.Running, nil
 }
 
+// UpdateResources applies new resource limits to a running container without restart.
+func (cm *ContainerManager) UpdateResources(ctx context.Context, containerID string, limits model.ResourceLimits) error {
+	if containerID == "" {
+		return fmt.Errorf("no container ID")
+	}
+	nanoCPUs, memory := parseResourceLimits(limits)
+	log := logger.With("container")
+	log.Info().Str("container", containerID[:min(12, len(containerID))]).Int64("cpu_nano", nanoCPUs).Int64("memory", memory).Msg("updating container resources")
+	return cm.docker.UpdateContainerResources(ctx, containerID, container.UpdateConfig{
+		Resources: container.Resources{
+			NanoCPUs: nanoCPUs,
+			Memory:   memory,
+		},
+	})
+}
+
 func parseResourceLimits(rl model.ResourceLimits) (nanoCPUs int64, memory int64) {
 	// Parse CPU (e.g., "0.5" -> 500_000_000 nanocpus)
 	if rl.CPU != "" {

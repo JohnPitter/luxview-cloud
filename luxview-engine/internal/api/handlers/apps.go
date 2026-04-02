@@ -173,6 +173,7 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 			UserID:    userID,
 			CommitSHA: commitSHA,
 			CommitMsg: commitMsg,
+			Source:    "auto",
 		}:
 			log.Info().Str("app", app.Subdomain).Msg("auto-deploy queued on creation")
 		default:
@@ -361,6 +362,24 @@ func (h *AppHandler) Update(w http.ResponseWriter, r *http.Request) {
 		app.EnvVars = json.RawMessage(`"` + encrypted + `"`)
 	}
 
+	if req.CustomDomain != nil {
+		domain := strings.TrimSpace(*req.CustomDomain)
+		if domain == "" {
+			app.CustomDomain = nil
+		} else {
+			domain = strings.TrimPrefix(domain, "https://")
+			domain = strings.TrimPrefix(domain, "http://")
+			domain = strings.TrimSuffix(domain, "/")
+			// Check uniqueness
+			existing, _ := h.appRepo.FindByCustomDomain(ctx, domain)
+			if existing != nil && existing.ID != app.ID {
+				writeError(w, http.StatusConflict, "domain already in use by another app")
+				return
+			}
+			app.CustomDomain = &domain
+		}
+	}
+
 	if err := h.appRepo.Update(ctx, app); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update app")
 		return
@@ -534,12 +553,24 @@ func (h *AppHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		commitMsg = "manual deploy"
 	}
 
+	// Check if frontend specifies a deploy source (e.g. "ai" from wizard)
+	source := "manual"
+	var body struct {
+		Source string `json:"source"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.Source == "ai" {
+			source = "ai"
+		}
+	}
+
 	deployReq := service.DeployRequest{
 		AppID:     app.ID,
 		UserID:    userID,
 		CommitSHA: commitSHA,
 		CommitMsg: commitMsg,
-		Source:    "manual",
+		Source:    source,
 	}
 
 	select {
@@ -647,6 +678,65 @@ func (h *AppHandler) Stop(w http.ResponseWriter, r *http.Request) {
 	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "app stopped"})
+}
+
+// SetMaintenance toggles maintenance mode for an app.
+func (h *AppHandler) SetMaintenance(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app ID")
+		return
+	}
+
+	app, err := h.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	if app.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if body.Enabled {
+		_ = h.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusMaintenance, app.ContainerID)
+	} else {
+		// Restore to running if container exists, otherwise stopped
+		if app.ContainerID != "" {
+			_ = h.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusRunning, app.ContainerID)
+		} else {
+			_ = h.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusStopped, app.ContainerID)
+		}
+	}
+
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "maintenance",
+		ResourceType: "app",
+		ResourceID:   app.ID.String(),
+		ResourceName: app.Subdomain,
+		NewValues:    map[string]interface{}{"maintenance": body.Enabled},
+		IPAddress:    clientIP(r),
+	})
+
+	msg := "maintenance mode enabled"
+	if !body.Enabled {
+		msg = "maintenance mode disabled"
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": msg})
 }
 
 // CheckSubdomain checks if a subdomain is available.

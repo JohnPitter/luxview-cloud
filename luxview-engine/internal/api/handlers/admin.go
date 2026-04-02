@@ -290,6 +290,14 @@ func (h *AdminHandler) UpdateAppLimits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Apply limits to the running container in real time
+	if app.ContainerID != "" && app.Status == model.AppStatusRunning {
+		if err := h.container.UpdateResources(ctx, app.ContainerID, body.ResourceLimits); err != nil {
+			log := logger.With("admin")
+			log.Warn().Err(err).Str("app", app.Subdomain).Msg("failed to apply resource limits to container (will apply on next deploy)")
+		}
+	}
+
 	actor := middleware.GetUser(ctx)
 	h.auditSvc.Log(ctx, service.AuditEntry{
 		ActorID:      actor.ID,

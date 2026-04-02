@@ -37,6 +37,7 @@ type Deployer struct {
 	deployRepo     *repository.DeploymentRepo
 	userRepo       *repository.UserRepo
 	serviceRepo    *repository.ServiceRepo
+	settingsRepo   *repository.SettingsRepo
 	provisioner    *Provisioner
 	detector       *Detector
 	builder        *Builder
@@ -54,6 +55,7 @@ func NewDeployer(
 	deployRepo *repository.DeploymentRepo,
 	userRepo *repository.UserRepo,
 	serviceRepo *repository.ServiceRepo,
+	settingsRepo *repository.SettingsRepo,
 	provisioner *Provisioner,
 	docker *dockerclient.Client,
 	portManager *PortManager,
@@ -67,6 +69,7 @@ func NewDeployer(
 		deployRepo:    deployRepo,
 		userRepo:      userRepo,
 		serviceRepo:   serviceRepo,
+		settingsRepo:  settingsRepo,
 		provisioner:   provisioner,
 		detector:      NewDetector(),
 		builder:       NewBuilder(docker),
@@ -109,9 +112,6 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	deploySource := req.Source
 	if deploySource == "" {
 		deploySource = "auto"
-		if hasCustomDockerfile {
-			deploySource = "ai"
-		}
 	}
 
 	log.Debug().
@@ -310,6 +310,13 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	}
 	envVars = mergedEnvVars
 
+	// Inject platform timezone if configured and not already set by user
+	if _, hasTZ := envVars["TZ"]; !hasTZ {
+		if tz, err := d.settingsRepo.Get(ctx, "platform_timezone"); err == nil && tz != "" {
+			envVars["TZ"] = tz
+		}
+	}
+
 	// Stop old container (blue-green)
 	oldContainerID := app.ContainerID
 	if oldContainerID != "" {
@@ -335,6 +342,10 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	}
 
 	log.Debug().Str("container_id", containerID[:min(12, len(containerID))]).Msg("container started")
+
+	// Run post-deploy hooks BEFORE health check so migrations create tables
+	// before the app's workers try to query them.
+	d.runPostDeployHooks(ctx, containerID, bp.Name())
 
 	// Health check — longer timeout for slow-starting stacks (Java, etc.)
 	healthTimeout := 120 * time.Second
@@ -384,9 +395,6 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	if oldContainerID != "" {
 		_ = d.container.Remove(ctx, oldContainerID)
 	}
-
-	// Run post-deploy hooks (e.g., Prisma migrations)
-	d.runPostDeployHooks(ctx, containerID, bp.Name())
 
 	// Finalize
 	duration := int(time.Since(start).Milliseconds())

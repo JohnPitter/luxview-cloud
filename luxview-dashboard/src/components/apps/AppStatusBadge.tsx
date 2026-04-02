@@ -13,6 +13,7 @@ const statusStyles: Record<AppStatus, string> = {
   stopped: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20',
   error: 'bg-red-500/10 text-red-400 border-red-500/20',
   sleeping: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
+  maintenance: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
 };
 
 const statusLabelKeys: Record<AppStatus, string> = {
@@ -22,6 +23,7 @@ const statusLabelKeys: Record<AppStatus, string> = {
   stopped: 'common.status.stopped',
   error: 'common.status.error',
   sleeping: 'common.status.sleeping',
+  maintenance: 'common.status.maintenance',
 };
 
 export function AppStatusBadge({ status, size = 'sm' }: AppStatusBadgeProps) {

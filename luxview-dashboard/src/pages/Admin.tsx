@@ -40,7 +40,7 @@ import { AppStatusBadge } from '../components/apps/AppStatusBadge';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { useThemeStore } from '../stores/theme.store';
 import { useNotificationsStore } from '../stores/notifications.store';
-import { adminApi, cleanupApi, auditApi, type AdminStats, type AdminUser, type AdminApp, type VPSInfo, type CleanupSettings, type CleanupResult, type DiskUsage, type AuditLog, type AuditStats, type AuditLogFilters } from '../api/admin';
+import { adminApi, cleanupApi, auditApi, timezoneApi, authSettingsApi, type AdminStats, type AdminUser, type AdminApp, type VPSInfo, type CleanupSettings, type CleanupResult, type DiskUsage, type AuditLog, type AuditStats, type AuditLogFilters } from '../api/admin';
 import { plansApi, type Plan, type CreatePlanPayload } from '../api/plans';
 import { aiSettingsApi, type AISettings, type AITestResult } from '../api/analyze';
 import { formatRelativeTime } from '../lib/format';
@@ -120,6 +120,12 @@ export function Admin() {
   const [appPage, setAppPage] = useState(0);
   const PAGE_SIZE = 20;
 
+  // Auth settings
+  const [requireAuth, setRequireAuth] = useState(true);
+
+  // Timezone
+  const [platformTimezone, setPlatformTimezone] = useState('UTC');
+
   // Modals
   const [roleChangeUser, setRoleChangeUser] = useState<AdminUser | null>(null);
   const [limitsApp, setLimitsApp] = useState<AdminApp | null>(null);
@@ -172,18 +178,22 @@ export function Admin() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [statsData, vpsData, usersData, appsData, plansData] = await Promise.all([
+      const [statsData, vpsData, usersData, appsData, plansData, tzData, authData] = await Promise.all([
         adminApi.stats(),
         adminApi.vpsInfo(),
         adminApi.listUsers(100, 0),
         adminApi.listApps(100, 0),
         plansApi.listAll(),
+        timezoneApi.get().catch(() => ({ timezone: 'UTC' })),
+        authSettingsApi.get().catch(() => ({ requireAuth: true })),
       ]);
       setStats(statsData);
       setVpsInfo(vpsData);
       setUsers(usersData.users ?? []);
       setApps(appsData.apps ?? []);
       setPlans(plansData ?? []);
+      setPlatformTimezone(tzData.timezone);
+      setRequireAuth(authData.requireAuth);
     } catch {
       addNotification({ type: 'error', title: t('admin.failedToLoad') });
     } finally {
@@ -763,6 +773,102 @@ export function Admin() {
                 </GlassCard>
               </div>
             </div>
+          )}
+
+          {/* ==================== AUTH SETTINGS (in overview) ==================== */}
+          {activeTab === 'overview' && (
+            <GlassCard className="mt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                    {t('admin.auth.title')}
+                  </h3>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">
+                    {t('admin.auth.description')}
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    const newVal = !requireAuth;
+                    try {
+                      await authSettingsApi.update(newVal);
+                      setRequireAuth(newVal);
+                      addNotification({ type: 'success', title: t('admin.auth.updated') });
+                    } catch {
+                      addNotification({ type: 'error', title: t('admin.auth.updateFailed') });
+                    }
+                  }}
+                  className={`
+                    w-11 h-6 rounded-full transition-all duration-200 relative
+                    ${requireAuth ? 'bg-amber-400' : isDark ? 'bg-zinc-700' : 'bg-zinc-300'}
+                  `}
+                >
+                  <span
+                    className={`
+                      absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200
+                      ${requireAuth ? 'left-[22px]' : 'left-0.5'}
+                    `}
+                  />
+                </button>
+              </div>
+            </GlassCard>
+          )}
+
+          {/* ==================== TIMEZONE (in overview) ==================== */}
+          {activeTab === 'overview' && (
+            <GlassCard className="mt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                    {t('admin.timezone.title')}
+                  </h3>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">
+                    {t('admin.timezone.description')}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={platformTimezone}
+                    onChange={async (e) => {
+                      const tz = e.target.value;
+                      try {
+                        await timezoneApi.update(tz);
+                        setPlatformTimezone(tz);
+                        addNotification({ type: 'success', title: t('admin.timezone.updated') });
+                      } catch {
+                        addNotification({ type: 'error', title: t('admin.timezone.updateFailed') });
+                      }
+                    }}
+                    className={`text-xs rounded-lg border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 ${
+                      isDark
+                        ? 'bg-zinc-900 border-zinc-700 text-zinc-300'
+                        : 'bg-white border-zinc-200 text-zinc-800'
+                    }`}
+                  >
+                    <option value="UTC">UTC</option>
+                    <option value="America/Sao_Paulo">America/Sao_Paulo (BRT)</option>
+                    <option value="America/New_York">America/New_York (EST)</option>
+                    <option value="America/Chicago">America/Chicago (CST)</option>
+                    <option value="America/Denver">America/Denver (MST)</option>
+                    <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
+                    <option value="America/Argentina/Buenos_Aires">America/Buenos_Aires (ART)</option>
+                    <option value="America/Bogota">America/Bogota (COT)</option>
+                    <option value="America/Santiago">America/Santiago (CLT)</option>
+                    <option value="America/Mexico_City">America/Mexico_City (CST)</option>
+                    <option value="Europe/London">Europe/London (GMT)</option>
+                    <option value="Europe/Paris">Europe/Paris (CET)</option>
+                    <option value="Europe/Berlin">Europe/Berlin (CET)</option>
+                    <option value="Europe/Lisbon">Europe/Lisbon (WET)</option>
+                    <option value="Europe/Madrid">Europe/Madrid (CET)</option>
+                    <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+                    <option value="Asia/Shanghai">Asia/Shanghai (CST)</option>
+                    <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+                    <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+                    <option value="Australia/Sydney">Australia/Sydney (AEST)</option>
+                  </select>
+                </div>
+              </div>
+            </GlassCard>
           )}
 
           {/* ==================== USERS ==================== */}
@@ -1445,7 +1551,7 @@ export function Admin() {
                         }`}
                       >
                         <option value="">{t('admin.audit.allActions')}</option>
-                        {['create', 'update', 'delete', 'deploy', 'restart', 'stop', 'login'].map((a) => (
+                        {['create', 'update', 'delete', 'deploy', 'restart', 'stop', 'maintenance', 'login'].map((a) => (
                           <option key={a} value={a}>{t(`admin.audit.actions.${a}`)}</option>
                         ))}
                       </select>

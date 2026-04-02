@@ -137,6 +137,26 @@ export const cleanupApi = {
   },
 };
 
+export const timezoneApi = {
+  async get(): Promise<{ timezone: string }> {
+    const { data } = await api.get<{ timezone: string }>('/admin/settings/timezone');
+    return data;
+  },
+  async update(timezone: string): Promise<void> {
+    await api.put('/admin/settings/timezone', { timezone });
+  },
+};
+
+export const authSettingsApi = {
+  async get(): Promise<{ requireAuth: boolean }> {
+    const { data } = await api.get<{ requireAuth: boolean }>('/auth/settings');
+    return data;
+  },
+  async update(requireAuth: boolean): Promise<void> {
+    await api.put('/admin/settings/auth', { requireAuth });
+  },
+};
+
 export interface AuditLog {
   id: number;
   actorId: string | null;

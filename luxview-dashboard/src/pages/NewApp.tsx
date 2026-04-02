@@ -34,6 +34,7 @@ export function NewApp() {
   const [provisioningDone, setProvisioningDone] = useState(false);
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
   const createdAppIdRef = useRef<string | null>(null);
+  const deployedRef = useRef(false);
   const wizardEnvVarsRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
@@ -53,6 +54,17 @@ export function NewApp() {
       .then((s) => setAiEnabled(s.aiEnabled))
       .catch(() => setAiEnabled(false));
   }, []);
+
+  // Cleanup: delete app if user abandons the wizard without deploying
+  const deleteApp = useAppsStore((s) => s.deleteApp);
+  useEffect(() => {
+    return () => {
+      const appId = createdAppIdRef.current;
+      if (appId && !deployedRef.current) {
+        deleteApp(appId).catch(() => {});
+      }
+    };
+  }, [deleteApp]);
 
   const deployedRepoUrls = useMemo(
     () => new Set(apps.map((a) => a.repoUrl.replace(/\.git$/, ''))),
@@ -76,10 +88,11 @@ export function NewApp() {
     [],
   );
 
-  const deployAndNavigate = async (appId: string) => {
+  const deployAndNavigate = async (appId: string, source?: 'manual' | 'ai') => {
+    deployedRef.current = true;
     setDeploying(true);
     try {
-      await appsApi.deploy(appId);
+      await appsApi.deploy(appId, source);
       addNotification({
         type: 'success',
         title: t('app.notifications.deploymentStarted'),
@@ -176,7 +189,7 @@ export function NewApp() {
   const handleFinalDeploy = async () => {
     const appId = createdAppIdRef.current;
     if (!appId) return;
-    await deployAndNavigate(appId);
+    await deployAndNavigate(appId, 'ai');
   };
 
   const handleDeployWithoutAnalysis = async () => {

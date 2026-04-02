@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aplicação não encontrada — LuxView Cloud</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #09090b;
+      color: #fafafa;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 24px;
+      overflow: hidden;
+    }
+
+    /* Animated background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(251, 191, 36, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(251, 191, 36, 0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: grid-drift 20s linear infinite;
+    }
+
+    @keyframes grid-drift {
+      0% { transform: translate(0, 0); }
+      100% { transform: translate(60px, 60px); }
+    }
+
+    .container {
+      position: relative;
+      text-align: center;
+      max-width: 480px;
+      animation: fade-up 0.8s ease-out;
+    }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Ghost icon */
+    .icon-wrapper {
+      position: relative;
+      display: inline-flex;
+      margin-bottom: 32px;
+    }
+
+    .icon-box {
+      width: 96px;
+      height: 96px;
+      border-radius: 24px;
+      background: rgba(251, 191, 36, 0.08);
+      border: 1px solid rgba(251, 191, 36, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-12px); }
+    }
+
+    .icon-box svg {
+      width: 48px;
+      height: 48px;
+      color: #FBBF24;
+      opacity: 0.8;
+    }
+
+    .pulse-ring {
+      position: absolute;
+      inset: -8px;
+      border-radius: 28px;
+      border: 1px solid rgba(251, 191, 36, 0.1);
+      animation: pulse-expand 2.5s ease-out infinite;
+    }
+
+    @keyframes pulse-expand {
+      0% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(1.3); opacity: 0; }
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      margin-bottom: 12px;
+      color: #fafafa;
+    }
+
+    .subdomain {
+      display: inline-block;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 14px;
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.2);
+      color: #FBBF24;
+      padding: 4px 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    .description {
+      font-size: 15px;
+      line-height: 1.6;
+      color: #a1a1aa;
+      margin-bottom: 8px;
+    }
+
+    .support {
+      font-size: 13px;
+      color: #71717a;
+      margin-bottom: 36px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #09090b;
+      background: #FBBF24;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(251, 191, 36, 0.25);
+    }
+
+    .btn:hover {
+      background: #F59E0B;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(251, 191, 36, 0.3);
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    .btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .logo {
+      position: fixed;
+      bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #52525b;
+      font-size: 12px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .logo:hover { color: #a1a1aa; }
+
+    .logo svg {
+      width: 20px;
+      height: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon-wrapper">
+      <div class="icon-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+          <line x1="12" y1="13" x2="12" y2="15" opacity="0.6"/>
+          <circle cx="12" cy="17" r="0.5" fill="currentColor" opacity="0.6"/>
+        </svg>
+      </div>
+      <div class="pulse-ring"></div>
+    </div>
+
+    <h1>Aplicação não encontrada</h1>
+
+    <div class="subdomain" id="subdomain"></div>
+
+    <p class="description">
+      Esta aplicação foi removida ou não existe mais nesta URL.
+    </p>
+    <p class="support">
+      Se você acredita que isso é um erro, entre em contato com o responsável pela aplicação.
+    </p>
+
+    <a href="https://luxview.cloud" class="btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 18l-6-6 6-6"/>
+      </svg>
+      Ir para LuxView Cloud
+    </a>
+  </div>
+
+  <a href="https://luxview.cloud" class="logo">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+      <path d="M8 24h18a6 6 0 0 0 1.5-11.8A8 8 0 0 0 12 10a6 6 0 0 0-4 14z" fill="currentColor"/>
+      <polygon points="16,10 12.5,18 14.5,18 14.5,22 17.5,22 17.5,18 19.5,18" fill="#09090b"/>
+    </svg>
+    LuxView Cloud
+  </a>
+
+  <script>
+    var host = window.location.hostname;
+    var parts = host.split('.');
+    if (parts.length > 2) {
+      document.getElementById('subdomain').textContent = host;
+    } else {
+      document.getElementById('subdomain').textContent = host;
+    }
+  </script>
+</body>
+</html>

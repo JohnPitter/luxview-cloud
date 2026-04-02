@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/luxview/engine/pkg/logger"
@@ -77,6 +79,10 @@ const dockerfileRules = `
 - Read the source code to find the actual PORT. Do NOT guess.
 - For Node.js CMD: only use "npm start" if a "start" script exists. Otherwise run the entrypoint directly.
 - Pick the template that matches the detected stack and adapt it.
+- IMPORTANT: Detect system dependencies used by the app:
+  1. If the code calls execFile/spawn/exec with system binaries (git, grep, rg, curl, ffmpeg, etc.), add "RUN apk add --no-cache <package>" for Alpine. Common: git→git, rg→ripgrep, ffmpeg→ffmpeg.
+  2. If package.json dependencies include packages that need a browser (puppeteer, @puppeteer, playwright, @wppconnect-team/wppconnect, whatsapp-web.js, chrome-launcher), add Chromium: "RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont" and set ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser and ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true.
+  3. If package.json has sharp or canvas, add build deps: "RUN apk add --no-cache vips-dev build-base" for sharp, "RUN apk add --no-cache cairo-dev pango-dev jpeg-dev giflib-dev" for canvas.
 
 ## Templates (all Docker-tested)
 
@@ -170,7 +176,11 @@ Notes: if main.go is in cmd/<name>/, adjust build path: go build -o /server ./cm
   EXPOSE 8080
   CMD ["java", "-jar", "app.jar"]
 
-Notes: for Gradle replace Maven with: COPY build.gradle* settings.gradle* gradlew* ./ && COPY gradle ./gradle && RUN ./gradlew build -x test. Detect java.version in pom.xml to pick JDK version (8/11/17/21).
+Notes:
+- Detect java.version in pom.xml to pick JDK version (8/11/17/21).
+- For multi-module Maven projects: use -pl :module-name -am to build only the runnable module and its dependencies. COPY the entire project, not just src/.
+- CRITICAL: If a module is defined inside a <profile> in pom.xml (not in the default <modules>), you MUST activate that profile with -P<profileName>. Check pom.xml for <profiles> that contain <module> entries matching the target module.
+- For Gradle replace Maven with: COPY build.gradle* settings.gradle* gradlew* ./ && COPY gradle ./gradle && RUN ./gradlew build -x test.
 
 ### Java (Gradle)
   FROM gradle:8-jdk21 AS builder
@@ -210,12 +220,13 @@ Notes: replace <binary_name> with the name from Cargo.toml [package].name.
 
 ### pnpm Monorepo (pnpm-workspace.yaml present)
 DO NOT use multi-stage builds — pnpm symlinks break with COPY --from=builder.
+CRITICAL: NODE_ENV must NOT be "production" during install/build — devDependencies (tsup, typescript, etc.) are needed. Set NODE_ENV=production only AFTER the build.
 
   FROM node:20-alpine
-  ENV CI=true NODE_ENV=production
+  ENV CI=true
   RUN corepack enable && corepack prepare pnpm@latest --activate
   WORKDIR /app
-  COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json* ./
+  COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json* tsconfig.json* ./
   COPY packages/ ./packages/
   RUN rm -rf packages/*/node_modules && pnpm install --frozen-lockfile
   # If shared package "main" points to .ts, patch to .js:
@@ -229,10 +240,18 @@ DO NOT use multi-stage builds — pnpm symlinks break with COPY --from=builder.
   RUN pnpm install --frozen-lockfile --prod
   # Re-generate Prisma client (prod install loses it). Pin version to avoid incompatibility.
   RUN cd packages/api && npx --yes prisma@$(cat /tmp/prisma-version) generate
+  ENV NODE_ENV=production
   EXPOSE 3001
   CMD ["node", "packages/api/dist/index.js"]
 
-Adapt: only include Prisma lines if @prisma/client is in dependencies. Only include shared "main" patch if needed. Replace package names with actual ones. WORKDIR is always /app (root). CMD runs from root — NEVER "cd" in CMD. Keep ALL dist/ output (API may serve frontend static files).
+Adapt:
+- CRITICAL: Only include Prisma lines (prisma generate, prisma-version, etc.) if @prisma/client appears in a package.json dependencies. If the project uses Drizzle, Knex, TypeORM, or any other ORM — do NOT add any Prisma lines.
+- Only include shared "main" patch if needed.
+- Replace package names with actual ones.
+- WORKDIR is always /app (root). CMD runs from root — NEVER "cd" in CMD.
+- Keep ALL dist/ output (API may serve frontend static files).
+- Always include tsconfig.json in COPY if it exists (packages extend it via "extends": "../../tsconfig.json").
+- Also include apps/ directory if the app code is there, not just packages/.
 `
 
 // Managed services reference shared by both prompts.
@@ -263,6 +282,16 @@ Analyze the repository and generate an optimal Dockerfile for deployment. Also d
 ## Service Recommendations
 For each detected service: set "currentEvidence" to the file where you found it, provide 3-6 "manualSteps", and omit "codeChanges".
 
+## Environment Variables Detection
+You MUST include ALL environment variables found in the "Environment Variables Found in Source Code" section in the envHints array. Do not skip any.
+Rules:
+- Mark as required=true if the code throws/exits when the variable is missing
+- Mark as required=false if there's a default fallback value — but STILL include it (the default is usually for development only and won't work in production)
+- For URL variables (callback URLs, frontend URLs, webhook URLs), always include them — localhost defaults need to be changed for production
+- For secret/key variables, note in the description that the user should generate a secure value
+- Do NOT include these platform-injected variables: DATABASE_URL, PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE, REDIS_URL, MONGODB_URL, RABBITMQ_URL, STORAGE_PATH, SPRING_DATASOURCE_*
+- Do NOT include these Dockerfile-set variables: NODE_ENV, PORT, CI, ORCHESTRATOR_PORT (or similar port vars already set via ENV in the Dockerfile)
+
 ## Response Format
 Respond with valid JSON only — no markdown, no extra text.
 {
@@ -277,6 +306,16 @@ Respond with valid JSON only — no markdown, no extra text.
 const failureSystemPrompt = `You are a Deploy Agent for LuxView Cloud, a self-hosted PaaS platform.
 A deployment has FAILED. Analyze the repository, the Dockerfile used, and the build log. Diagnose the exact cause and provide a corrected Dockerfile.
 ` + dockerfileRules + `
+## Environment Variables Detection
+You MUST include ALL environment variables found in the "Environment Variables Found in Source Code" section in the envHints array. Do not skip any.
+Rules:
+- Mark as required=true if the code throws/exits when the variable is missing
+- Mark as required=false if there's a default fallback value — but STILL include it (the default is usually for development only and won't work in production)
+- For URL variables (callback URLs, frontend URLs, webhook URLs), always include them — localhost defaults need to be changed for production
+- For secret/key variables, note in the description that the user should generate a secure value
+- Do NOT include these platform-injected variables: DATABASE_URL, PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE, REDIS_URL, MONGODB_URL, RABBITMQ_URL, STORAGE_PATH, SPRING_DATASOURCE_*
+- Do NOT include these Dockerfile-set variables: NODE_ENV, PORT, CI, ORCHESTRATOR_PORT (or similar port vars already set via ENV in the Dockerfile)
+
 ## Response Format
 Respond with valid JSON only — no markdown, no extra text.
 {
@@ -318,6 +357,39 @@ func BuildContext(repoDir string) (string, error) {
 		for name, content := range files {
 			sb.WriteString(fmt.Sprintf("### %s\n```\n%s\n```\n\n", name, content))
 		}
+	}
+
+	// Scan source files for environment variable references and system binary usage
+	envVars, sysBins := scanSourceCode(repoDir)
+	if len(envVars) > 0 {
+		sb.WriteString("## Environment Variables Found in Source Code\n")
+		sb.WriteString("The following environment variables were detected by scanning source files:\n```\n")
+		for _, ev := range envVars {
+			sb.WriteString(fmt.Sprintf("%s (found in %s)\n", ev.name, ev.file))
+		}
+		sb.WriteString("```\n\n")
+		log.Debug().Int("env_vars_found", len(envVars)).Msg("environment variables scanned from source")
+	}
+	if len(sysBins) > 0 {
+		sb.WriteString("## System Binaries Used in Source Code\n")
+		sb.WriteString("The following system binaries are called via execFile/spawn/exec:\n```\n")
+		for _, bin := range sysBins {
+			sb.WriteString(fmt.Sprintf("%s (found in %s)\n", bin.name, bin.file))
+		}
+		sb.WriteString("```\nIMPORTANT: These must be installed in the Dockerfile (e.g. RUN apk add --no-cache git).\n\n")
+		log.Debug().Int("sys_bins_found", len(sysBins)).Msg("system binaries scanned from source")
+	}
+
+	// Detect npm deps that require system-level packages
+	nativeDeps := scanNativeDeps(repoDir)
+	if len(nativeDeps) > 0 {
+		sb.WriteString("## Dependencies Requiring System Packages\n")
+		sb.WriteString("These npm/pip packages require system-level binaries or libraries:\n```\n")
+		for _, d := range nativeDeps {
+			sb.WriteString(fmt.Sprintf("%s (in %s) → requires: %s\n", d.pkg, d.file, d.requires))
+		}
+		sb.WriteString("```\nIMPORTANT: Install these system packages in the Dockerfile BEFORE npm/pnpm install.\n\n")
+		log.Debug().Int("native_deps", len(nativeDeps)).Msg("native dependencies detected")
 	}
 
 	sb.WriteString("Analyze this repository and generate an optimal Dockerfile for deployment on LuxView Cloud.")
@@ -367,9 +439,221 @@ func BuildFailureContext(repoDir, buildLog, dockerfile string) (string, error) {
 	sb.WriteString(buildLog)
 	sb.WriteString("\n```\n\n")
 
+	// Scan source files for environment variable references and system binary usage
+	envVars, sysBins := scanSourceCode(repoDir)
+	if len(envVars) > 0 {
+		sb.WriteString("## Environment Variables Found in Source Code\n```\n")
+		for _, ev := range envVars {
+			sb.WriteString(fmt.Sprintf("%s (found in %s)\n", ev.name, ev.file))
+		}
+		sb.WriteString("```\n\n")
+	}
+	if len(sysBins) > 0 {
+		sb.WriteString("## System Binaries Used in Source Code\n```\n")
+		for _, bin := range sysBins {
+			sb.WriteString(fmt.Sprintf("%s (found in %s)\n", bin.name, bin.file))
+		}
+		sb.WriteString("```\nIMPORTANT: These must be installed in the Dockerfile.\n\n")
+	}
+
+	nativeDeps := scanNativeDeps(repoDir)
+	if len(nativeDeps) > 0 {
+		sb.WriteString("## Dependencies Requiring System Packages\n```\n")
+		for _, d := range nativeDeps {
+			sb.WriteString(fmt.Sprintf("%s (in %s) → requires: %s\n", d.pkg, d.file, d.requires))
+		}
+		sb.WriteString("```\n\n")
+	}
+
 	sb.WriteString("Diagnose the build failure and provide a corrected Dockerfile.")
 
 	return sb.String(), nil
+}
+
+// sourceRef represents a reference found in source code (env var or system binary).
+type sourceRef struct {
+	name string
+	file string
+}
+
+// nativeDep represents an npm/pip package that requires system-level binaries.
+type nativeDep struct {
+	pkg      string
+	file     string
+	requires string
+}
+
+// Packages that require system-level binaries or libraries.
+var nativeDepMap = map[string]string{
+	"puppeteer":                     "chromium nss freetype harfbuzz ca-certificates ttf-freefont (+ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true)",
+	"puppeteer-core":                "chromium nss freetype harfbuzz ca-certificates ttf-freefont (+ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser)",
+	"puppeteer-extra":               "chromium nss freetype harfbuzz ca-certificates ttf-freefont (+ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true)",
+	"@wppconnect-team/wppconnect":   "chromium nss freetype harfbuzz ca-certificates ttf-freefont (+ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true)",
+	"whatsapp-web.js":               "chromium nss freetype harfbuzz ca-certificates ttf-freefont (+ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true)",
+	"playwright":                    "chromium nss freetype harfbuzz ca-certificates ttf-freefont",
+	"@playwright/test":              "chromium nss freetype harfbuzz ca-certificates ttf-freefont",
+	"chrome-launcher":               "chromium nss freetype harfbuzz ca-certificates ttf-freefont",
+	"sharp":                         "vips-dev (already handled by npm, but may need: apk add --no-cache vips-dev)",
+	"canvas":                        "cairo-dev pango-dev jpeg-dev giflib-dev build-base",
+	"bcrypt":                        "build-base python3",
+	"better-sqlite3":                "build-base python3",
+	"node-gyp":                      "build-base python3 make g++",
+	"@mapbox/node-pre-gyp":          "build-base python3",
+	"grpc":                          "build-base",
+	"@grpc/grpc-js":                 "(no native deps)",
+	"sqlite3":                       "build-base python3 sqlite-dev",
+	"pg-native":                     "postgresql-dev build-base",
+	"ssh2":                          "build-base",
+}
+
+// scanNativeDeps scans all package.json files for dependencies that require system packages.
+func scanNativeDeps(repoDir string) []nativeDep {
+	var results []nativeDep
+	seen := make(map[string]bool)
+
+	_ = filepath.Walk(repoDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() && skipDirs[info.Name()] {
+			return filepath.SkipDir
+		}
+		if info.Name() != "package.json" {
+			return nil
+		}
+
+		content, readErr := readFileLimited(path)
+		if readErr != nil || len(content) == 0 {
+			return nil
+		}
+
+		rel, relErr := filepath.Rel(repoDir, path)
+		if relErr != nil {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+
+		for depName, requires := range nativeDepMap {
+			if strings.Contains(requires, "no native") {
+				continue
+			}
+			// Check if dep appears in dependencies or devDependencies
+			if strings.Contains(content, `"`+depName+`"`) && !seen[depName] {
+				seen[depName] = true
+				results = append(results, nativeDep{pkg: depName, file: rel, requires: requires})
+			}
+		}
+		return nil
+	})
+
+	sort.Slice(results, func(i, j int) bool { return results[i].pkg < results[j].pkg })
+	return results
+}
+
+// scanSourceCode scans source files for environment variable references and system binary calls.
+// Returns deduplicated lists of env vars and system binaries with the files where they were found.
+func scanSourceCode(repoDir string) (envVars []sourceRef, sysBins []sourceRef) {
+	log := logger.With("deploy-agent")
+	seenEnv := make(map[string]string)
+	seenBin := make(map[string]string)
+
+	// Env var patterns
+	envPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`process\.env\.([A-Z][A-Z0-9_]+)`),
+		regexp.MustCompile(`os\.Getenv\("([A-Z][A-Z0-9_]+)"\)`),
+		regexp.MustCompile(`os\.environ\[["']([A-Z][A-Z0-9_]+)["']\]`),
+		regexp.MustCompile(`os\.environ\.get\(["']([A-Z][A-Z0-9_]+)["']`),
+		regexp.MustCompile(`env\(["']([A-Z][A-Z0-9_]+)["']`),
+	}
+
+	// System binary patterns: execFile("git"...), spawn("git"...), exec.Command("git"...)
+	binPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`execFile\w*\(\s*["']([a-z][\w-]+)["']`),
+		regexp.MustCompile(`spawn\(\s*["']([a-z][\w-]+)["']`),
+		regexp.MustCompile(`exec\.Command\w*\(\s*["']([a-z][\w-]+)["']`),
+		regexp.MustCompile(`subprocess\.\w+\(\s*\[?\s*["']([a-z][\w-]+)["']`),
+	}
+
+	// Known system binaries (not npm packages or node builtins)
+	knownBins := map[string]bool{
+		"git": true, "grep": true, "rg": true, "curl": true, "wget": true,
+		"ffmpeg": true, "convert": true, "chromium": true, "chrome": true,
+		"python": true, "python3": true, "pip": true, "pip3": true,
+		"ssh": true, "scp": true, "rsync": true, "tar": true, "unzip": true,
+		"sed": true, "awk": true, "find": true, "make": true, "gcc": true,
+		"g++": true, "cmake": true, "openssl": true, "sqlite3": true,
+	}
+
+	sourceExts := map[string]bool{
+		".ts": true, ".tsx": true, ".js": true, ".jsx": true,
+		".go": true, ".py": true, ".rb": true, ".rs": true,
+		".java": true, ".kt": true,
+	}
+
+	_ = filepath.Walk(repoDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() && skipDirs[info.Name()] {
+			return filepath.SkipDir
+		}
+		if info.IsDir() || info.Size() > int64(maxFileSize) {
+			return nil
+		}
+
+		ext := filepath.Ext(info.Name())
+		if !sourceExts[ext] {
+			return nil
+		}
+
+		content, readErr := readFileLimited(path)
+		if readErr != nil || len(content) == 0 {
+			return nil
+		}
+
+		rel, relErr := filepath.Rel(repoDir, path)
+		if relErr != nil {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+
+		// Scan for env vars
+		for _, re := range envPatterns {
+			for _, m := range re.FindAllStringSubmatch(content, -1) {
+				if len(m) >= 2 {
+					if _, exists := seenEnv[m[1]]; !exists {
+						seenEnv[m[1]] = rel
+					}
+				}
+			}
+		}
+
+		// Scan for system binary calls
+		for _, re := range binPatterns {
+			for _, m := range re.FindAllStringSubmatch(content, -1) {
+				if len(m) >= 2 && knownBins[m[1]] {
+					if _, exists := seenBin[m[1]]; !exists {
+						seenBin[m[1]] = rel
+					}
+				}
+			}
+		}
+
+		return nil
+	})
+
+	for name, file := range seenEnv {
+		envVars = append(envVars, sourceRef{name: name, file: file})
+	}
+	for name, file := range seenBin {
+		sysBins = append(sysBins, sourceRef{name: name, file: file})
+	}
+
+	sort.Slice(envVars, func(i, j int) bool { return envVars[i].name < envVars[j].name })
+	sort.Slice(sysBins, func(i, j int) bool { return sysBins[i].name < sysBins[j].name })
+
+	log.Debug().Int("env_vars", len(envVars)).Int("sys_bins", len(sysBins)).Msg("source code scan complete")
+	return envVars, sysBins
 }
 
 // buildFileTree walks the repo and returns a text tree of files (max 200 files).

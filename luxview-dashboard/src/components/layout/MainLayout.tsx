@@ -45,11 +45,13 @@ export function MainLayout() {
   const initialize = useAuthStore((s) => s.initialize);
   const notifications = useNotificationsStore((s) => s.notifications);
   const markRead = useNotificationsStore((s) => s.markRead);
+  const pruneExpired = useNotificationsStore((s) => s.pruneExpired);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
   useEffect(() => {
     initialize();
-  }, [initialize]);
+    pruneExpired();
+  }, [initialize, pruneExpired]);
 
   // Only show toasts for recent unread notifications (< 6s old)
   const toasts = notifications.filter(

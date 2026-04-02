@@ -192,3 +192,84 @@ func (h *SettingsHandler) TestAIConnection(w http.ResponseWriter, r *http.Reques
 		"model":   usedModel,
 	})
 }
+
+// GetAuthSettings returns platform auth configuration.
+func (h *SettingsHandler) GetAuthSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	val, _ := h.settingsRepo.Get(ctx, "platform_require_auth")
+	requireAuth := val != "false" // default true
+	writeJSON(w, http.StatusOK, map[string]bool{"require_auth": requireAuth})
+}
+
+// UpdateAuthSettings updates platform auth configuration.
+func (h *SettingsHandler) UpdateAuthSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req struct {
+		RequireAuth bool `json:"require_auth"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	val := "true"
+	if !req.RequireAuth {
+		val = "false"
+	}
+	if err := h.settingsRepo.Set(ctx, "platform_require_auth", val, false); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update auth settings")
+		return
+	}
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "update",
+		ResourceType: "setting",
+		ResourceID:   "auth",
+		ResourceName: "auth",
+		NewValues:    map[string]interface{}{"require_auth": req.RequireAuth},
+		IPAddress:    clientIP(r),
+	})
+	writeJSON(w, http.StatusOK, map[string]string{"message": "auth settings updated"})
+}
+
+// GetTimezone returns the platform timezone setting.
+func (h *SettingsHandler) GetTimezone(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tz, _ := h.settingsRepo.Get(ctx, "platform_timezone")
+	if tz == "" {
+		tz = "UTC"
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"timezone": tz})
+}
+
+// UpdateTimezone sets the platform timezone.
+func (h *SettingsHandler) UpdateTimezone(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req struct {
+		Timezone string `json:"timezone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Timezone == "" {
+		writeError(w, http.StatusBadRequest, "timezone is required")
+		return
+	}
+
+	if err := h.settingsRepo.Set(ctx, "platform_timezone", req.Timezone, false); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update timezone")
+		return
+	}
+
+	user := middleware.GetUser(ctx)
+	h.auditSvc.Log(ctx, service.AuditEntry{
+		ActorID:      user.ID,
+		ActorUsername: user.Username,
+		Action:       "update",
+		ResourceType: "setting",
+		ResourceID:   "timezone",
+		ResourceName: "timezone",
+		NewValues:    map[string]interface{}{"timezone": req.Timezone},
+		IPAddress:    clientIP(r),
+	})
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "timezone updated"})
+}

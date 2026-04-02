@@ -187,6 +187,69 @@ export function Settings() {
         </div>
       </GlassCard>
 
+      {/* Notification Settings */}
+      <GlassCard className="mb-4">
+        <div className="flex items-center gap-3 mb-4">
+          <Bell size={18} className="text-zinc-400" />
+          <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+            {t('settings.notifications.title')}
+          </h3>
+        </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                {t('settings.notifications.expiration')}
+              </p>
+              <p className="text-[11px] text-zinc-500">{t('settings.notifications.expirationDescription')}</p>
+            </div>
+            <select
+              value={useNotificationsStore.getState().expirationHours}
+              onChange={(e) => {
+                useNotificationsStore.getState().setExpirationHours(Number(e.target.value));
+                addNotification({ type: 'success', title: t('settings.notifications.saved') });
+              }}
+              className={`text-xs rounded-lg border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 ${
+                isDark
+                  ? 'bg-zinc-900 border-zinc-700 text-zinc-300'
+                  : 'bg-white border-zinc-200 text-zinc-800'
+              }`}
+            >
+              <option value="24">24h</option>
+              <option value="72">3 {t('common.days')}</option>
+              <option value="168">7 {t('common.days')}</option>
+              <option value="720">30 {t('common.days')}</option>
+              <option value="0">{t('settings.notifications.neverExpire')}</option>
+            </select>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                {t('settings.notifications.maxCount')}
+              </p>
+              <p className="text-[11px] text-zinc-500">{t('settings.notifications.maxCountDescription')}</p>
+            </div>
+            <select
+              value={useNotificationsStore.getState().maxNotifications}
+              onChange={(e) => {
+                useNotificationsStore.getState().setMaxNotifications(Number(e.target.value));
+                addNotification({ type: 'success', title: t('settings.notifications.saved') });
+              }}
+              className={`text-xs rounded-lg border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 ${
+                isDark
+                  ? 'bg-zinc-900 border-zinc-700 text-zinc-300'
+                  : 'bg-white border-zinc-200 text-zinc-800'
+              }`}
+            >
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+              <option value="500">500</option>
+            </select>
+          </div>
+        </div>
+      </GlassCard>
+
       {/* Replay Tutorials */}
       <GlassCard data-tour="replay-tours">
         <div className="flex items-center gap-3 mb-4">

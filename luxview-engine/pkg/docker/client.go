@@ -94,6 +94,12 @@ func (c *Client) RestartContainer(ctx context.Context, containerID string, timeo
 	return c.cli.ContainerRestart(ctx, containerID, opts)
 }
 
+// UpdateContainerResources updates the resource limits of a running container.
+func (c *Client) UpdateContainerResources(ctx context.Context, containerID string, resources container.UpdateConfig) error {
+	_, err := c.cli.ContainerUpdate(ctx, containerID, resources)
+	return err
+}
+
 // InspectContainer returns container details.
 func (c *Client) InspectContainer(ctx context.Context, containerID string) (types.ContainerJSON, error) {
 	return c.cli.ContainerInspect(ctx, containerID)
@@ -207,10 +213,20 @@ func (c *Client) SystemPrune(ctx context.Context) (*PruneResult, error) {
 		result.TotalReclaimed += int64(containerReport.SpaceReclaimed)
 	}
 
-	// Prune all unused images (not just dangling)
+	// Prune all unused images (including tagged ones not used by any container)
 	pruneFilters := filters.NewArgs()
-	pruneFilters.Add("dangling", "false")
+	pruneFilters.Add("dangling", "true")
 	imageReport, err := c.cli.ImagesPrune(ctx, pruneFilters)
+	if err == nil {
+		result.ImagesRemoved += len(imageReport.ImagesDeleted)
+		result.ImagesReclaimed += int64(imageReport.SpaceReclaimed)
+		result.TotalReclaimed += int64(imageReport.SpaceReclaimed)
+	}
+
+	// Also prune non-dangling unused images
+	allFilters := filters.NewArgs()
+	allFilters.Add("dangling", "false")
+	imageReport, err = c.cli.ImagesPrune(ctx, allFilters)
 	if err == nil {
 		result.ImagesRemoved = len(imageReport.ImagesDeleted)
 		result.ImagesReclaimed = int64(imageReport.SpaceReclaimed)

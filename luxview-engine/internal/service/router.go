@@ -73,12 +73,35 @@ func (rs *RouterService) GenerateConfig(ctx context.Context) (*TraefikConfig, er
 	}
 
 	for _, app := range apps {
-		if app.AssignedPort == 0 || app.Status != model.AppStatusRunning {
+		if app.AssignedPort == 0 {
 			continue
 		}
 
 		routerName := fmt.Sprintf("app-%s", app.Subdomain)
 		serviceName := fmt.Sprintf("app-%s", app.Subdomain)
+
+		// Apps in maintenance, building, or deploying show the maintenance page
+		if app.Status == model.AppStatusMaintenance || app.Status == model.AppStatusBuilding || app.Status == "deploying" {
+			config.HTTP.Routers[routerName] = TraefikRouter{
+				Rule:    fmt.Sprintf("Host(`%s.%s`)", app.Subdomain, rs.domain),
+				Service: "maintenance-svc",
+				TLS:     &TraefikTLS{CertResolver: "letsencrypt"},
+			}
+			// Custom domain maintenance route
+			if app.CustomDomain != nil && *app.CustomDomain != "" {
+				customRouterName := fmt.Sprintf("app-%s-custom", app.Subdomain)
+				config.HTTP.Routers[customRouterName] = TraefikRouter{
+					Rule:    fmt.Sprintf("Host(`%s`)", *app.CustomDomain),
+					Service: "maintenance-svc",
+					TLS:     &TraefikTLS{CertResolver: "letsencrypt"},
+				}
+			}
+			continue
+		}
+
+		if app.Status != model.AppStatusRunning {
+			continue
+		}
 
 		config.HTTP.Routers[routerName] = TraefikRouter{
 			Rule:    fmt.Sprintf("Host(`%s.%s`)", app.Subdomain, rs.domain),
@@ -86,10 +109,31 @@ func (rs *RouterService) GenerateConfig(ctx context.Context) (*TraefikConfig, er
 			TLS:     &TraefikTLS{CertResolver: "letsencrypt"},
 		}
 
+		// Custom domain route
+		if app.CustomDomain != nil && *app.CustomDomain != "" {
+			customRouterName := fmt.Sprintf("app-%s-custom", app.Subdomain)
+			config.HTTP.Routers[customRouterName] = TraefikRouter{
+				Rule:    fmt.Sprintf("Host(`%s`)", *app.CustomDomain),
+				Service: serviceName,
+				TLS:     &TraefikTLS{CertResolver: "letsencrypt"},
+			}
+		}
+
 		config.HTTP.Services[serviceName] = TraefikService{
 			LoadBalancer: TraefikLB{
 				Servers: []TraefikServer{
 					{URL: fmt.Sprintf("http://host.docker.internal:%d", app.AssignedPort)},
+				},
+			},
+		}
+	}
+
+	// Add maintenance service — points to dashboard which serves app-maintenance.html
+	if len(config.HTTP.Routers) > 0 {
+		config.HTTP.Services["maintenance-svc"] = TraefikService{
+			LoadBalancer: TraefikLB{
+				Servers: []TraefikServer{
+					{URL: "http://luxview-dashboard:80"},
 				},
 			},
 		}

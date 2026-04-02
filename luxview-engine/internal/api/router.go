@@ -66,7 +66,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	})
 
 	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(deps.Config, deps.UserRepo, deps.EncryptKey, deps.AuditSvc)
+	authHandler := handlers.NewAuthHandler(deps.Config, deps.UserRepo, deps.SettingsRepo, deps.EncryptKey, deps.AuditSvc)
 	webhookURL := deps.Config.BaseURL + "/api/webhooks/github"
 	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.BuildQueue, deps.EncryptKey, deps.AuditSvc, webhookURL, deps.Config.InternalToken)
 	deployHandler := handlers.NewDeploymentHandler(deps.DeployRepo, deps.AppRepo, deps.BuildQueue, deps.AuditSvc)
@@ -101,6 +101,9 @@ func NewRouter(deps Deps) *chi.Mux {
 		// Plans (public, for landing page)
 		r.Get("/plans", planHandler.ListActive)
 
+		// Auth settings (public, for dashboard public mode check)
+		r.Get("/auth/settings", settingsHandler.GetAuthSettings)
+
 		// Webhooks (public, verified by signature)
 		r.Post("/webhooks/github", webhookHandler.GitHubWebhook)
 
@@ -131,6 +134,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Post("/apps/{id}/deploy", appHandler.Deploy)
 			r.Post("/apps/{id}/restart", appHandler.Restart)
 			r.Post("/apps/{id}/stop", appHandler.Stop)
+			r.Put("/apps/{id}/maintenance", appHandler.SetMaintenance)
 			r.Get("/apps/{id}/logs", appHandler.ContainerLogs)
 			r.Get("/apps/{id}/logs/stream", appHandler.ContainerLogsStream)
 
@@ -207,10 +211,13 @@ func NewRouter(deps Deps) *chi.Mux {
 				r.Get("/admin/settings/ai", settingsHandler.GetAISettings)
 				r.Put("/admin/settings/ai", settingsHandler.UpdateAISettings)
 				r.Post("/admin/settings/ai/test", settingsHandler.TestAIConnection)
+				r.Get("/admin/settings/timezone", settingsHandler.GetTimezone)
+				r.Put("/admin/settings/timezone", settingsHandler.UpdateTimezone)
 				r.Get("/admin/settings/cleanup", cleanupHandler.GetCleanupSettings)
 				r.Put("/admin/settings/cleanup", cleanupHandler.UpdateCleanupSettings)
 				r.Post("/admin/cleanup/trigger", cleanupHandler.TriggerCleanup)
 				r.Get("/admin/cleanup/disk-usage", cleanupHandler.DiskUsage)
+				r.Put("/admin/settings/auth", settingsHandler.UpdateAuthSettings)
 				r.Get("/admin/audit-logs", auditHandler.ListAuditLogs)
 				r.Get("/admin/audit-logs/stats", auditHandler.AuditStats)
 			})

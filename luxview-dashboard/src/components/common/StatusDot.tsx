@@ -13,6 +13,7 @@ const statusConfig: Record<AppStatus, { color: string; pulse: boolean; label: st
   stopped: { color: 'bg-zinc-500', pulse: false, label: 'Stopped' },
   error: { color: 'bg-red-500', pulse: false, label: 'Error' },
   sleeping: { color: 'bg-violet-400', pulse: false, label: 'Sleeping' },
+  maintenance: { color: 'bg-amber-400', pulse: true, label: 'Maintenance' },
 };
 
 const sizeMap = {

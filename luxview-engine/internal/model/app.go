@@ -10,11 +10,12 @@ import (
 type AppStatus string
 
 const (
-	AppStatusBuilding AppStatus = "building"
-	AppStatusRunning  AppStatus = "running"
-	AppStatusStopped  AppStatus = "stopped"
-	AppStatusError    AppStatus = "error"
-	AppStatusSleeping AppStatus = "sleeping"
+	AppStatusBuilding    AppStatus = "building"
+	AppStatusRunning     AppStatus = "running"
+	AppStatusStopped     AppStatus = "stopped"
+	AppStatusError       AppStatus = "error"
+	AppStatusSleeping    AppStatus = "sleeping"
+	AppStatusMaintenance AppStatus = "maintenance"
 )
 
 type ResourceLimits struct {
@@ -41,6 +42,7 @@ type App struct {
 	AutoDeploy       bool            `json:"auto_deploy"`
 	WebhookID        *int64          `json:"webhook_id,omitempty"`
 	CustomDockerfile *string         `json:"custom_dockerfile,omitempty"`
+	CustomDomain    *string          `json:"custom_domain,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`
 	UpdatedAt        time.Time       `json:"updated_at"`
 }
@@ -60,6 +62,7 @@ type UpdateAppRequest struct {
 	EnvVars        map[string]string  `json:"env_vars,omitempty"`
 	ResourceLimits *ResourceLimits    `json:"resource_limits,omitempty"`
 	AutoDeploy     *bool              `json:"auto_deploy,omitempty"`
+	CustomDomain   *string            `json:"custom_domain,omitempty"`
 }
 
 // ReservedSubdomains that cannot be used by users.
