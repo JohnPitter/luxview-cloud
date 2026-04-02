@@ -444,7 +444,7 @@ func (h *ExplorerHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 			if currentUsage+header.Size > planLimit {
 				writeError(w, http.StatusForbidden, fmt.Sprintf(
 					"storage quota exceeded: used %s + %s would exceed limit of %s",
-					formatBytes(currentUsage), formatBytes(header.Size), user.Plan.MaxDiskPerApp,
+					formatBytesDB(currentUsage), formatBytesDB(header.Size), user.Plan.MaxDiskPerApp,
 				))
 				return
 			}
@@ -567,8 +567,8 @@ func (h *ExplorerHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "deleted"})
 }
 
-// formatBytes formats bytes into a human-readable string.
-func formatBytes(b int64) string {
+// formatBytesDB formats bytes into a human-readable string (no space between value and unit).
+func formatBytesDB(b int64) string {
 	const (
 		kb = 1024
 		mb = kb * 1024
