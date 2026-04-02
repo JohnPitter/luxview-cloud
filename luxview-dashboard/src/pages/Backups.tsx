@@ -93,7 +93,7 @@ export function Backups() {
         backupsApi.getSettings(),
         backupsApi.list(limit, page * limit),
       ]);
-      setSettings(settingsData);
+      setSettings({ ...settingsData, databases: settingsData.databases || [] });
       setBackups(backupsData.backups || []);
       setTotal(backupsData.total);
     } catch {
