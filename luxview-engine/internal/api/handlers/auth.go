@@ -35,15 +35,8 @@ func NewAuthHandler(cfg *config.Config, userRepo *repository.UserRepo, settingsR
 }
 
 // GitHubLogin redirects to GitHub OAuth authorization page.
-// If auth is disabled (maintenance mode), block login for non-admins.
+// Always allows the OAuth flow — admin check happens in the callback after authentication.
 func (h *AuthHandler) GitHubLogin(w http.ResponseWriter, r *http.Request) {
-	// Check if auth is disabled (maintenance mode) — admins can bypass with ?admin=1
-	if r.URL.Query().Get("admin") != "1" {
-		if val, err := h.settingsRepo.Get(r.Context(), "platform_require_auth"); err == nil && val == "false" {
-			http.Error(w, "Login is temporarily disabled for maintenance", http.StatusServiceUnavailable)
-			return
-		}
-	}
 	url := fmt.Sprintf(
 		"https://github.com/login/oauth/authorize?client_id=%s&scope=repo,user:email&redirect_uri=%s/api/auth/github/callback",
 		h.cfg.GitHubClientID,
@@ -106,6 +99,15 @@ func (h *AuthHandler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 		log.Error().Err(err).Msg("failed to upsert user")
 		writeError(w, http.StatusInternalServerError, "failed to save user")
 		return
+	}
+
+	// If maintenance mode is active, only admins can log in
+	if val, err := h.settingsRepo.Get(ctx, "platform_require_auth"); err == nil && val == "false" {
+		if user.Role != model.RoleAdmin {
+			log.Warn().Str("user", user.Username).Msg("non-admin login blocked during maintenance")
+			http.Error(w, "Login is temporarily disabled for maintenance", http.StatusServiceUnavailable)
+			return
+		}
 	}
 
 	// Generate JWT

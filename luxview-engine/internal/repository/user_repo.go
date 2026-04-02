@@ -123,11 +123,11 @@ func (r *UserRepo) Upsert(ctx context.Context, u *model.User) error {
 		return fmt.Errorf("upsert user: %w", err)
 	}
 
-	// Re-read the ID after upsert
+	// Re-read the ID and role after upsert (role is preserved from DB, not overwritten)
 	if err := r.db.Pool.QueryRow(ctx,
-		`SELECT id FROM users WHERE github_id = $1`, u.GitHubID,
-	).Scan(&u.ID); err != nil {
-		return fmt.Errorf("read user id after upsert: %w", err)
+		`SELECT id, role FROM users WHERE github_id = $1`, u.GitHubID,
+	).Scan(&u.ID, &u.Role); err != nil {
+		return fmt.Errorf("read user after upsert: %w", err)
 	}
 
 	// Assign default plan if user has no plan

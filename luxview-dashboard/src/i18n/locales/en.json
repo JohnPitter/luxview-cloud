@@ -934,7 +934,7 @@
   "admin.cleanup.saved": "Cleanup settings saved",
   "admin.cleanup.failedToSave": "Failed to save cleanup settings",
   "admin.auth.title": "Require Authentication",
-  "admin.auth.description": "When disabled, the GitHub login button is blocked for regular users. Admins can still log in via /api/auth/github?admin=1.",
+  "admin.auth.description": "When disabled, the login button is hidden for regular users. Admins can still log in normally — non-admin users are blocked after GitHub authentication.",
   "admin.auth.updated": "Authentication settings updated",
   "admin.auth.updateFailed": "Failed to update authentication settings",
   "admin.timezone.title": "Platform Timezone",

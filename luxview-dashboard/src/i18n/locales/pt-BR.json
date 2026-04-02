@@ -934,7 +934,7 @@
   "admin.cleanup.saved": "Configurações de limpeza salvas",
   "admin.cleanup.failedToSave": "Erro ao salvar configurações de limpeza",
   "admin.auth.title": "Exigir Autenticação",
-  "admin.auth.description": "Quando desativado, o botão de login via GitHub é bloqueado para usuários comuns. Admins podem acessar via /api/auth/github?admin=1.",
+  "admin.auth.description": "Quando desativado, o botão de login fica oculto para usuários comuns. Admins ainda podem logar normalmente — usuários não-admin são bloqueados após a autenticação do GitHub.",
   "admin.auth.updated": "Configurações de autenticação atualizadas",
   "admin.auth.updateFailed": "Falha ao atualizar configurações de autenticação",
   "admin.timezone.title": "Fuso Horário da Plataforma",
