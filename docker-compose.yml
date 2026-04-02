@@ -46,6 +46,7 @@ services:
       - build-cache:/tmp/builds
       - traefik-logs:/var/log/traefik:ro
       - /data/luxview/storage:/data/luxview/storage
+      - /backups:/backups
     environment:
       - PORT=${ENGINE_PORT:-8080}
       - DATABASE_URL=postgres://luxview:${DB_PASSWORD}@pg-platform:5432/luxview_platform?sslmode=disable
