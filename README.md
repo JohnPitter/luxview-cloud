@@ -6,14 +6,15 @@
 
 **Your own Platform as a Service — deploy from GitHub in one click.**
 
-[![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev)
 [![Docker](https://img.shields.io/badge/Docker-Powered-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
 [![Traefik](https://img.shields.io/badge/Traefik-Proxy-24A1C1?style=flat-square&logo=traefikproxy&logoColor=white)](https://traefik.io)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://typescriptlang.org)
+[![Pipeline](https://img.shields.io/github/actions/workflow/status/JohnPitter/luxview-cloud/pipeline.yml?branch=main&style=flat-square&label=Pipeline)](https://github.com/JohnPitter/luxview-cloud/actions)
 [![License](https://img.shields.io/badge/License-Private-red?style=flat-square)](#)
 
-[Features](#-features) · [Architecture](#-architecture) · [Deploy Flow](#-deploy-flow) · [Getting Started](#-getting-started) · [Tech Stack](#-tech-stack)
+[Features](#-features) · [Architecture](#-architecture) · [Deploy Flow](#-deploy-flow) · [CI/CD](#-cicd-pipeline) · [Getting Started](#-getting-started) · [Tech Stack](#-tech-stack)
 
 </div>
 
@@ -37,16 +38,18 @@ Think of it as your own **Heroku / Railway / Render** — but you own the infras
 | **Managed Services** | Provision PostgreSQL, Redis, MongoDB, RabbitMQ, or S3 Object Storage per app |
 | **DB Explorer** | Browse tables, view schemas, and execute SQL queries directly in the dashboard |
 | **S3 File Browser** | Upload, download, and manage files in your S3-compatible storage buckets |
+| **Email Hosting** | Managed email service with mailbox provisioning and Roundcube webmail |
 | **Environment Variables** | Encrypted at rest (AES-256-GCM), injected at deploy time |
 | **Real-time Metrics** | CPU, RAM, and network usage per container — live in the dashboard |
 | **Real-time Logs** | SSE-streamed runtime logs (newest first, paginated) + full build logs |
 | **Auto Deploy** | Push to your branch, GitHub webhook triggers a new deploy automatically |
 | **Rollback** | One-click rollback to any previous successful deployment |
-| **Alerts** | Configure CPU/memory thresholds and get notified |
+| **Alerts & Notifications** | Configure CPU/memory thresholds and get notified via persistent notifications |
 | **Resource Limits** | CPU and memory limits per app (cgroups-enforced) |
 | **Internationalization** | Full i18n — English, Português (BR), Español. Auto-detects browser language |
 | **Guided Tours** | Interactive tutorials on every page via react-joyride. First-time onboarding included |
 | **GitHub OAuth** | Secure login via GitHub — no passwords to manage |
+| **Maintenance Mode** | Toggle auth on/off for platform maintenance |
 
 ---
 
@@ -80,15 +83,22 @@ graph TB
             RABBIT[("RabbitMQ")]
             MINIO[("MinIO<br/>S3 Storage")]
         end
+
+        subgraph Email["Email Services"]
+            MAIL["Mailserver<br/>(docker-mailserver)"]
+            ROUNDCUBE["Roundcube<br/>Webmail"]
+        end
     end
 
     USER -->|HTTPS| TRAEFIK
     TRAEFIK -->|"/api/*"| ENGINE
     TRAEFIK -->|"/"| DASHBOARD
     TRAEFIK -->|"*.luxview.cloud"| Apps
+    TRAEFIK -->|"mail.*"| ROUNDCUBE
     ENGINE --> PG_PLATFORM
     ENGINE -->|"Docker API"| Apps
     ENGINE --> Shared
+    ENGINE --> MAIL
     A1 -.-> PG_SHARED
     A2 -.-> REDIS
     A3 -.-> MINIO
@@ -102,6 +112,8 @@ graph TB
     style MONGO fill:#47A248,color:#fff,stroke:none
     style RABBIT fill:#FF6600,color:#fff,stroke:none
     style MINIO fill:#C72E49,color:#fff,stroke:none
+    style MAIL fill:#4A90D9,color:#fff,stroke:none
+    style ROUNDCUBE fill:#37A3D9,color:#fff,stroke:none
 ```
 
 ### How the pieces fit together
@@ -109,13 +121,15 @@ graph TB
 | Component | Role | Tech |
 |---|---|---|
 | **Traefik** | Reverse proxy, SSL termination, wildcard routing | Traefik v3 |
-| **LuxView Engine** | REST API — builds, deploys, manages containers, provisions services | Go + Chi |
-| **Dashboard** | Web UI — deploy wizard, app management, metrics, logs, DB explorer, file browser | React + Vite + Tailwind |
+| **LuxView Engine** | REST API — builds, deploys, manages containers, provisions services | Go 1.26 + Chi |
+| **Dashboard** | Web UI — deploy wizard, app management, metrics, logs, DB explorer, file browser | React 19 + Vite + Tailwind |
 | **Docker Engine** | Runs isolated user app containers | Docker API |
 | **PostgreSQL (platform)** | Stores users, apps, deployments, services, metrics, alerts | PostgreSQL 16 |
 | **PostgreSQL (shared)** | User app databases — one isolated DB + user per app | PostgreSQL 16 |
 | **Redis / MongoDB / RabbitMQ** | Optional services provisioned per app | Managed containers |
 | **MinIO** | S3-compatible object storage — one bucket per app | MinIO |
+| **Mailserver** | Email hosting with SMTP/IMAP | docker-mailserver |
+| **Roundcube** | Webmail client | Roundcube |
 
 ---
 
@@ -180,6 +194,50 @@ flowchart LR
     style M fill:#10B981,color:#fff,stroke:none
     style N fill:#EF4444,color:#fff,stroke:none
 ```
+
+---
+
+## CI/CD Pipeline
+
+Every push to `main` runs through an automated pipeline with **3 sequential stages**:
+
+```mermaid
+flowchart LR
+    subgraph "Stage 1: Frontend"
+        FB[Typecheck + Build]
+        FS[Security Audit]
+    end
+
+    subgraph "Stage 2: Backend"
+        BB[Vet + Build]
+        BS[govulncheck]
+    end
+
+    subgraph "Stage 3: Deploy"
+        D[SSH → VPS<br/>docker compose up]
+    end
+
+    FB --> BB
+    FS --> BB
+    FB --> BS
+    FS --> BS
+    BB --> D
+    BS --> D
+
+    style FB fill:#61DAFB,color:#000,stroke:none
+    style FS fill:#61DAFB,color:#000,stroke:none
+    style BB fill:#00ADD8,color:#fff,stroke:none
+    style BS fill:#00ADD8,color:#fff,stroke:none
+    style D fill:#10B981,color:#fff,stroke:none
+```
+
+| Stage | Jobs | What it validates |
+|---|---|---|
+| **Frontend** | `tsc -b`, `vite build`, `npm audit` | Type safety, build integrity, dependency security |
+| **Backend** | `go vet`, `go build`, `govulncheck` | Code correctness, compilation, vulnerability scan |
+| **Deploy** | SSH into VPS, `git pull`, `docker compose up --build` | Automated deployment (only on `push`, skipped for PRs) |
+
+Pull requests run Stages 1 and 2 only (no deploy).
 
 ---
 
@@ -294,13 +352,15 @@ make prod && make migrate
 | Layer | Technology |
 |:---:|:---:|
 | **Proxy** | Traefik v3 (SSL, routing, middleware) |
-| **Backend** | Go 1.23, Chi router, pgx, Docker SDK, MinIO SDK |
-| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, Zustand, react-i18next, react-joyride |
+| **Backend** | Go 1.26, Chi router, pgx, Docker SDK, MinIO SDK |
+| **Frontend** | React 19, TypeScript 5, Vite, Tailwind CSS, Zustand, react-i18next, react-joyride |
 | **Database** | PostgreSQL 16 |
 | **Storage** | MinIO (S3-compatible) |
+| **Email** | docker-mailserver + Roundcube |
 | **Containers** | Docker Engine API |
 | **Auth** | GitHub OAuth + JWT |
 | **Encryption** | AES-256-GCM (credentials at rest) |
+| **CI/CD** | GitHub Actions (build → security → deploy) |
 | **Observability** | Structured logging (zerolog), real-time metrics |
 
 </div>
@@ -311,42 +371,46 @@ make prod && make migrate
 
 ```
 luxview-cloud/
-  docker-compose.yml            # Production compose
-  docker-compose.dev.yml        # Development override
-  Makefile                      # Common commands
+  .github/workflows/pipeline.yml  # CI/CD: build, security scan, deploy
+  docker-compose.yml              # Production compose
+  docker-compose.dev.yml          # Development override
+  Makefile                        # Common commands
 
-  luxview-engine/               # Go API backend
-    cmd/engine/main.go          # Entry point + worker orchestration
+  luxview-engine/                 # Go API backend
+    cmd/engine/main.go            # Entry point + worker orchestration
     internal/
-      api/                      # HTTP handlers + middleware + router
+      api/                        # HTTP handlers + middleware + router
         handlers/
-          db_explorer.go        # DB Explorer + S3 file browser endpoints
-      buildpack/                # Stack detection (node, python, go, rust, java, docker, static)
-      config/                   # Environment config loader
-      model/                    # Domain models (App, Deployment, Service, Alert, Metric)
-      repository/               # PostgreSQL data access layer
-      service/                  # Business logic (deployer, container, provisioner, health, metrics)
-      worker/                   # Background workers (build, metrics, health, alerts, cleanup)
-    pkg/                        # Shared packages (crypto, docker client, logger)
-    migrations/                 # SQL migration files
+          db_explorer.go          # DB Explorer + S3 file browser endpoints
+          settings_handler.go     # Platform settings (maintenance mode, etc.)
+      buildpack/                  # Stack detection (node, python, go, rust, java, docker, static)
+      config/                     # Environment config loader
+      model/                      # Domain models (App, Deployment, Service, Alert, Metric)
+      repository/                 # PostgreSQL data access layer
+      service/                    # Business logic (deployer, container, provisioner, health, metrics)
+      worker/                     # Background workers (build, metrics, health, alerts, cleanup, stale deploys)
+    pkg/                          # Shared packages (crypto, docker client, logger)
+    migrations/                   # SQL migration files
 
-  luxview-dashboard/            # React SPA frontend
+  luxview-dashboard/              # React SPA frontend
     src/
-      api/                      # API client layer (apps, services, deployments, metrics)
-      components/               # UI components (apps, deploy, monitoring, services, layout, common)
-      hooks/                    # Custom React hooks
-      i18n/                     # Internationalization setup + locale files (en, pt-BR, es)
-      lib/                      # Utility functions
+      api/                        # API client layer (apps, services, deployments, metrics)
+      components/                 # UI components (apps, deploy, monitoring, services, layout, common)
+      hooks/                      # Custom React hooks
+      i18n/                       # Internationalization setup + locale files (en, pt-BR, es)
+      lib/                        # Utility functions
       pages/
-        DbExplorer.tsx          # SQL editor + table browser + schema viewer
-        S3Explorer.tsx          # S3 file browser (upload, download, delete)
-        Resources.tsx           # Resource overview (all services across apps)
-      stores/                   # Zustand state management
-      tours/                    # Interactive guided tour step definitions per page
+        Landing.tsx               # Public landing page with feature toggles
+        Dashboard.tsx             # Main dashboard overview
+        DbExplorer.tsx            # SQL editor + table browser + schema viewer
+        StorageExplorer.tsx       # S3 file browser (upload, download, delete)
+        EmailManager.tsx          # Email service management
+        Resources.tsx             # Resource overview (all services across apps)
+      stores/                     # Zustand state management
+      tours/                      # Interactive guided tour step definitions per page
 
-  traefik/                      # Traefik configuration
-  scripts/                      # VPS setup, deploy, backup scripts
-  docs/plans/                   # Design documents
+  traefik/                        # Traefik configuration
+  scripts/                        # VPS setup, deploy, backup scripts
 ```
 
 ---
