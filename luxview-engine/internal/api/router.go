@@ -56,6 +56,9 @@ func NewRouter(deps Deps) *chi.Mux {
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.RequestLogger)
 
+	// Request body size limit: 1MB (CWE-770)
+	r.Use(middleware.BodySizeLimit(1 << 20))
+
 	// Rate limiter: 20 req/s with burst of 40
 	rl := middleware.NewRateLimiter(20, 40)
 	r.Use(rl.Middleware)

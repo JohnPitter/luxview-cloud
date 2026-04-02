@@ -124,9 +124,13 @@ func Load() (*Config, error) {
 	var missing []string
 	if cfg.EncryptionKey == "" {
 		missing = append(missing, "ENCRYPTION_KEY")
+	} else if len(cfg.EncryptionKey) < 32 {
+		return nil, fmt.Errorf("ENCRYPTION_KEY must be at least 32 characters (got %d)", len(cfg.EncryptionKey))
 	}
 	if cfg.JWTSecret == "" {
 		missing = append(missing, "JWT_SECRET")
+	} else if len(cfg.JWTSecret) < 32 {
+		return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters (got %d)", len(cfg.JWTSecret))
 	}
 	if cfg.GitHubClientID == "" {
 		missing = append(missing, "GITHUB_CLIENT_ID")
