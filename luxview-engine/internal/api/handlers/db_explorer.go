@@ -277,7 +277,9 @@ func (h *ExplorerHandler) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 
 		rows, err := conn.Query(ctx, req.Query)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("query error: %s", err.Error()))
+			log := logger.With("db-explorer")
+			log.Error().Err(err).Str("query", req.Query).Msg("query execution failed")
+			writeError(w, http.StatusBadRequest, "query execution failed")
 			return
 		}
 		defer rows.Close()
