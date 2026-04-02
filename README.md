@@ -35,9 +35,9 @@ Think of it as your own **Heroku / Railway / Render** — but you own the infras
 | **One-Click Deploy** | Select a GitHub repo, pick a branch, deploy. That's it. |
 | **Auto Stack Detection** | Node.js, Python, Go, Rust, Java, static, Docker — all auto-detected |
 | **Wildcard SSL** | Every app gets `<app>.luxview.cloud` with automatic HTTPS via Let's Encrypt |
-| **Managed Services** | Provision PostgreSQL, Redis, MongoDB, RabbitMQ, or S3 Object Storage per app |
+| **Managed Services** | Provision PostgreSQL, Redis, MongoDB, or RabbitMQ per app |
 | **DB Explorer** | Browse tables, view schemas, and execute SQL queries directly in the dashboard |
-| **S3 File Browser** | Upload, download, and manage files in your S3-compatible storage buckets |
+| **Storage Explorer** | Upload, download, and manage files in your app's local storage volumes |
 | **Email Hosting** | Managed email service with mailbox provisioning and Roundcube webmail |
 | **Environment Variables** | Encrypted at rest (AES-256-GCM), injected at deploy time |
 | **Real-time Metrics** | CPU, RAM, and network usage per container — live in the dashboard |
@@ -81,7 +81,6 @@ graph TB
             REDIS[("Redis")]
             MONGO[("MongoDB")]
             RABBIT[("RabbitMQ")]
-            MINIO[("MinIO<br/>S3 Storage")]
         end
 
         subgraph Email["Email Services"]
@@ -101,7 +100,6 @@ graph TB
     ENGINE --> MAIL
     A1 -.-> PG_SHARED
     A2 -.-> REDIS
-    A3 -.-> MINIO
 
     style TRAEFIK fill:#24A1C1,color:#fff,stroke:none
     style ENGINE fill:#00ADD8,color:#fff,stroke:none
@@ -111,7 +109,7 @@ graph TB
     style REDIS fill:#DC382D,color:#fff,stroke:none
     style MONGO fill:#47A248,color:#fff,stroke:none
     style RABBIT fill:#FF6600,color:#fff,stroke:none
-    style MINIO fill:#C72E49,color:#fff,stroke:none
+
     style MAIL fill:#4A90D9,color:#fff,stroke:none
     style ROUNDCUBE fill:#37A3D9,color:#fff,stroke:none
 ```
@@ -127,7 +125,7 @@ graph TB
 | **PostgreSQL (platform)** | Stores users, apps, deployments, services, metrics, alerts | PostgreSQL 16 |
 | **PostgreSQL (shared)** | User app databases — one isolated DB + user per app | PostgreSQL 16 |
 | **Redis / MongoDB / RabbitMQ** | Optional services provisioned per app | Managed containers |
-| **MinIO** | S3-compatible object storage — one bucket per app | MinIO |
+| **Local Storage** | File storage volumes per app | Docker volumes |
 | **Mailserver** | Email hosting with SMTP/IMAP | docker-mailserver |
 | **Roundcube** | Webmail client | Roundcube |
 
@@ -245,7 +243,7 @@ Pull requests run Stages 1 and 2 only (no deploy).
 
 When you add a service to your app, LuxView automatically:
 
-1. **Creates** an isolated resource (database + user, S3 bucket, etc.)
+1. **Creates** an isolated resource (database + user, storage directory, etc.)
 2. **Generates** a secure 24-char random password
 3. **Encrypts** credentials at rest (AES-256-GCM)
 4. **Injects** connection env vars into your container on every deploy
@@ -258,7 +256,7 @@ flowchart LR
     C --> D[Store in platform DB]
     D --> E[On deploy: decrypt<br/>& inject env vars]
 
-    E --> F["DATABASE_URL<br/>S3_ENDPOINT / S3_BUCKET<br/>REDIS_URL / MONGO_URL<br/>..."]
+    E --> F["DATABASE_URL<br/>STORAGE_PATH<br/>REDIS_URL / MONGO_URL<br/>..."]
 
     style A fill:#F59E0B,color:#fff,stroke:none
     style F fill:#10B981,color:#fff,stroke:none
@@ -272,14 +270,14 @@ flowchart LR
 | Redis | `REDIS_URL`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` |
 | MongoDB | `MONGODB_URL`, `MONGO_URL` |
 | RabbitMQ | `RABBITMQ_URL`, `AMQP_URL` |
-| S3 (MinIO) | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `AWS_ENDPOINT_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` |
+| Storage | `STORAGE_PATH` |
 
-### DB Explorer & S3 File Browser
+### DB Explorer & Storage Explorer
 
 The dashboard includes built-in tools to interact with your provisioned services:
 
 - **DB Explorer** — Browse tables, view column schemas (type, nullable, default), and execute arbitrary SQL queries with a built-in editor (Ctrl+Enter to run). Results are displayed in a paginated grid with copy-to-clipboard support. Limited to 1,000 rows per query for safety.
-- **S3 File Browser** — Navigate folder structures, upload files (multi-file, up to 50MB), download, and delete objects. Includes breadcrumb navigation, search filtering, and file size/date metadata.
+- **Storage Explorer** — Navigate folder structures, upload files (multi-file, up to 50MB), download, and delete files. Includes breadcrumb navigation, search filtering, and file size/date metadata.
 
 ### Service Isolation
 
@@ -291,7 +289,7 @@ Every provisioned service enforces strict per-app isolation:
 | Redis | Unique DB number (0–15) per app |
 | MongoDB | Dedicated user with `readWrite` role scoped to app database |
 | RabbitMQ | Dedicated vhost + user with vhost-scoped permissions |
-| S3 (MinIO) | Isolated bucket per app |
+| Storage | Isolated directory per app |
 
 ---
 
@@ -352,10 +350,10 @@ make prod && make migrate
 | Layer | Technology |
 |:---:|:---:|
 | **Proxy** | Traefik v3 (SSL, routing, middleware) |
-| **Backend** | Go 1.26, Chi router, pgx, Docker SDK, MinIO SDK |
+| **Backend** | Go 1.26, Chi router, pgx, Docker SDK |
 | **Frontend** | React 19, TypeScript 5, Vite, Tailwind CSS, Zustand, react-i18next, react-joyride |
 | **Database** | PostgreSQL 16 |
-| **Storage** | MinIO (S3-compatible) |
+| **Storage** | Local volumes (Docker-managed) |
 | **Email** | docker-mailserver + Roundcube |
 | **Containers** | Docker Engine API |
 | **Auth** | GitHub OAuth + JWT |
@@ -381,7 +379,7 @@ luxview-cloud/
     internal/
       api/                        # HTTP handlers + middleware + router
         handlers/
-          db_explorer.go          # DB Explorer + S3 file browser endpoints
+          db_explorer.go          # DB Explorer + Storage explorer endpoints
           settings_handler.go     # Platform settings (maintenance mode, etc.)
       buildpack/                  # Stack detection (node, python, go, rust, java, docker, static)
       config/                     # Environment config loader
@@ -403,7 +401,7 @@ luxview-cloud/
         Landing.tsx               # Public landing page with feature toggles
         Dashboard.tsx             # Main dashboard overview
         DbExplorer.tsx            # SQL editor + table browser + schema viewer
-        StorageExplorer.tsx       # S3 file browser (upload, download, delete)
+        StorageExplorer.tsx       # Storage explorer (upload, download, delete)
         EmailManager.tsx          # Email service management
         Resources.tsx             # Resource overview (all services across apps)
       stores/                     # Zustand state management
@@ -429,7 +427,6 @@ luxview-cloud/
 | `SHARED_REDIS_PASSWORD` | Shared Redis password | Yes |
 | `SHARED_MONGO_PASSWORD` | Shared MongoDB password | Yes |
 | `SHARED_RABBITMQ_PASSWORD` | Shared RabbitMQ password | Yes |
-| `SHARED_MINIO_PASSWORD` | Shared MinIO password | Yes |
 | `ACME_EMAIL` | Let's Encrypt email | Production |
 | `BUILD_CONCURRENCY` | Max concurrent builds (default: `3`) | No |
 | `LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` | No |

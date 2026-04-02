@@ -267,7 +267,7 @@ Detect and recommend replacements:
 - SQLite/MySQL/MariaDB/SQL Server/CockroachDB → "postgres"
 - Memcached/local cache → "redis"
 - Self-hosted Redis/MongoDB/RabbitMQ/PostgreSQL → managed version
-- Local file uploads / S3 usage → "storage"
+- Local file uploads → "storage"
 - multer / formidable / busboy / express-fileupload / sharp (image processing) → "storage"
 - fs.writeFile / fs.createWriteStream with uploads directory → "storage"
 - Any file upload middleware or local file persistence → "storage"

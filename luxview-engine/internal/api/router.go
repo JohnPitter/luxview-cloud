@@ -162,7 +162,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Delete("/mailboxes/{id}", mailboxHandler.Delete)
 			r.Post("/mailboxes/{id}/reset-password", mailboxHandler.ResetPassword)
 
-			// Explorer (DB + S3)
+			// Explorer (DB + Storage)
 			r.Get("/services/{id}/tables", explorerHandler.ListTables)
 			r.Get("/services/{id}/tables/{table}", explorerHandler.GetTableSchema)
 			r.Post("/services/{id}/query", explorerHandler.ExecuteQuery)

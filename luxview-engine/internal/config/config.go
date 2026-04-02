@@ -39,11 +39,6 @@ type Config struct {
 	SharedRabbitUser     string
 	SharedRabbitPassword string
 
-	SharedMinioHost     string
-	SharedMinioPort     int
-	SharedMinioUser     string
-	SharedMinioPassword string
-
 	StorageBasePath    string // base path for local storage volumes
 	MailContainerName  string // docker-mailserver container name
 
@@ -98,11 +93,6 @@ func Load() (*Config, error) {
 		SharedRabbitPort:     envInt("SHARED_RABBIT_PORT", 5672),
 		SharedRabbitUser:     envStr("SHARED_RABBIT_USER", "luxview_admin"),
 		SharedRabbitPassword: envStr("SHARED_RABBIT_PASSWORD", ""),
-
-		SharedMinioHost:     envStr("SHARED_MINIO_HOST", "minio-shared"),
-		SharedMinioPort:     envInt("SHARED_MINIO_PORT", 9000),
-		SharedMinioUser:     envStr("SHARED_MINIO_USER", "luxview_admin"),
-		SharedMinioPassword: envStr("SHARED_MINIO_PASSWORD", ""),
 
 		StorageBasePath:   envStr("STORAGE_BASE_PATH", "/data/luxview/storage"),
 		MailContainerName: envStr("MAIL_CONTAINER_NAME", "luxview-mailserver"),

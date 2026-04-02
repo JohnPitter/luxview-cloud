@@ -30,7 +30,7 @@ type EnvHint struct {
 type ServiceRecommendation struct {
 	CurrentService     string   `json:"currentService"`
 	CurrentEvidence    string   `json:"currentEvidence"`
-	RecommendedService string   `json:"recommendedService"` // postgres, redis, mongodb, rabbitmq, s3
+	RecommendedService string   `json:"recommendedService"` // postgres, redis, mongodb, rabbitmq, storage
 	Reason             string   `json:"reason"`
 	ManualSteps        []string `json:"manualSteps"`
 }
