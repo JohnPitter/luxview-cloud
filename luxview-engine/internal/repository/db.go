@@ -261,6 +261,24 @@ func (db *DB) migrate(ctx context.Context) error {
 
 		`ALTER TABLE apps ADD COLUMN IF NOT EXISTS custom_domain VARCHAR(255) DEFAULT NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_apps_custom_domain ON apps(custom_domain) WHERE custom_domain IS NOT NULL`,
+
+		`CREATE TABLE IF NOT EXISTS backups (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			databases TEXT[] NOT NULL,
+			status TEXT NOT NULL DEFAULT 'running',
+			trigger TEXT NOT NULL,
+			file_path TEXT NOT NULL DEFAULT '',
+			file_size BIGINT NOT NULL DEFAULT 0,
+			duration_ms INT NOT NULL DEFAULT 0,
+			error TEXT,
+			started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			completed_at TIMESTAMPTZ,
+			created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_backups_status ON backups(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_backups_started_at ON backups(started_at DESC)`,
 	}
 
 	for i, m := range migrations {
