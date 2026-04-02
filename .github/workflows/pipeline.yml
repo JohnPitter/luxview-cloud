@@ -10,9 +10,6 @@ concurrency:
   group: pipeline-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   # ── Stage 1: Frontend ─────────────────────────────────────────────────────
   frontend-build:
@@ -22,9 +19,9 @@ jobs:
       run:
         working-directory: luxview-dashboard
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -43,9 +40,9 @@ jobs:
       run:
         working-directory: luxview-dashboard
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -64,9 +61,9 @@ jobs:
       run:
         working-directory: luxview-engine
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: luxview-engine/go.mod
           cache-dependency-path: luxview-engine/go.sum
@@ -84,9 +81,9 @@ jobs:
       run:
         working-directory: luxview-engine
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: luxview-engine/go.mod
           cache-dependency-path: luxview-engine/go.sum
@@ -94,7 +91,7 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Scan for vulnerabilities
-        run: govulncheck ./... || true
+        run: govulncheck ./...
 
   # ── Stage 3: Deploy (only on push to main, after all stages) ──────────────
   deploy:

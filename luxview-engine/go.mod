@@ -1,6 +1,6 @@
 module github.com/luxview/engine
 
-go 1.25.0
+go 1.26.1
 
 require (
 	github.com/docker/docker v27.5.1+incompatible
