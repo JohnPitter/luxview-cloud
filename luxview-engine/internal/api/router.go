@@ -96,9 +96,13 @@ func NewRouter(deps Deps) *chi.Mux {
 			w.Write([]byte(`{"status":"ok"}`))
 		})
 
-		// Auth (public)
-		r.Get("/auth/github", authHandler.GitHubLogin)
-		r.Get("/auth/github/callback", authHandler.GitHubCallback)
+		// Auth (public, stricter rate limit: 3 req/s burst 6)
+		r.Group(func(r chi.Router) {
+			authRL := middleware.NewRateLimiter(3, 6)
+			r.Use(authRL.Middleware)
+			r.Get("/auth/github", authHandler.GitHubLogin)
+			r.Get("/auth/github/callback", authHandler.GitHubCallback)
+		})
 
 		// Plans (public, for landing page)
 		r.Get("/plans", planHandler.ListActive)
@@ -194,9 +198,11 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Get("/analytics/referers", analyticsHandler.Referers)
 			r.Get("/analytics/live", analyticsHandler.Live)
 
-			// Admin
+			// Admin (5 req/s burst 10)
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.AdminOnly)
+				adminRL := middleware.NewRateLimiter(5, 10)
+				r.Use(adminRL.Middleware)
 				r.Get("/admin/users", adminHandler.ListUsers)
 				r.Get("/admin/stats", adminHandler.Stats)
 				r.Delete("/admin/apps/{id}", adminHandler.ForceDeleteApp)
