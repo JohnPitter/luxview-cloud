@@ -16,6 +16,7 @@ import { Logs } from './pages/Logs';
 import { Settings } from './pages/Settings';
 import { Profile } from './pages/Profile';
 import { Analytics } from './pages/Analytics';
+import { Backups } from './pages/Backups';
 import { Status } from './pages/Status';
 import { Docs } from './pages/Docs';
 import { MainLayout } from './components/layout/MainLayout';
@@ -53,6 +54,7 @@ export function App() {
         <Route path="new" element={<NewApp />} />
         <Route path="apps/:appId" element={<AppDetail />} />
         <Route path="admin" element={<Admin />} />
+        <Route path="backups" element={<Backups />} />
         <Route path="resources" element={<Resources />} />
         <Route path="resources/db/:serviceId" element={<DbExplorer />} />
         <Route path="resources/storage/:serviceId" element={<StorageExplorer />} />
