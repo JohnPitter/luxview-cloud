@@ -63,6 +63,7 @@ func main() {
 	auditRepo := repository.NewAuditLogRepo(db)
 	auditSvc := service.NewAuditService(auditRepo)
 	mailboxRepo := repository.NewMailboxRepo(db)
+	backupRepo := repository.NewBackupRepo(db)
 
 	// Services
 	portManager := service.NewPortManager(appRepo, cfg.PortRangeStart, cfg.PortRangeEnd)
@@ -73,6 +74,17 @@ func main() {
 	metricsCollector := service.NewMetricsCollector(appRepo, metricRepo, docker)
 	healthChecker := service.NewHealthChecker(appRepo, containerMgr)
 	alerter := service.NewAlerter(alertRepo, metricRepo, appRepo)
+	backupSvc := service.NewBackupService(backupRepo, settingsRepo, auditSvc, cfg.BackupDir, service.ContainerConfig{
+		PGPlatformContainer: "luxview-pg-platform",
+		PGPlatformUser:      "luxview",
+		PGSharedContainer:   "luxview-pg-shared",
+		PGSharedUser:        cfg.SharedPGUser,
+		MongoContainer:      "luxview-mongo-shared",
+		MongoUser:           cfg.SharedMongoUser,
+		MongoPassword:       cfg.SharedMongoPassword,
+		RedisContainer:      "luxview-redis-shared",
+		RedisPassword:       cfg.SharedRedisPassword,
+	})
 
 	// Workers
 	buildWorker, buildQueue := worker.NewBuildWorker(deployer, cfg.BuildConcurrency)
@@ -114,6 +126,9 @@ func main() {
 	aggregationWorker := worker.NewAggregationWorker(pageviewRepo, 24)
 	go aggregationWorker.Start(ctx)
 
+	backupWorker := worker.NewBackupWorker(backupSvc, settingsRepo, backupRepo)
+	go backupWorker.Start(ctx)
+
 	// Router
 	router := api.NewRouter(api.Deps{
 		Config:      cfg,
@@ -136,6 +151,7 @@ func main() {
 		AuditSvc:     auditSvc,
 		PageviewRepo: pageviewRepo,
 		MailboxRepo:  mailboxRepo,
+		BackupSvc:    backupSvc,
 	})
 
 	// HTTP server

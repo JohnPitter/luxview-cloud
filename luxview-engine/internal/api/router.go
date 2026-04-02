@@ -36,6 +36,7 @@ type Deps struct {
 	AuditSvc     *service.AuditService
 	PageviewRepo *repository.PageviewRepo
 	MailboxRepo  *repository.MailboxRepo
+	BackupSvc *service.BackupService
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -84,6 +85,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	auditHandler := handlers.NewAuditHandler(deps.AuditRepo)
 	analyticsHandler := handlers.NewAnalyticsHandler(deps.PageviewRepo, deps.AppRepo)
 	mailboxHandler := handlers.NewMailboxHandler(deps.MailboxRepo, deps.ServiceRepo, deps.AppRepo, deps.Provisioner, deps.AuditSvc, deps.Config.Domain)
+	backupHandler := handlers.NewBackupHandler(deps.BackupSvc, deps.AuditSvc)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 
@@ -220,6 +222,14 @@ func NewRouter(deps Deps) *chi.Mux {
 				r.Put("/admin/settings/auth", settingsHandler.UpdateAuthSettings)
 				r.Get("/admin/audit-logs", auditHandler.ListAuditLogs)
 				r.Get("/admin/audit-logs/stats", auditHandler.AuditStats)
+				r.Get("/admin/backups", backupHandler.List)
+				r.Post("/admin/backups", backupHandler.Trigger)
+				r.Get("/admin/backups/settings", backupHandler.GetSettings)
+				r.Put("/admin/backups/settings", backupHandler.UpdateSettings)
+				r.Get("/admin/backups/{id}", backupHandler.Get)
+				r.Delete("/admin/backups/{id}", backupHandler.Delete)
+				r.Post("/admin/backups/{id}/restore", backupHandler.Restore)
+				r.Get("/admin/backups/{id}/download", backupHandler.Download)
 			})
 		})
 	})
