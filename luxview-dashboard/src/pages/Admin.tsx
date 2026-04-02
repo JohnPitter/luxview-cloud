@@ -32,6 +32,7 @@ import {
   List,
   ChevronDown,
   ChevronUp,
+  Loader2,
 } from 'lucide-react';
 import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
@@ -1148,7 +1149,9 @@ export function Admin() {
           {activeTab === 'ai' && (
             <div className="space-y-4">
               {aiLoading ? (
-                <div className="text-center py-16 text-sm text-zinc-500">{t('admin.loadingData')}</div>
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 size={24} className="animate-spin text-amber-400" />
+                </div>
               ) : (
                 <GlassCard>
                   <div className="flex items-center gap-2 mb-2">
@@ -1282,7 +1285,9 @@ export function Admin() {
           {activeTab === 'cleanup' && (
             <div className="space-y-4">
               {cleanupLoading ? (
-                <div className="text-center py-16 text-sm text-zinc-500">{t('admin.loadingData')}</div>
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 size={24} className="animate-spin text-amber-400" />
+                </div>
               ) : (
                 <>
                   {/* Disk Usage Overview */}
@@ -1499,7 +1504,9 @@ export function Admin() {
           {activeTab === 'audit' && (
             <div className="space-y-4">
               {auditLoading && auditLogs.length === 0 ? (
-                <div className="text-center py-16 text-sm text-zinc-500">{t('admin.loadingData')}</div>
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 size={24} className="animate-spin text-amber-400" />
+                </div>
               ) : (
                 <>
                   {/* Header with view toggle + stats badge */}
