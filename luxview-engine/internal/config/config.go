@@ -41,6 +41,7 @@ type Config struct {
 
 	StorageBasePath    string // base path for local storage volumes
 	MailContainerName  string // docker-mailserver container name
+	BackupDir          string // base directory for backup files
 
 	BuildConcurrency int
 	PortRangeStart   int
@@ -96,6 +97,7 @@ func Load() (*Config, error) {
 
 		StorageBasePath:   envStr("STORAGE_BASE_PATH", "/data/luxview/storage"),
 		MailContainerName: envStr("MAIL_CONTAINER_NAME", "luxview-mailserver"),
+		BackupDir:         envStr("BACKUP_DIR", "/backups"),
 
 		BuildConcurrency: envInt("BUILD_CONCURRENCY", 3),
 		PortRangeStart:   envInt("PORT_RANGE_START", 10000),
