@@ -96,7 +96,10 @@ export function DeployHistory({ deployments, onRollback, onViewLog }: DeployHist
 
             <div className="flex items-center gap-4">
               <div className="text-right">
-                <div className="text-[11px] text-zinc-500">
+                <div
+                  className="text-[11px] text-zinc-500 cursor-default"
+                  title={new Date(deploy.createdAt).toLocaleString()}
+                >
                   {formatRelativeTime(deploy.createdAt)}
                 </div>
                 {deploy.durationMs > 0 && (
