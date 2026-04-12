@@ -258,10 +258,11 @@ export function DbExplorer() {
               placeholder={t('resources.db.queryPlaceholder')}
               spellCheck={false}
               className={`
-                w-full p-4 font-mono text-sm resize-none outline-none
+                w-full p-4 font-mono text-sm resize-vertical outline-none
                 ${isDark ? 'bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600' : 'bg-white text-zinc-800 placeholder:text-zinc-400'}
               `}
-              rows={4}
+              style={{ minHeight: 100, maxHeight: 400 }}
+              rows={6}
             />
           </GlassCard>
 
