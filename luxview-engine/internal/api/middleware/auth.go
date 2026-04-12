@@ -51,7 +51,7 @@ func Auth(jwtSecret string, userRepo *repository.UserRepo) func(http.Handler) ht
 
 			tokenStr := extractToken(r)
 			if tokenStr == "" {
-				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 				return
 			}
 
@@ -65,19 +65,19 @@ func Auth(jwtSecret string, userRepo *repository.UserRepo) func(http.Handler) ht
 
 			if err != nil || !token.Valid {
 				log.Debug().Err(err).Msg("invalid token")
-				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 				return
 			}
 
 			userID, err := uuid.Parse(claims.UserID)
 			if err != nil {
-				http.Error(w, `{"error":"invalid token claims"}`, http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "invalid token claims")
 				return
 			}
 
 			user, err := userRepo.FindByID(r.Context(), userID)
 			if err != nil || user == nil {
-				http.Error(w, `{"error":"user not found"}`, http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "user not found")
 				return
 			}
 
@@ -93,7 +93,7 @@ func AdminOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := GetUser(r.Context())
 		if user == nil || user.Role != model.RoleAdmin {
-			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			writeJSONError(w, http.StatusForbidden, "forbidden")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -112,7 +112,7 @@ func InternalAuth(token string) func(http.Handler) http.Handler {
 
 			authHeader := r.Header.Get("Authorization")
 			if authHeader != "Bearer "+token {
-				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 				return
 			}
 			next.ServeHTTP(w, r)

@@ -51,6 +51,23 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Raw API instance that preserves response keys as-is (no snakeToCamel transform).
+// Used for endpoints where original keys matter (e.g., DB Explorer column names).
+export const apiRaw = axios.create({
+  baseURL: '/api',
+  timeout: 30000,
+  headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
+});
+
+apiRaw.interceptors.request.use((config) => {
+  const token = localStorage.getItem('lv_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 api.interceptors.response.use(
   (response) => {
     if (response.data && typeof response.data === 'object' && !(response.data instanceof Blob) && !(response.data instanceof ArrayBuffer)) {

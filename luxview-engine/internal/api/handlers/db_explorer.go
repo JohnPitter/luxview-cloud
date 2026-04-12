@@ -161,6 +161,10 @@ func (h *ExplorerHandler) ListTables(w http.ResponseWriter, r *http.Request) {
 				tables = append(tables, t)
 			}
 		}
+		if err := rows.Err(); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to read tables")
+			return
+		}
 		if tables == nil {
 			tables = []tableInfo{}
 		}
@@ -222,6 +226,10 @@ func (h *ExplorerHandler) GetTableSchema(w http.ResponseWriter, r *http.Request)
 				columns = append(columns, c)
 			}
 		}
+		if err := rows.Err(); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to read schema")
+			return
+		}
 		if columns == nil {
 			columns = []columnInfo{}
 		}
@@ -237,6 +245,25 @@ func (h *ExplorerHandler) GetTableSchema(w http.ResponseWriter, r *http.Request)
 
 	default:
 		writeError(w, http.StatusBadRequest, "schema not supported for this service type")
+	}
+}
+
+// sanitizeValue converts complex PostgreSQL types into JSON-safe representations.
+func sanitizeValue(v interface{}) interface{} {
+	if v == nil {
+		return nil
+	}
+	switch val := v.(type) {
+	case []byte:
+		// bytea columns: encode as hex string for readability
+		return fmt.Sprintf("\\x%x", val)
+	case [16]byte:
+		// UUID as raw bytes
+		return fmt.Sprintf("%x-%x-%x-%x-%x", val[0:4], val[4:6], val[6:8], val[8:10], val[10:16])
+	case time.Time:
+		return val.Format(time.RFC3339)
+	default:
+		return v
 	}
 }
 
@@ -277,8 +304,7 @@ func (h *ExplorerHandler) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 
 		rows, err := conn.Query(ctx, req.Query)
 		if err != nil {
-			log := logger.With("db-explorer")
-			log.Error().Err(err).Str("query", req.Query).Msg("query execution failed")
+			log.Error().Err(err).Msg("query execution failed")
 			writeError(w, http.StatusBadRequest, "query execution failed")
 			return
 		}
@@ -304,10 +330,20 @@ func (h *ExplorerHandler) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 			}
 			row := make(map[string]interface{})
 			for i, col := range columns {
-				row[col] = values[i]
+				if i < len(values) {
+					row[col] = sanitizeValue(values[i])
+				} else {
+					row[col] = nil
+				}
 			}
 			resultRows = append(resultRows, row)
 			rowCount++
+		}
+
+		if err := rows.Err(); err != nil {
+			log.Error().Err(err).Msg("error reading query results")
+			writeError(w, http.StatusInternalServerError, "error reading query results")
+			return
 		}
 
 		if resultRows == nil {
@@ -316,9 +352,9 @@ func (h *ExplorerHandler) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 
 		log.Info().Int("rows", rowCount).Msg("query executed")
 		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"columns":  columns,
-			"rows":     resultRows,
-			"rowCount": rowCount,
+			"columns":   columns,
+			"rows":      resultRows,
+			"rowCount":  rowCount,
 			"truncated": rowCount >= maxRows,
 		})
 
@@ -527,7 +563,10 @@ func (h *ExplorerHandler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
-	io.Copy(w, file)
+	if _, err := io.Copy(w, file); err != nil {
+		log := logger.With("storage-explorer")
+		log.Error().Err(err).Str("key", key).Msg("failed to stream file download")
+	}
 }
 
 // DeleteFile deletes a file from the local storage directory.

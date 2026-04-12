@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -51,7 +52,7 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 
 		if !limiter.Allow() {
 			w.Header().Set("Retry-After", "60")
-			http.Error(w, `{"error":"rate limit exceeded"}`, http.StatusTooManyRequests)
+			writeJSONError(w, http.StatusTooManyRequests, "rate limit exceeded")
 			return
 		}
 
@@ -80,21 +81,26 @@ func (rl *RateLimiter) getLimiter(ip string) *rate.Limiter {
 
 // evictOldest removes the oldest 10% of visitors. Must be called with mu held.
 func (rl *RateLimiter) evictOldest() {
-	oldest := time.Now()
 	toEvict := len(rl.visitors) / 10
 	if toEvict < 1 {
 		toEvict = 1
 	}
 
-	evicted := 0
+	type entry struct {
+		ip       string
+		lastSeen time.Time
+	}
+	entries := make([]entry, 0, len(rl.visitors))
 	for ip, v := range rl.visitors {
-		if v.lastSeen.Before(oldest) || evicted < toEvict {
-			delete(rl.visitors, ip)
-			evicted++
-			if evicted >= toEvict {
-				break
-			}
-		}
+		entries = append(entries, entry{ip: ip, lastSeen: v.lastSeen})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].lastSeen.Before(entries[j].lastSeen)
+	})
+
+	for i := 0; i < toEvict && i < len(entries); i++ {
+		delete(rl.visitors, entries[i].ip)
 	}
 }
 

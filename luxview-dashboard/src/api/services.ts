@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, apiRaw } from './client';
 
 export type ServiceType = 'postgres' | 'redis' | 'mongodb' | 'rabbitmq' | 'storage' | 'email';
 
@@ -99,7 +99,8 @@ export const servicesApi = {
   },
 
   async executeQuery(serviceId: string, query: string): Promise<QueryResult> {
-    const { data } = await api.post<QueryResult>(`/services/${serviceId}/query`, { query });
+    // Use apiRaw to bypass snakeToCamel response transform — DB column names must be preserved.
+    const { data } = await apiRaw.post<QueryResult>(`/services/${serviceId}/query`, { query });
     return data;
   },
 
