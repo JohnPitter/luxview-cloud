@@ -285,8 +285,8 @@ func (h *ExplorerHandler) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Limit query length
-	if len(req.Query) > 10000 {
-		writeError(w, http.StatusBadRequest, "query too long (max 10000 chars)")
+	if len(req.Query) > 50000 {
+		writeError(w, http.StatusBadRequest, "query too long (max 50000 chars)")
 		return
 	}
 
@@ -302,65 +302,126 @@ func (h *ExplorerHandler) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 		}
 		defer conn.Close(ctx)
 
-		rows, err := conn.Query(ctx, req.Query)
-		if err != nil {
-			log.Error().Err(err).Msg("query execution failed")
-			writeError(w, http.StatusBadRequest, err.Error())
+		// Split into individual statements and filter empty ones
+		statements := splitStatements(req.Query)
+		if len(statements) == 0 {
+			writeError(w, http.StatusBadRequest, "query is required")
 			return
 		}
-		defer rows.Close()
 
-		fieldDescs := rows.FieldDescriptions()
-		columns := make([]string, len(fieldDescs))
-		for i, fd := range fieldDescs {
-			columns[i] = string(fd.Name)
+		// Run all statements in a transaction
+		tx, err := conn.Begin(ctx)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to start transaction")
+			return
 		}
+		defer tx.Rollback(ctx)
 
+		var columns []string
 		var resultRows []map[string]interface{}
 		rowCount := 0
 		maxRows := 1000
+		truncated := false
 
-		for rows.Next() {
-			if rowCount >= maxRows {
-				break
-			}
-			values, err := rows.Values()
+		for i, stmt := range statements {
+			rows, err := tx.Query(ctx, stmt)
 			if err != nil {
+				log.Error().Err(err).Int("statement", i+1).Msg("query execution failed")
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("statement %d: %s", i+1, err.Error()))
+				return
+			}
+
+			fieldDescs := rows.FieldDescriptions()
+
+			// Non-SELECT statement (UPDATE, INSERT, DELETE, etc.) — consume and continue
+			if len(fieldDescs) == 0 {
+				rows.Close()
+				if err := rows.Err(); err != nil {
+					writeError(w, http.StatusBadRequest, fmt.Sprintf("statement %d: %s", i+1, err.Error()))
+					return
+				}
+				tag := rows.CommandTag()
+				rowCount = int(tag.RowsAffected())
+				columns = nil
+				resultRows = nil
 				continue
 			}
-			row := make(map[string]interface{})
-			for i, col := range columns {
-				if i < len(values) {
-					row[col] = sanitizeValue(values[i])
-				} else {
-					row[col] = nil
-				}
+
+			// SELECT-like statement — collect results (only keep last SELECT's results)
+			columns = make([]string, len(fieldDescs))
+			for j, fd := range fieldDescs {
+				columns[j] = string(fd.Name)
 			}
-			resultRows = append(resultRows, row)
-			rowCount++
+
+			resultRows = nil
+			rowCount = 0
+			for rows.Next() {
+				if rowCount >= maxRows {
+					truncated = true
+					break
+				}
+				values, err := rows.Values()
+				if err != nil {
+					continue
+				}
+				row := make(map[string]interface{})
+				for j, col := range columns {
+					if j < len(values) {
+						row[col] = sanitizeValue(values[j])
+					} else {
+						row[col] = nil
+					}
+				}
+				resultRows = append(resultRows, row)
+				rowCount++
+			}
+			rows.Close()
+
+			if err := rows.Err(); err != nil {
+				log.Error().Err(err).Int("statement", i+1).Msg("error reading query results")
+				writeError(w, http.StatusInternalServerError, fmt.Sprintf("statement %d: %s", i+1, err.Error()))
+				return
+			}
 		}
 
-		if err := rows.Err(); err != nil {
-			log.Error().Err(err).Msg("error reading query results")
-			writeError(w, http.StatusInternalServerError, "error reading query results")
+		if err := tx.Commit(ctx); err != nil {
+			log.Error().Err(err).Msg("failed to commit transaction")
+			writeError(w, http.StatusInternalServerError, "failed to commit transaction")
 			return
 		}
 
+		if columns == nil {
+			columns = []string{}
+		}
 		if resultRows == nil {
 			resultRows = []map[string]interface{}{}
 		}
 
-		log.Info().Int("rows", rowCount).Msg("query executed")
+		log.Info().Int("statements", len(statements)).Int("rows", rowCount).Msg("query executed")
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"columns":   columns,
 			"rows":      resultRows,
 			"rowCount":  rowCount,
-			"truncated": rowCount >= maxRows,
+			"truncated": truncated,
 		})
 
 	default:
 		writeError(w, http.StatusBadRequest, "queries not supported for this service type")
 	}
+}
+
+// splitStatements splits a SQL string by semicolons, trimming whitespace and
+// filtering out empty statements.
+func splitStatements(query string) []string {
+	parts := strings.Split(query, ";")
+	var stmts []string
+	for _, p := range parts {
+		s := strings.TrimSpace(p)
+		if s != "" {
+			stmts = append(stmts, s)
+		}
+	}
+	return stmts
 }
 
 // resolveStoragePath validates and resolves a storage path, preventing path traversal.
