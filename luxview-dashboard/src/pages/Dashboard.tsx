@@ -22,7 +22,7 @@ import { useAuthStore } from '../stores/auth.store';
 import { useThemeStore } from '../stores/theme.store';
 import { metricsApi, type LatestMetric } from '../api/metrics';
 import { servicesApi } from '../api/services';
-import { deploymentsApi } from '../api/deployments';
+import { deploymentsApi, type RecentDeploy } from '../api/deployments';
 import { formatRelativeTime } from '../lib/format';
 import { dashboardTourSteps } from '../tours/dashboard';
 
@@ -34,58 +34,30 @@ export function Dashboard() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [latestMetrics, setLatestMetrics] = useState<Record<string, LatestMetric>>({});
   const [resourceCount, setResourceCount] = useState(0);
-  const [recentDeploys, setRecentDeploys] = useState<
-    Array<{ id: string; appName: string; appId: string; status: string; createdAt: string }>
-  >([]);
+  const [recentDeploys, setRecentDeploys] = useState<RecentDeploy[]>([]);
+
+  const RECENT_DEPLOYS_LIMIT = 5;
 
   useEffect(() => {
     fetchApps();
-    servicesApi
-      .listAll()
-      .then((s) => setResourceCount(s.length))
-      .catch(() => {});
+    servicesApi.listAll().then((s) => setResourceCount(s.length)).catch(() => {});
+    deploymentsApi.listRecent(RECENT_DEPLOYS_LIMIT).then(setRecentDeploys).catch(() => {});
+    metricsApi.getLatestAll().then(setLatestMetrics).catch(() => {});
   }, [fetchApps]);
-
-  // Fetch recent deploys across all apps
-  useEffect(() => {
-    if (apps.length === 0) return;
-    const fetchDeploys = async () => {
-      const allDeploys: typeof recentDeploys = [];
-      for (const app of apps.slice(0, 10)) {
-        try {
-          const deploys = await deploymentsApi.list(app.id);
-          for (const d of deploys.slice(0, 3)) {
-            allDeploys.push({
-              id: d.id,
-              appName: app.name,
-              appId: app.id,
-              status: d.status,
-              createdAt: d.createdAt,
-            });
-          }
-        } catch {
-          // ignore
-        }
-      }
-      allDeploys.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setRecentDeploys(allDeploys.slice(0, 5));
-    };
-    fetchDeploys();
-  }, [apps]);
 
   const hasTransitional = apps.some((a) => ['building', 'deploying'].includes(a.status));
 
   useEffect(() => {
     if (apps.length === 0) return;
-    const poll = () => {
+    const intervalMs = hasTransitional ? 5000 : 30000;
+    const interval = setInterval(() => {
       fetchApps();
       metricsApi.getLatestAll().then(setLatestMetrics).catch(() => {});
-    };
-    const intervalMs = hasTransitional ? 5000 : 30000;
-    metricsApi.getLatestAll().then(setLatestMetrics).catch(() => {});
-    const interval = setInterval(poll, intervalMs);
+      deploymentsApi.listRecent(RECENT_DEPLOYS_LIMIT).then(setRecentDeploys).catch(() => {});
+    }, intervalMs);
     return () => clearInterval(interval);
-  }, [apps.length, hasTransitional, fetchApps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apps.length, hasTransitional]);
 
   const runningCount = apps.filter((a) => a.status === 'running').length;
   const totalCount = apps.length;
@@ -144,7 +116,7 @@ export function Dashboard() {
           },
           {
             label: t('dashboard.stats.deploys'),
-            value: recentDeploys.length > 0 ? recentDeploys.length + '+' : '0',
+            value: recentDeploys.length >= RECENT_DEPLOYS_LIMIT ? `${RECENT_DEPLOYS_LIMIT}+` : String(recentDeploys.length),
             icon: Rocket,
             color: 'text-violet-400',
             bg: 'bg-violet-500/10',
@@ -333,7 +305,7 @@ export function Dashboard() {
                   key={link.path}
                   onClick={() => navigate(link.path)}
                   className={`
-                    w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-xs
+                    group w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-xs
                     transition-all duration-150
                     ${
                       isDark

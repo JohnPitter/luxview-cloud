@@ -30,3 +30,9 @@ type Deployment struct {
 	CreatedAt     time.Time        `json:"created_at"`
 	FinishedAt    *time.Time       `json:"finished_at,omitempty"`
 }
+
+// DeploymentWithApp extends Deployment with the app name for cross-app listing.
+type DeploymentWithApp struct {
+	Deployment
+	AppName string `json:"app_name"`
+}

@@ -16,7 +16,16 @@ export interface Deployment {
   finishedAt: string;
 }
 
+export interface RecentDeploy extends Omit<Deployment, 'buildLog' | 'imageTag'> {
+  appName: string;
+}
+
 export const deploymentsApi = {
+  async listRecent(limit = 5): Promise<RecentDeploy[]> {
+    const { data } = await api.get<RecentDeploy[]>('/deployments/recent', { params: { limit } });
+    return data ?? [];
+  },
+
   async list(appId: string, limit = 20, offset = 0): Promise<Deployment[]> {
     const { data } = await api.get<{ deployments: Deployment[]; total: number }>(
       `/apps/${appId}/deployments`,

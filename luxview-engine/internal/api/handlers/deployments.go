@@ -28,6 +28,22 @@ func NewDeploymentHandler(deployRepo *repository.DeploymentRepo, appRepo *reposi
 	}
 }
 
+// ListRecent returns the most recent deployments across all apps for the authenticated user.
+func (h *DeploymentHandler) ListRecent(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+
+	deploys, err := h.deployRepo.ListRecentByUserID(ctx, userID, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list recent deployments")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, deploys)
+}
+
 // List lists deployments for an app.
 func (h *DeploymentHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

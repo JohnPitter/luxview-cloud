@@ -74,6 +74,42 @@ func (r *DeploymentRepo) ListByAppID(ctx context.Context, appID uuid.UUID, limit
 	return deployments, total, nil
 }
 
+// ListRecentByUserID returns the most recent deployments across all apps owned by a user.
+func (r *DeploymentRepo) ListRecentByUserID(ctx context.Context, userID uuid.UUID, limit int) ([]model.DeploymentWithApp, error) {
+	if limit <= 0 || limit > 20 {
+		limit = 5
+	}
+	rows, err := r.db.Pool.Query(ctx,
+		`SELECT d.id, d.app_id, a.name AS app_name, d.commit_sha, d.commit_message,
+		        d.status, d.duration_ms, d.image_tag, d.source, d.created_at, d.finished_at
+		 FROM deployments d
+		 JOIN apps a ON a.id = d.app_id
+		 WHERE a.user_id = $1
+		 ORDER BY d.created_at DESC
+		 LIMIT $2`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []model.DeploymentWithApp
+	for rows.Next() {
+		var d model.DeploymentWithApp
+		if err := rows.Scan(&d.ID, &d.AppID, &d.AppName, &d.CommitSHA, &d.CommitMessage,
+			&d.Status, &d.DurationMs, &d.ImageTag, &d.Source, &d.CreatedAt, &d.FinishedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if result == nil {
+		result = []model.DeploymentWithApp{}
+	}
+	return result, nil
+}
+
 func (r *DeploymentRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status model.DeploymentStatus, buildLog string, durationMs int) error {
 	_, err := r.db.Pool.Exec(ctx,
 		`UPDATE deployments SET status=$2, build_log=$3, duration_ms=$4, finished_at=NOW() WHERE id=$1`,

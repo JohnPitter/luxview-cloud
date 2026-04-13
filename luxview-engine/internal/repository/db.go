@@ -22,8 +22,8 @@ func NewDB(ctx context.Context, databaseURL string) (*DB, error) {
 		return nil, fmt.Errorf("failed to parse database URL: %w", err)
 	}
 
-	config.MaxConns = 20
-	config.MinConns = 2
+	config.MaxConns = 50
+	config.MinConns = 5
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
@@ -101,6 +101,7 @@ func (db *DB) migrate(ctx context.Context) error {
 		)`,
 
 		`CREATE INDEX IF NOT EXISTS idx_deployments_app_id_created ON deployments(app_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_deployments_created_at ON deployments(created_at DESC)`,
 
 		`CREATE TABLE IF NOT EXISTS app_services (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

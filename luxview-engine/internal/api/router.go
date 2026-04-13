@@ -155,6 +155,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Post("/apps/{id}/apply-analysis", analyzeHandler.ApplyAnalysis)
 
 			// Deployments
+			r.Get("/deployments/recent", deployHandler.ListRecent)
 			r.Get("/apps/{id}/deployments", deployHandler.List)
 			r.Get("/deployments/{id}/logs", deployHandler.GetLogs)
 			r.Post("/deployments/{id}/rollback", deployHandler.Rollback)
