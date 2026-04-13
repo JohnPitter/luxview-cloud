@@ -62,8 +62,10 @@ var keyFiles = []string{
 	".env.example",
 }
 
-// Monorepo glob patterns for additional package.json files.
+// Monorepo and wildcard glob patterns for additional config files.
 var monorepoPatterns = []string{
+	"*.sh",
+	"scripts/*.sh",
 	"apps/*/package.json",
 	"packages/*/package.json",
 	"apps/*/Dockerfile",
