@@ -286,6 +286,7 @@
   "app.actions.deploy": "Deploy",
   "app.actions.deploying": "Deploying...",
   "app.actions.analyzeFailure": "Analyze Failure",
+  "app.actions.reanalyze": "AI Analysis",
   "app.logs.runtimeLogs": "Runtime Logs",
   "app.logs.buildLogs": "Build Logs",
   "app.logs.deployment": "Deployment:",
