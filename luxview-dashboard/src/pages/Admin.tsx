@@ -1227,6 +1227,7 @@ export function Admin() {
                         </optgroup>
                         <optgroup label="Qwen">
                           <option value="qwen/qwen3-coder">Qwen3 Coder 480B — code specialist</option>
+                          <option value="qwen/qwen3.6-plus">Qwen3.6 Plus — free</option>
                         </optgroup>
                       </select>
                     </div>
