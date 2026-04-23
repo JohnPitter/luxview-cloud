@@ -20,9 +20,10 @@ type Suggestion struct {
 
 // EnvHint represents an environment variable the application may need.
 type EnvHint struct {
-	Key         string `json:"key"`
-	Description string `json:"description"`
-	Required    bool   `json:"required"`
+	Key          string `json:"key"`
+	Description  string `json:"description"`
+	Required     bool   `json:"required"`
+	DefaultValue string `json:"defaultValue,omitempty"`
 }
 
 // ServiceRecommendation represents a suggestion to migrate an external service

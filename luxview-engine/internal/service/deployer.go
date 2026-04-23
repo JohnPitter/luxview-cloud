@@ -296,14 +296,16 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 		}
 	}
 
-	// Merge: service env vars first, then user env vars override (skip empty user values)
+	// Merge: service env vars first, then user env vars override.
+	// Empty user values are dropped entirely — strict config validators (Zod enum,
+	// class-validator, pydantic) reject "" and most frameworks treat missing as
+	// "use default", so omitting the key is safer than forwarding an empty string.
 	mergedEnvVars := make(map[string]string)
 	for k, v := range serviceEnvVars {
 		mergedEnvVars[k] = v
 	}
 	for k, v := range envVars {
-		// Don't let empty user env vars override service-provided values
-		if v == "" && serviceEnvVars[k] != "" {
+		if v == "" {
 			continue
 		}
 		mergedEnvVars[k] = v

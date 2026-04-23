@@ -147,10 +147,26 @@ export function DeployAnalysis({
   const [envValues, setEnvValues] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const hint of result.envHints) {
-      initial[hint.key] = '';
+      initial[hint.key] = hint.defaultValue ?? '';
     }
     return initial;
   });
+
+  // Re-seed env defaults when analysis result arrives (loading -> real result)
+  useEffect(() => {
+    if (result.envHints.length === 0) return;
+    setEnvValues((prev: Record<string, string>) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const hint of result.envHints) {
+        if (next[hint.key] === undefined) {
+          next[hint.key] = hint.defaultValue ?? '';
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [result.envHints]);
 
   const isSecretKey = (key: string) => {
     const upper = key.toUpperCase();

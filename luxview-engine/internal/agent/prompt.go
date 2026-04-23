@@ -254,6 +254,52 @@ Adapt:
 - Keep ALL dist/ output (API may serve frontend static files).
 - Always include tsconfig.json in COPY if it exists (packages extend it via "extends": "../../tsconfig.json").
 - Also include apps/ directory if the app code is there, not just packages/.
+
+### Runtime Non-Code Assets (CRITICAL)
+Bundlers like tsup, esbuild, webpack and Next.js only process .ts/.js files — they do NOT copy .sql, .hbs, .ejs, .html templates, .json schemas, .yml configs, or .graphql files that live in src/.
+Scan source for these patterns that load files relative to the compiled module:
+- readFileSync(join(__dirname, ...)) or readFile(..., __dirname, ...)
+- fileURLToPath(import.meta.url) + path join
+- require.resolve with relative asset paths
+- fs.createReadStream with __dirname
+When the referenced path points to a non-JS asset folder inside src/ (e.g. src/store/migrations/*.sql, src/templates/*.hbs, src/schemas/*.graphql), add a RUN cp -r step AFTER "pnpm build" (or npm/yarn build) to copy the folder into the corresponding dist/ location.
+Example:
+  RUN pnpm build
+  RUN cp -r apps/api/src/store/migrations apps/api/dist/migrations
+  RUN cp -r apps/api/src/templates apps/api/dist/templates
+Do this for each referenced asset folder you find. If unsure, include a "warning" in suggestions[] listing the paths you spotted.
+
+### Combined Web + API Monorepo (SvelteKit/Vite/Next + Fastify/Express)
+When BOTH a frontend build (apps/web, apps/client, packages/frontend with vite/sveltekit/next) AND a backend API (apps/api, packages/api with fastify/express/nestjs/koa) exist in the same pnpm workspace, they MUST share a single port — the platform only exposes one.
+Detection signals:
+- apps/web or apps/client with @sveltejs/adapter-static, vite.config.*, or next.config.* → frontend build outputs to apps/web/build or apps/web/dist
+- apps/api with fastify/express/nestjs imports → backend on some port
+- Backend does NOT import @fastify/static, express.static, or @nestjs/serve-static → it cannot serve frontend files itself
+
+In this case, use nginx inside the final image to serve static files and reverse proxy /api to the backend. Template:
+  FROM node:20-alpine
+  ENV CI=true
+  RUN apk add --no-cache build-base python3 nginx
+  RUN corepack enable && corepack prepare pnpm@latest --activate
+  WORKDIR /app
+  COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json* tsconfig.json* ./
+  COPY apps/ ./apps/
+  COPY packages/ ./packages/
+  RUN pnpm install --frozen-lockfile
+  RUN pnpm build
+  # copy any non-JS runtime assets here (see Runtime Non-Code Assets above)
+  RUN rm -rf node_modules apps/*/node_modules packages/*/node_modules
+  RUN pnpm install --frozen-lockfile --prod
+  RUN mkdir -p /run/nginx && printf 'worker_processes 1;\nevents { worker_connections 1024; }\nhttp {\n  include /etc/nginx/mime.types;\n  default_type application/octet-stream;\n  sendfile on;\n  gzip on;\n  server {\n    listen <PLATFORM_PORT>;\n    root /app/apps/web/build;\n    index index.html;\n    location /api/ { proxy_pass http://127.0.0.1:<BACKEND_PORT>; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_http_version 1.1; proxy_set_header Connection ""; }\n    location /health { proxy_pass http://127.0.0.1:<BACKEND_PORT>/health; }\n    location / { try_files $uri $uri/ /index.html; }\n  }\n}\n' > /etc/nginx/nginx.conf
+  ENV NODE_ENV=production
+  EXPOSE <PLATFORM_PORT>
+  CMD ["sh", "-c", "PORT=<BACKEND_PORT> node apps/api/dist/main.js & nginx -g 'daemon off;'"]
+
+Rules:
+- <PLATFORM_PORT> is the single port the platform routes to (same value in listen, EXPOSE); <BACKEND_PORT> is internal and distinct (e.g. 3000).
+- Replace the frontend root path with the actual build output (apps/web/build for adapter-static, apps/web/dist for pure Vite, apps/web/.next for Next.js standalone — adjust CMD accordingly for Next).
+- Match the CMD entrypoint to the actual API build output (apps/api/dist/main.js, packages/api/dist/index.js, etc.).
+- If the API ALREADY uses @fastify/static, express.static, or @nestjs/serve-static configured for the frontend build folder, skip nginx and keep a single Node CMD.
 `
 
 // Managed services reference shared by both prompts.
@@ -291,6 +337,8 @@ Rules:
 - Mark as required=false if there's a default fallback value — but STILL include it (the default is usually for development only and won't work in production)
 - For URL variables (callback URLs, frontend URLs, webhook URLs), always include them — localhost defaults need to be changed for production
 - For secret/key variables, note in the description that the user should generate a secure value
+- Populate "defaultValue" whenever the source has a safe production fallback the dashboard can pre-fill (enum members like LOG_LEVEL=info, cache TTLs, numeric tunables). CRITICAL for strict validators (Zod enum, class-validator, pydantic): an empty string "" is NOT the same as "undefined" — leaving it blank will fail validation, so always emit a concrete defaultValue for enum-typed vars.
+- Do NOT set defaultValue for secrets, API keys, tokens, or anything user-specific (leave the user to fill it in).
 - Do NOT include these platform-injected variables: DATABASE_URL, PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE, REDIS_URL, MONGODB_URL, RABBITMQ_URL, STORAGE_PATH, SPRING_DATASOURCE_*
 - Do NOT include these Dockerfile-set variables: NODE_ENV, PORT, CI, ORCHESTRATOR_PORT (or similar port vars already set via ENV in the Dockerfile)
 
@@ -301,7 +349,7 @@ Respond with valid JSON only — no markdown, no extra text.
   "dockerfile": "FROM ...\n...",
   "port": 3000,
   "stack": "nodejs|nextjs|vite|python|go|java|rust|static",
-  "envHints": [{"key": "DATABASE_URL", "description": "...", "required": true}],
+  "envHints": [{"key": "DATABASE_URL", "description": "...", "required": true, "defaultValue": ""}],
   "serviceRecommendations": [{"currentService": "sqlite", "currentEvidence": "package.json: better-sqlite3", "recommendedService": "postgres", "reason": "...", "manualSteps": ["..."]}]
 }`
 
@@ -315,6 +363,8 @@ Rules:
 - Mark as required=false if there's a default fallback value — but STILL include it (the default is usually for development only and won't work in production)
 - For URL variables (callback URLs, frontend URLs, webhook URLs), always include them — localhost defaults need to be changed for production
 - For secret/key variables, note in the description that the user should generate a secure value
+- Populate "defaultValue" whenever the source has a safe production fallback the dashboard can pre-fill (enum members like LOG_LEVEL=info, cache TTLs, numeric tunables). CRITICAL for strict validators (Zod enum, class-validator, pydantic): an empty string "" is NOT the same as "undefined" — leaving it blank will fail validation, so always emit a concrete defaultValue for enum-typed vars.
+- Do NOT set defaultValue for secrets, API keys, tokens, or anything user-specific (leave the user to fill it in).
 - Do NOT include these platform-injected variables: DATABASE_URL, PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE, REDIS_URL, MONGODB_URL, RABBITMQ_URL, STORAGE_PATH, SPRING_DATASOURCE_*
 - Do NOT include these Dockerfile-set variables: NODE_ENV, PORT, CI, ORCHESTRATOR_PORT (or similar port vars already set via ENV in the Dockerfile)
 
@@ -325,7 +375,7 @@ Respond with valid JSON only — no markdown, no extra text.
   "dockerfile": "FROM ...\n...",
   "port": 3000,
   "stack": "nodejs|nextjs|vite|python|go|java|rust|static",
-  "envHints": [{"key": "DATABASE_URL", "description": "...", "required": true}],
+  "envHints": [{"key": "DATABASE_URL", "description": "...", "required": true, "defaultValue": ""}],
   "diagnosis": "Root cause explanation..."
 }`
 

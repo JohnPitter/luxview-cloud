@@ -9,6 +9,7 @@ export interface EnvHint {
   key: string;
   description: string;
   required: boolean;
+  defaultValue?: string;
 }
 
 export interface ServiceRecommendation {
