@@ -327,7 +327,7 @@ export function AppDetail() {
       setActionPending(true);
       await deployApp(appId!, 'ai');
       setShowAnalysisModal(false);
-      setFailureAnalysisResult(null);
+      setAnalysisResult(null);
     } catch {
       addNotification({ type: 'error', title: t('app.notifications.deploymentFailed') });
     }
@@ -335,7 +335,7 @@ export function AppDetail() {
 
   const handleDismissAnalysis = () => {
     setShowAnalysisModal(false);
-    setFailureAnalysisResult(null);
+    setAnalysisResult(null);
   };
 
   const latestMetric = metrics.length > 0 ? metrics[metrics.length - 1] : null;
