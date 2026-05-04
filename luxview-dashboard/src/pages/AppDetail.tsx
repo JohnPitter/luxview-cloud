@@ -1160,7 +1160,7 @@ export function AppDetail() {
       {/* Failure Analysis Modal */}
       {showAnalysisModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleDismissAnalysis} />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
           <div className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
             {!analyzing && analysisResult && (
               <button
