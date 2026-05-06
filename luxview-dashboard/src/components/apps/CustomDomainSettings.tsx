@@ -29,7 +29,14 @@ export function CustomDomainSettings({ appId, savedDomain, value, onChange, inpu
     setLoading(true);
     try {
       const r = await appsApi.checkDomain(appId, probeDomain);
-      setCheck(r);
+      // Defensive: backend may serialize nil slices as null in older builds.
+      setCheck({
+        ...r,
+        nameservers: r.nameservers ?? [],
+        issues: r.issues ?? [],
+        apex: { ...r.apex, ips: r.apex?.ips ?? [] },
+        www: { ...r.www, ips: r.www?.ips ?? [] },
+      });
     } catch {
       // Non-fatal — UI shows last good state.
     } finally {
@@ -150,10 +157,16 @@ export function CustomDomainSettings({ appId, savedDomain, value, onChange, inpu
       )}
 
       {/* Diagnostics */}
-      {check && check.issues.length > 0 && (
+      {check && (check.issues?.length ?? 0) > 0 && (
         <div className="mt-3 space-y-1.5">
-          {check.issues.map((iss) => (
-            <DiagnosticItem key={iss} issue={iss} t={t} expectedIP={expectedIP} actualIPs={check.apex.ips} />
+          {(check.issues ?? []).map((iss) => (
+            <DiagnosticItem
+              key={iss}
+              issue={iss}
+              t={t}
+              expectedIP={expectedIP}
+              actualIPs={check.apex?.ips ?? []}
+            />
           ))}
         </div>
       )}
@@ -165,33 +178,35 @@ type RowState = 'ok' | 'fail' | 'pending' | 'idle';
 
 function statusFor(c: DomainCheckResult | null, kind: 'dns' | 'cert', loading: boolean): RowState {
   if (!c) return loading ? 'pending' : 'idle';
+  const apexIPs = c.apex?.ips ?? [];
   if (kind === 'dns') {
-    if (c.apex.match) return 'ok';
-    if (c.apex.ips.length > 0) return 'fail';
+    if (c.apex?.match) return 'ok';
+    if (apexIPs.length > 0) return 'fail';
     return 'pending';
   }
-  if (c.cert.issued) return 'ok';
-  if (!c.apex.match) return 'idle';
+  if (c.cert?.issued) return 'ok';
+  if (!c.apex?.match) return 'idle';
   return 'pending';
 }
 
 function dnsDetail(c: DomainCheckResult | null, t: (k: string) => string): string {
   if (!c) return '';
-  if (c.apex.match) return `${c.apex.host} → ${c.expected_ip}`;
-  if (c.apex.ips.length > 0) return `${c.apex.host} → ${c.apex.ips.join(', ')}`;
+  const apexIPs = c.apex?.ips ?? [];
+  if (c.apex?.match) return `${c.apex.host} → ${c.expected_ip}`;
+  if (apexIPs.length > 0) return `${c.apex.host} → ${apexIPs.join(', ')}`;
   return t('app.settings.domain.unresolved');
 }
 
 function certDetail(c: DomainCheckResult | null, t: (k: string) => string): string {
   if (!c) return '';
-  if (c.cert.issued) {
+  if (c.cert?.issued) {
     if (c.cert.not_after) {
       const d = new Date(c.cert.not_after);
       return t('app.settings.domain.certExpires').replace('{{date}}', d.toLocaleDateString());
     }
     return t('app.settings.domain.certActive');
   }
-  if (!c.apex.match) return t('app.settings.domain.certWaitingDns');
+  if (!c.apex?.match) return t('app.settings.domain.certWaitingDns');
   return t('app.settings.domain.certIssuing');
 }
 

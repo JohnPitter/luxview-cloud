@@ -74,9 +74,11 @@ func (c *DomainChecker) Check(ctx context.Context, domain string) DomainCheckRes
 	domain = strings.TrimSuffix(domain, "/")
 
 	res := DomainCheckResult{
-		Domain:     domain,
-		ExpectedIP: c.expectedIP,
-		CheckedAt:  time.Now().UTC(),
+		Domain:      domain,
+		ExpectedIP:  c.expectedIP,
+		Nameservers: []string{},
+		Issues:      []string{},
+		CheckedAt:   time.Now().UTC(),
 	}
 
 	if domain == "" {
@@ -124,7 +126,7 @@ func (c *DomainChecker) Check(ctx context.Context, domain string) DomainCheckRes
 }
 
 func (c *DomainChecker) checkHost(ctx context.Context, host string) DomainHostStatus {
-	out := DomainHostStatus{Host: host}
+	out := DomainHostStatus{Host: host, IPs: []string{}}
 	ips, err := c.resolver.LookupHost(ctx, host)
 	if err != nil {
 		return out
