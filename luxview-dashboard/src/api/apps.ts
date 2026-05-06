@@ -104,4 +104,45 @@ export const appsApi = {
     const base = api.defaults.baseURL ?? '/api';
     return `${base}/apps/${id}/logs/stream?tail=${tail}`;
   },
+
+  async checkDomain(id: string, domain?: string): Promise<DomainCheckResult> {
+    const { data } = await api.get<DomainCheckResult>(`/apps/${id}/domain-check`, {
+      params: domain ? { domain } : undefined,
+    });
+    return data;
+  },
 };
+
+export interface DomainHostStatus {
+  host: string;
+  ips: string[];
+  match: boolean;
+  cloudflare_proxied: boolean;
+}
+
+export interface DomainCertStatus {
+  issued: boolean;
+  not_after?: string;
+  last_error?: string;
+}
+
+export type DomainIssue =
+  | 'empty_domain'
+  | 'parking_nameservers'
+  | 'apex_unresolved'
+  | 'apex_wrong_ip'
+  | 'cloudflare_proxy_active'
+  | 'cert_pending';
+
+export interface DomainCheckResult {
+  domain: string;
+  expected_ip: string;
+  apex: DomainHostStatus;
+  www: DomainHostStatus;
+  nameservers: string[];
+  parking_detected: boolean;
+  cert: DomainCertStatus;
+  ready: boolean;
+  issues: DomainIssue[];
+  checked_at: string;
+}

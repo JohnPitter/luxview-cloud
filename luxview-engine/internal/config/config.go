@@ -57,6 +57,9 @@ type Config struct {
 	AppNetwork    string // Docker network for user app containers
 	InternalToken string
 
+	VPSPublicIP   string // Public IP A-record users must point custom domains to
+	AcmeStorePath string // Path to Traefik acme.json (read-only mount), used for cert status
+
 	// Analytics
 	GeoLite2Path      string
 	TraefikLogPath    string
@@ -112,6 +115,9 @@ func Load() (*Config, error) {
 
 		AppNetwork:    envStr("APP_NETWORK", "luxview-net"),
 		InternalToken: envStr("INTERNAL_TOKEN", ""),
+
+		VPSPublicIP:   envStr("VPS_PUBLIC_IP", ""),
+		AcmeStorePath: envStr("ACME_STORE_PATH", "/letsencrypt/acme.json"),
 
 		GeoLite2Path:      envStr("GEOLITE2_PATH", "/usr/share/GeoIP/GeoLite2-City.mmdb"),
 		TraefikLogPath:    envStr("TRAEFIK_LOG_PATH", ""),

@@ -45,6 +45,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - build-cache:/tmp/builds
       - traefik-logs:/var/log/traefik:ro
+      - traefik-certs:/letsencrypt:ro
       - /data/luxview/storage:/data/luxview/storage
       - /backups:/backups
     environment:
@@ -75,6 +76,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - TRAEFIK_LOG_PATH=/var/log/traefik/access.json
       - MAIL_CONTAINER_NAME=luxview-mailserver
+      - VPS_PUBLIC_IP=${VPS_PUBLIC_IP:-}
+      - ACME_STORE_PATH=/letsencrypt/acme.json
     networks:
       - luxview-net
       - traefik-public

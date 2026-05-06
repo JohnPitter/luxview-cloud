@@ -89,6 +89,8 @@ func NewRouter(deps Deps) *chi.Mux {
 	analyticsHandler := handlers.NewAnalyticsHandler(deps.PageviewRepo, deps.AppRepo)
 	mailboxHandler := handlers.NewMailboxHandler(deps.MailboxRepo, deps.ServiceRepo, deps.AppRepo, deps.Provisioner, deps.AuditSvc, deps.Config.Domain)
 	backupHandler := handlers.NewBackupHandler(deps.BackupSvc, deps.AuditSvc)
+	domainChecker := service.NewDomainChecker(deps.Config.VPSPublicIP, deps.Config.AcmeStorePath)
+	domainCheckHandler := handlers.NewDomainCheckHandler(deps.AppRepo, domainChecker)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 
@@ -146,6 +148,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Put("/apps/{id}/maintenance", appHandler.SetMaintenance)
 			r.Get("/apps/{id}/logs", appHandler.ContainerLogs)
 			r.Get("/apps/{id}/logs/stream", appHandler.ContainerLogsStream)
+			r.Get("/apps/{id}/domain-check", domainCheckHandler.Check)
 
 			// AI Analyze
 			r.Post("/apps/{id}/analyze", analyzeHandler.Analyze)

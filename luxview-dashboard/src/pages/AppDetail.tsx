@@ -12,8 +12,6 @@ import {
   Eye,
   EyeOff,
   Save,
-  Copy,
-  Check,
   Rocket,
   Loader2,
   Stethoscope,
@@ -46,6 +44,7 @@ import { alertsApi, type Alert, type CreateAlertPayload } from '../api/alerts';
 import { appsApi } from '../api/apps';
 import { analyzeApi, type AnalysisResult } from '../api/analyze';
 import { DeployAnalysis } from '../components/deploy/DeployAnalysis';
+import { CustomDomainSettings } from '../components/apps/CustomDomainSettings';
 
 type Tab = 'overview' | 'deployments' | 'logs' | 'env' | 'services' | 'metrics' | 'alerts' | 'settings';
 
@@ -1059,19 +1058,13 @@ export function AppDetail() {
                     />
                   </button>
                 </div>
-                <div>
-                  <label className="block text-xs text-zinc-500 mb-1.5">{t('app.settings.customDomain')}</label>
-                  <input
-                    type="text"
-                    value={settingsCustomDomain}
-                    onChange={(e) => setSettingsCustomDomain(e.target.value)}
-                    placeholder={t('app.settings.customDomainPlaceholder')}
-                    className={inputClass}
-                  />
-                  <p className="text-[10px] text-zinc-500 mt-1">
-                    {t('app.settings.customDomainDescription', { subdomain: app.subdomain })}
-                  </p>
-                </div>
+                <CustomDomainSettings
+                  appId={app.id}
+                  savedDomain={app.customDomain ?? null}
+                  value={settingsCustomDomain}
+                  onChange={setSettingsCustomDomain}
+                  inputClassName={inputClass}
+                />
               </div>
               <div className="flex justify-end mt-6">
                 <PillButton variant="primary" size="sm" onClick={handleSaveSettings} icon={<Save size={14} />}>
