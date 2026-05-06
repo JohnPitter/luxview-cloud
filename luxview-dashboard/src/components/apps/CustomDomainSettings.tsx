@@ -192,7 +192,6 @@ function statusFor(c: DomainCheckResult | null, kind: 'dns' | 'cert', loading: b
 function dnsDetail(c: DomainCheckResult | null, t: (k: string) => string): string {
   if (!c) return '';
   const apexIPs = c.apex?.ips ?? [];
-  if (c.apex?.match) return `${c.apex.host} → ${c.expected_ip}`;
   if (apexIPs.length > 0) return `${c.apex.host} → ${apexIPs.join(', ')}`;
   return t('app.settings.domain.unresolved');
 }

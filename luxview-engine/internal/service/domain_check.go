@@ -103,8 +103,10 @@ func (c *DomainChecker) Check(ctx context.Context, domain string) DomainCheckRes
 
 	res.Cert = c.readCertStatus(domain)
 
-	// Compose issues
-	if res.ParkingDetected {
+	// Compose issues — only surface "parking" if the DNS isn't resolving
+	// correctly yet. Once the A record points here, the parking NS is just
+	// a stale resolver-cache artifact and shouldn't alarm the user.
+	if res.ParkingDetected && !res.Apex.Match {
 		res.Issues = append(res.Issues, "parking_nameservers")
 	}
 	if !res.Apex.Match {
