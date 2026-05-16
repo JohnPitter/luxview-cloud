@@ -13,7 +13,8 @@ import (
 )
 
 type fakeRepositoryStore struct {
-	repos map[uuid.UUID]*model.Repository
+	repos   map[uuid.UUID]*model.Repository
+	remotes []model.RepositoryRemote
 }
 
 func newFakeRepositoryStore() *fakeRepositoryStore {
@@ -33,6 +34,43 @@ func (s *fakeRepositoryStore) FindByID(_ context.Context, id uuid.UUID) (*model.
 	}
 	copy := *repo
 	return &copy, nil
+}
+
+func (s *fakeRepositoryStore) FindByUserAndSlug(_ context.Context, userID uuid.UUID, slug string) (*model.Repository, error) {
+	for _, r := range s.repos {
+		if r.UserID == userID && r.Slug == slug {
+			copy := *r
+			return &copy, nil
+		}
+	}
+	return nil, nil
+}
+
+func (s *fakeRepositoryStore) CreateRemote(_ context.Context, remote *model.RepositoryRemote) error {
+	remote.ID = uuid.New()
+	s.remotes = append(s.remotes, *remote)
+	return nil
+}
+
+func (s *fakeRepositoryStore) ListRemotes(_ context.Context, repositoryID uuid.UUID) ([]model.RepositoryRemote, error) {
+	var result []model.RepositoryRemote
+	for _, r := range s.remotes {
+		if r.RepositoryID == repositoryID {
+			result = append(result, r)
+		}
+	}
+	return result, nil
+}
+
+func (s *fakeRepositoryStore) UpdateRemoteSyncStatus(_ context.Context, remoteID uuid.UUID, status model.RepositorySyncStatus, errMsg string) error {
+	for i, r := range s.remotes {
+		if r.ID == remoteID {
+			s.remotes[i].LastSyncStatus = &status
+			s.remotes[i].LastSyncError = errMsg
+			return nil
+		}
+	}
+	return nil
 }
 
 func TestRepositoryServiceCreateInitializesBareRepo(t *testing.T) {

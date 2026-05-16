@@ -74,6 +74,7 @@ func main() {
 	provisioner := service.NewProvisioner(serviceRepo, mailboxRepo, cfg, encryptionKey)
 	routerSvc := service.NewRouterService(appRepo, cfg.Domain)
 	repositorySvc := service.NewRepositoryService(repositoryRepo, cfg.RepositoryBasePath)
+	// Backup support is wired after githubAppSvc is initialised below.
 	sourceCheckout := service.NewAppSourceCheckout(
 		service.NewGitHubSourceCheckout(userRepo, encryptionKey, "source-checkout"),
 		service.NewLuxViewSourceCheckout(repositorySvc),
@@ -113,6 +114,11 @@ func main() {
 		log.Info().Int64("app_id", cfg.GitHubAppID).Msg("GitHub App integration enabled")
 	} else {
 		log.Info().Msg("GitHub App integration disabled (GITHUB_APP_ID not set)")
+	}
+
+	// Wire backup support once githubAppSvc is available.
+	if githubAppSvc != nil {
+		repositorySvc.WithBackupSupport(githubAppSvc, userRepo)
 	}
 
 	metricsWorker := worker.NewMetricsWorker(metricsCollector, cfg.MetricsInterval)

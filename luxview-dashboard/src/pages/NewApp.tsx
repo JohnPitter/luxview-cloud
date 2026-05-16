@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Github, Server, GitBranch, Loader2, Plus, Rocket } from 'lucide-react';
+import { ArrowLeft, Github, Server, GitBranch, Loader2, Plus, Rocket, Settings } from 'lucide-react';
 import { DeployWizard, type DeployConfig } from '../components/deploy/DeployWizard';
 import { PillButton } from '../components/common/PillButton';
 import { PageTour } from '../components/common/PageTour';
@@ -351,6 +351,7 @@ export function NewApp() {
               >
                 {t('newApp.createRepo')}
               </PillButton>
+              <p className="text-xs text-zinc-500">{t('newApp.createRepoHint')}</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -376,7 +377,16 @@ export function NewApp() {
                         <p className="text-xs text-zinc-500 font-mono">{repo.slug}</p>
                       </div>
                     </div>
-                    <span className="text-xs text-zinc-500">{repo.defaultBranch}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-zinc-500">{repo.defaultBranch}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/repositories/${repo.id}`); }}
+                        className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+                        title={t('repo.backup.title')}
+                      >
+                        <Settings size={13} />
+                      </button>
+                    </div>
                   </div>
                 </GlassCard>
               ))}

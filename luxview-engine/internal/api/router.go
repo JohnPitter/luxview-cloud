@@ -166,6 +166,9 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Get("/repositories", repositoryHandler.List)
 			r.Post("/repositories", repositoryHandler.Create)
 			r.Get("/repositories/{id}/branches", repositoryHandler.ListBranches)
+			r.Get("/repositories/{id}/remotes", repositoryHandler.ListRemotes)
+			r.Post("/repositories/{id}/remotes", repositoryHandler.AddRemote)
+			r.Post("/repositories/{id}/remotes/{remoteId}/sync", repositoryHandler.SyncRemote)
 
 			// Apps
 			r.Get("/apps/check-subdomain/{subdomain}", appHandler.CheckSubdomain)

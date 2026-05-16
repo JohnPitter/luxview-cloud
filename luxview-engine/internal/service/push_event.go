@@ -83,5 +83,18 @@ func (s *PushEventService) HandlePush(ctx context.Context, repositoryID uuid.UUI
 	}
 
 	log.Info().Int("matched", matched).Str("repo_id", repositoryID.String()).Msg("push event processed")
+
+	// Sync backup remotes in background — failure must not block the response.
+	go func() {
+		// Find the owner of this repository to get the GitHub token.
+		apps2, _, _ := s.appRepo.ListAll(context.Background(), 1000, 0)
+		for _, app := range apps2 {
+			if app.RepositoryID != nil && *app.RepositoryID == repositoryID {
+				s.repoSvc.SyncAllBackups(context.Background(), repositoryID, app.UserID)
+				return
+			}
+		}
+	}()
+
 	return nil
 }

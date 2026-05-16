@@ -25,11 +25,27 @@ var repositorySlugRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,118}[a-z0-9]
 type RepositoryStore interface {
 	Create(ctx context.Context, repo *model.Repository) error
 	FindByID(ctx context.Context, id uuid.UUID) (*model.Repository, error)
+	FindByUserAndSlug(ctx context.Context, userID uuid.UUID, slug string) (*model.Repository, error)
+	CreateRemote(ctx context.Context, remote *model.RepositoryRemote) error
+	ListRemotes(ctx context.Context, repositoryID uuid.UUID) ([]model.RepositoryRemote, error)
+	UpdateRemoteSyncStatus(ctx context.Context, remoteID uuid.UUID, status model.RepositorySyncStatus, errMsg string) error
+}
+
+// BackupTokenProvider retrieves a GitHub token for the repository owner to use during backup push.
+type BackupTokenProvider interface {
+	TokenForUser(ctx context.Context, user *model.User) (string, error)
+}
+
+// UserLookup retrieves a user by ID.
+type UserLookup interface {
+	FindByID(ctx context.Context, id uuid.UUID) (*model.User, error)
 }
 
 type RepositoryService struct {
-	store   RepositoryStore
-	baseDir string
+	store         RepositoryStore
+	baseDir       string
+	tokenProvider BackupTokenProvider
+	userLookup    UserLookup
 }
 
 type CreateRepositoryRequest struct {
@@ -45,6 +61,12 @@ func NewRepositoryService(store RepositoryStore, baseDir string) *RepositoryServ
 		baseDir = defaultRepositoryBaseDir
 	}
 	return &RepositoryService{store: store, baseDir: baseDir}
+}
+
+// WithBackupSupport attaches a token provider and user lookup so SyncBackup can authenticate.
+func (s *RepositoryService) WithBackupSupport(tokenProvider BackupTokenProvider, userLookup UserLookup) {
+	s.tokenProvider = tokenProvider
+	s.userLookup = userLookup
 }
 
 func (s *RepositoryService) Create(ctx context.Context, req CreateRepositoryRequest) (*model.Repository, error) {
@@ -164,6 +186,99 @@ func (s *RepositoryService) Checkout(ctx context.Context, repositoryID uuid.UUID
 		CommitSHA:    strings.TrimSpace(commit),
 		WorkDir:      destDir,
 	}, nil
+}
+
+// ConfigureBackupRemote adds a GitHub remote entry and registers it in the bare repository.
+// remoteURL must be the canonical HTTPS URL (e.g. https://github.com/owner/repo.git).
+// The token is stored externally; the remote URL in git config is set with the token embedded only during sync.
+func (s *RepositoryService) ConfigureBackupRemote(ctx context.Context, repositoryID uuid.UUID, provider, remoteURL string) (*model.RepositoryRemote, error) {
+	repo, err := s.findRepository(ctx, repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	remote := &model.RepositoryRemote{
+		RepositoryID: repo.ID,
+		Provider:     provider,
+		RemoteURL:    remoteURL,
+		Mode:         model.RepositoryRemoteModeBackup,
+	}
+	if err := s.store.CreateRemote(ctx, remote); err != nil {
+		return nil, fmt.Errorf("create remote record: %w", err)
+	}
+	return remote, nil
+}
+
+// ListRemotes returns the configured backup remotes for a repository.
+func (s *RepositoryService) ListRemotes(ctx context.Context, repositoryID uuid.UUID) ([]model.RepositoryRemote, error) {
+	return s.store.ListRemotes(ctx, repositoryID)
+}
+
+// SyncBackup pushes all refs to the backup remote.
+// userID is the repository owner — used to retrieve the GitHub token.
+// Failure is non-fatal by design: it updates the sync status but does not propagate the error.
+func (s *RepositoryService) SyncBackup(ctx context.Context, repositoryID uuid.UUID, remoteID uuid.UUID, userID uuid.UUID) error {
+	repo, err := s.findRepository(ctx, repositoryID)
+	if err != nil {
+		return err
+	}
+
+	remotes, err := s.store.ListRemotes(ctx, repositoryID)
+	if err != nil {
+		return fmt.Errorf("list remotes: %w", err)
+	}
+	var target *model.RepositoryRemote
+	for i := range remotes {
+		if remotes[i].ID == remoteID {
+			target = &remotes[i]
+			break
+		}
+	}
+	if target == nil {
+		return fmt.Errorf("remote not found")
+	}
+
+	pushURL, err := s.buildAuthURL(ctx, target.RemoteURL, userID)
+	if err != nil {
+		syncErr := fmt.Sprintf("build auth url: %s", err.Error())
+		_ = s.store.UpdateRemoteSyncStatus(ctx, remoteID, model.RepositorySyncStatusFailed, syncErr)
+		return fmt.Errorf("backup auth: %w", err)
+	}
+
+	if err := runGit(ctx, repo.StoragePath, "push", "--mirror", pushURL); err != nil {
+		syncErr := err.Error()
+		_ = s.store.UpdateRemoteSyncStatus(ctx, remoteID, model.RepositorySyncStatusFailed, syncErr)
+		return fmt.Errorf("backup push: %w", err)
+	}
+
+	return s.store.UpdateRemoteSyncStatus(ctx, remoteID, model.RepositorySyncStatusSuccess, "")
+}
+
+// SyncAllBackups pushes to all configured backup remotes for a repository (fire-and-forget use).
+func (s *RepositoryService) SyncAllBackups(ctx context.Context, repositoryID uuid.UUID, userID uuid.UUID) {
+	remotes, err := s.store.ListRemotes(ctx, repositoryID)
+	if err != nil {
+		return
+	}
+	for _, remote := range remotes {
+		_ = s.SyncBackup(ctx, repositoryID, remote.ID, userID)
+	}
+}
+
+func (s *RepositoryService) buildAuthURL(ctx context.Context, remoteURL string, userID uuid.UUID) (string, error) {
+	if s.tokenProvider == nil || s.userLookup == nil {
+		return "", fmt.Errorf("backup token provider not configured")
+	}
+	user, err := s.userLookup.FindByID(ctx, userID)
+	if err != nil || user == nil {
+		return "", fmt.Errorf("user not found")
+	}
+	token, err := s.tokenProvider.TokenForUser(ctx, user)
+	if err != nil {
+		return "", err
+	}
+	// Embed token: https://github.com/... → https://<token>@github.com/...
+	withToken := strings.Replace(remoteURL, "https://", fmt.Sprintf("https://%s@", token), 1)
+	return withToken, nil
 }
 
 func (s *RepositoryService) findRepository(ctx context.Context, repositoryID uuid.UUID) (*model.Repository, error) {
