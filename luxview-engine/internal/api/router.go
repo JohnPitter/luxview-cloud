@@ -16,27 +16,30 @@ import (
 
 // Deps holds all dependencies needed to set up the router.
 type Deps struct {
-	Config      *config.Config
-	UserRepo    *repository.UserRepo
-	AppRepo     *repository.AppRepo
-	DeployRepo  *repository.DeploymentRepo
-	ServiceRepo *repository.ServiceRepo
-	MetricRepo  *repository.MetricRepo
-	AlertRepo   *repository.AlertRepo
-	Container   *service.ContainerManager
-	Provisioner *service.Provisioner
-	Router      *service.RouterService
-	WebhookSvc  *service.WebhookService
-	BuildQueue  chan<- service.DeployRequest
-	EncryptKey  []byte
-	PlanRepo     *repository.PlanRepo
-	SettingsRepo *repository.SettingsRepo
-	Docker       *dockerclient.Client
-	AuditRepo    *repository.AuditLogRepo
-	AuditSvc     *service.AuditService
-	PageviewRepo *repository.PageviewRepo
-	MailboxRepo  *repository.MailboxRepo
-	BackupSvc *service.BackupService
+	Config        *config.Config
+	UserRepo      *repository.UserRepo
+	AppRepo       *repository.AppRepo
+	DeployRepo    *repository.DeploymentRepo
+	ActionRepo    *repository.ActionRepo
+	ServiceRepo   *repository.ServiceRepo
+	MetricRepo    *repository.MetricRepo
+	AlertRepo     *repository.AlertRepo
+	Container     *service.ContainerManager
+	Provisioner   *service.Provisioner
+	Router        *service.RouterService
+	WebhookSvc    *service.WebhookService
+	ActionSvc     *service.ActionService
+	GitHubAppSvc  *service.GitHubAppService
+	BuildQueue    chan<- service.DeployRequest
+	EncryptKey    []byte
+	PlanRepo      *repository.PlanRepo
+	SettingsRepo  *repository.SettingsRepo
+	Docker        *dockerclient.Client
+	AuditRepo     *repository.AuditLogRepo
+	AuditSvc      *service.AuditService
+	PageviewRepo  *repository.PageviewRepo
+	MailboxRepo   *repository.MailboxRepo
+	BackupSvc     *service.BackupService
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -70,17 +73,19 @@ func NewRouter(deps Deps) *chi.Mux {
 	})
 
 	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(deps.Config, deps.UserRepo, deps.SettingsRepo, deps.EncryptKey, deps.AuditSvc)
+	authHandler := handlers.NewAuthHandler(deps.Config, deps.UserRepo, deps.SettingsRepo, deps.EncryptKey, deps.AuditSvc, deps.GitHubAppSvc)
 	webhookURL := deps.Config.BaseURL + "/api/webhooks/github"
 	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.BuildQueue, deps.EncryptKey, deps.AuditSvc, webhookURL, deps.Config.InternalToken)
 	deployHandler := handlers.NewDeploymentHandler(deps.DeployRepo, deps.AppRepo, deps.BuildQueue, deps.AuditSvc)
+	actionHandler := handlers.NewActionHandler(deps.ActionRepo, deps.AppRepo, deps.ActionSvc, deps.AuditSvc)
 	serviceHandler := handlers.NewServiceHandler(deps.ServiceRepo, deps.AppRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)
 	metricHandler := handlers.NewMetricHandler(deps.MetricRepo, deps.AppRepo)
 	alertHandler := handlers.NewAlertHandler(deps.AlertRepo, deps.AppRepo, deps.AuditSvc)
 	adminHandler := handlers.NewAdminHandler(deps.UserRepo, deps.AppRepo, deps.DeployRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.AuditSvc)
 	explorerHandler := handlers.NewExplorerHandler(deps.ServiceRepo, deps.AppRepo, deps.EncryptKey)
 	traefikHandler := handlers.NewTraefikHandler(deps.Router)
-	webhookHandler := handlers.NewWebhookHandler(deps.WebhookSvc, deps.Config.InternalToken)
+	webhookHandler := handlers.NewWebhookHandler(deps.WebhookSvc, deps.Config.InternalToken, deps.Config.GitHubAppWebhookSecret, deps.GitHubAppSvc)
+	githubHandler := handlers.NewGitHubHandler(deps.GitHubAppSvc)
 	planHandler := handlers.NewPlanHandler(deps.PlanRepo, deps.UserRepo, deps.AppRepo, deps.AuditSvc)
 	settingsHandler := handlers.NewSettingsHandler(deps.SettingsRepo, deps.AuditSvc)
 	analyzeHandler := handlers.NewAnalyzeHandler(deps.AppRepo, deps.UserRepo, deps.DeployRepo, deps.SettingsRepo, deps.ServiceRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)
@@ -131,9 +136,16 @@ func NewRouter(deps Deps) *chi.Mux {
 			// User
 			r.Get("/auth/me", authHandler.Me)
 
-			// GitHub
+			// GitHub App install (authenticated redirect + callback)
+			r.Get("/auth/github/app/install", authHandler.GitHubAppInstallRedirect)
+			r.Get("/auth/github/app/callback", authHandler.GitHubAppCallback)
+
+			// GitHub repos/branches + GitHub App endpoints
 			r.Get("/github/repos", appHandler.ListGitHubRepos)
 			r.Get("/github/repos/{owner}/{repo}/branches", appHandler.ListGitHubBranches)
+			r.Post("/github/repos", githubHandler.CreateRepo)
+			r.Put("/github/workflow", githubHandler.CommitWorkflow)
+			r.Post("/github/sync-secrets", githubHandler.SyncSecrets)
 
 			// Apps
 			r.Get("/apps/check-subdomain/{subdomain}", appHandler.CheckSubdomain)
@@ -162,6 +174,15 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Get("/apps/{id}/deployments", deployHandler.List)
 			r.Get("/deployments/{id}/logs", deployHandler.GetLogs)
 			r.Post("/deployments/{id}/rollback", deployHandler.Rollback)
+
+			// Actions
+			r.Get("/apps/{id}/actions/runs", actionHandler.ListRuns)
+			r.Post("/apps/{id}/actions/runs", actionHandler.TriggerRun)
+			r.Get("/apps/{id}/actions/secrets", actionHandler.ListSecrets)
+			r.Put("/apps/{id}/actions/secrets/{key}", actionHandler.UpsertSecret)
+			r.Delete("/apps/{id}/actions/secrets/{key}", actionHandler.DeleteSecret)
+			r.Get("/actions/runs/{runID}", actionHandler.GetRun)
+			r.Get("/actions/runs/{runID}/artifacts", actionHandler.ListArtifacts)
 
 			// Services
 			r.Get("/services", serviceHandler.ListAll)

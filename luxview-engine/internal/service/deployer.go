@@ -6,20 +6,19 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/rs/zerolog"
 	"github.com/luxview/engine/internal/buildpack"
 	"github.com/luxview/engine/internal/model"
 	"github.com/luxview/engine/internal/repository"
 	"github.com/luxview/engine/pkg/crypto"
 	dockerclient "github.com/luxview/engine/pkg/docker"
 	"github.com/luxview/engine/pkg/logger"
+	"github.com/rs/zerolog"
 )
 
 // DeployRequest holds the data needed to deploy an app.
@@ -33,21 +32,22 @@ type DeployRequest struct {
 
 // Deployer orchestrates the full deploy flow.
 type Deployer struct {
-	appRepo        *repository.AppRepo
-	deployRepo     *repository.DeploymentRepo
-	userRepo       *repository.UserRepo
-	serviceRepo    *repository.ServiceRepo
-	settingsRepo   *repository.SettingsRepo
-	provisioner    *Provisioner
-	detector       *Detector
-	builder        *Builder
-	container      *ContainerManager
-	portManager    *PortManager
-	healthChecker  *HealthChecker
-	docker         *dockerclient.Client
-	encryptionKey  []byte
-	buildTimeout   time.Duration
-	appLocks       sync.Map // per-app deploy lock to prevent concurrent deploys
+	appRepo       *repository.AppRepo
+	deployRepo    *repository.DeploymentRepo
+	userRepo      *repository.UserRepo
+	serviceRepo   *repository.ServiceRepo
+	settingsRepo  *repository.SettingsRepo
+	provisioner   *Provisioner
+	detector      *Detector
+	builder       *Builder
+	container     *ContainerManager
+	portManager   *PortManager
+	healthChecker *HealthChecker
+	docker        *dockerclient.Client
+	encryptionKey []byte
+	repoCloner    *RepoCloner
+	buildTimeout  time.Duration
+	appLocks      sync.Map // per-app deploy lock to prevent concurrent deploys
 }
 
 func NewDeployer(
@@ -78,6 +78,7 @@ func NewDeployer(
 		healthChecker: NewHealthChecker(appRepo, container),
 		docker:        docker,
 		encryptionKey: encryptionKey,
+		repoCloner:    NewRepoCloner(userRepo, encryptionKey, "deployer"),
 		buildTimeout:  buildTimeout,
 	}
 }
@@ -144,7 +145,7 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	buildDir := filepath.Join(os.TempDir(), "luxview-builds", deployment.ID.String())
 	defer os.RemoveAll(buildDir)
 
-	if err := d.cloneRepo(ctx, app, buildDir); err != nil {
+	if err := d.repoCloner.Clone(ctx, app, buildDir); err != nil {
 		d.failDeploy(ctx, deployment, app, "clone failed: "+err.Error(), start)
 		return err
 	}
@@ -754,53 +755,6 @@ func (d *Deployer) tryHook(ctx context.Context, containerID string, log zerolog.
 	}
 
 	return true // tool was detected, don't try others
-}
-
-func (d *Deployer) cloneRepo(ctx context.Context, app *model.App, destDir string) error {
-	log := logger.With("deployer")
-
-	if err := os.MkdirAll(destDir, 0755); err != nil {
-		return fmt.Errorf("create build dir: %w", err)
-	}
-
-	// Get user's GitHub token for private repos
-	user, err := d.userRepo.FindByID(ctx, app.UserID)
-	if err != nil || user == nil {
-		return fmt.Errorf("user not found")
-	}
-
-	token := user.GitHubToken
-	if token != "" {
-		// Try to decrypt
-		if decrypted, err := crypto.Decrypt(token, d.encryptionKey); err == nil {
-			token = decrypted
-		}
-	}
-
-	// Build clone URL with token for authentication
-	cloneURL := app.RepoURL
-	maskedURL := app.RepoURL
-	if token != "" {
-		cloneURL = injectTokenInURL(app.RepoURL, token)
-		if len(token) >= 4 {
-			maskedURL = injectTokenInURL(app.RepoURL, "****"+token[len(token)-4:])
-		} else {
-			maskedURL = injectTokenInURL(app.RepoURL, "****")
-		}
-	}
-
-	log.Debug().Str("clone_url", maskedURL).Str("branch", app.RepoBranch).Str("dest_dir", destDir).Msg("cloning repo")
-
-	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--branch", app.RepoBranch, cloneURL, destDir)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Error().Err(err).Str("output", string(output)).Msg("git clone failed")
-		return fmt.Errorf("git clone failed: %s", string(output))
-	}
-
-	log.Info().Str("repo", app.RepoURL).Str("branch", app.RepoBranch).Msg("repo cloned")
-	return nil
 }
 
 func (d *Deployer) failDeploy(ctx context.Context, deployment *model.Deployment, app *model.App, reason string, start time.Time) {

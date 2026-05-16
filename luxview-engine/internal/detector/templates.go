@@ -5,6 +5,12 @@ import (
 	"strings"
 )
 
+const (
+	defaultNodeImage     = "node:20-alpine"
+	pnpmNodeImage        = "node:22-alpine"
+	pnpmCorepackActivate = "corepack enable && corepack prepare pnpm@10 --activate"
+)
+
 func generateDockerfile(det Detection, repoDir string) string {
 	switch det.Runtime {
 	case "nodejs":
@@ -30,10 +36,12 @@ func nodeDockerfile(det Detection, repoDir string) string {
 	pm := "npm"
 	lockfile := "package-lock.json"
 	installCmd := "npm ci --omit=dev"
+	nodeImage := defaultNodeImage
 	if fileExists(repoDir, "pnpm-lock.yaml") {
 		pm = "pnpm"
 		lockfile = "pnpm-lock.yaml"
-		installCmd = "corepack enable && pnpm install --frozen-lockfile --prod"
+		nodeImage = pnpmNodeImage
+		installCmd = pnpmCorepackActivate + " && pnpm install --frozen-lockfile --prod"
 	} else if fileExists(repoDir, "yarn.lock") {
 		pm = "yarn"
 		lockfile = "yarn.lock"
@@ -44,11 +52,11 @@ func nodeDockerfile(det Detection, repoDir string) string {
 	hasBuildScript := strings.Contains(pkg, `"build"`)
 
 	if det.Framework == "vite" {
-		return "# Build stage\nFROM node:20-alpine AS builder\nWORKDIR /app\nCOPY package.json " + lockfile + " ./\nRUN " + strings.Replace(installCmd, "--prod", "", 1) + "\nCOPY . .\nRUN " + pm + " run build\n\n# Production stage\nFROM nginx:alpine\nCOPY --from=builder /app/dist /usr/share/nginx/html\nEXPOSE 80\nCMD [\"nginx\", \"-g\", \"daemon off;\"]\n"
+		return "# Build stage\nFROM " + nodeImage + " AS builder\nWORKDIR /app\nCOPY package.json " + lockfile + " ./\nRUN " + strings.Replace(installCmd, "--prod", "", 1) + "\nCOPY . .\nRUN " + pm + " run build\n\n# Production stage\nFROM nginx:alpine\nCOPY --from=builder /app/dist /usr/share/nginx/html\nEXPOSE 80\nCMD [\"nginx\", \"-g\", \"daemon off;\"]\n"
 	}
 
 	if det.Framework == "nextjs" {
-		return "FROM node:20-alpine AS builder\nWORKDIR /app\nCOPY package.json " + lockfile + " ./\nRUN " + strings.Replace(installCmd, "--prod", "", 1) + "\nCOPY . .\nRUN " + pm + " run build\n\nFROM node:20-alpine\nWORKDIR /app\nCOPY --from=builder /app/.next ./.next\nCOPY --from=builder /app/node_modules ./node_modules\nCOPY --from=builder /app/package.json ./\nCOPY --from=builder /app/public ./public\nEXPOSE 3000\nCMD [\"" + pm + "\", \"start\"]\n"
+		return "FROM " + nodeImage + " AS builder\nWORKDIR /app\nCOPY package.json " + lockfile + " ./\nRUN " + strings.Replace(installCmd, "--prod", "", 1) + "\nCOPY . .\nRUN " + pm + " run build\n\nFROM " + nodeImage + "\nWORKDIR /app\nCOPY --from=builder /app/.next ./.next\nCOPY --from=builder /app/node_modules ./node_modules\nCOPY --from=builder /app/package.json ./\nCOPY --from=builder /app/public ./public\nEXPOSE 3000\nCMD [\"" + pm + "\", \"start\"]\n"
 	}
 
 	buildStep := ""
@@ -56,7 +64,7 @@ func nodeDockerfile(det Detection, repoDir string) string {
 		buildStep = "RUN " + pm + " run build\n"
 	}
 
-	return "FROM node:20-alpine\nWORKDIR /app\nCOPY package.json " + lockfile + " ./\nRUN " + installCmd + "\nCOPY . .\n" + buildStep + "EXPOSE " + strconv.Itoa(det.Port) + "\nCMD [\"node\", \"dist/index.js\"]\n"
+	return "FROM " + nodeImage + "\nWORKDIR /app\nCOPY package.json " + lockfile + " ./\nRUN " + installCmd + "\nCOPY . .\n" + buildStep + "EXPOSE " + strconv.Itoa(det.Port) + "\nCMD [\"node\", \"dist/index.js\"]\n"
 }
 
 func pythonDockerfile(det Detection) string {

@@ -22,9 +22,9 @@ func NewUserRepo(db *DB) *UserRepo {
 func (r *UserRepo) FindByGitHubID(ctx context.Context, githubID int64) (*model.User, error) {
 	var u model.User
 	err := r.db.Pool.QueryRow(ctx,
-		`SELECT id, github_id, username, email, avatar_url, github_token, role, created_at, last_login_at, plan_id
+		`SELECT id, github_id, username, email, avatar_url, github_token, installation_id, role, created_at, last_login_at, plan_id
 		 FROM users WHERE github_id = $1`, githubID,
-	).Scan(&u.ID, &u.GitHubID, &u.Username, &u.Email, &u.AvatarURL, &u.GitHubToken, &u.Role, &u.CreatedAt, &u.LastLoginAt, &u.PlanID)
+	).Scan(&u.ID, &u.GitHubID, &u.Username, &u.Email, &u.AvatarURL, &u.GitHubToken, &u.InstallationID, &u.Role, &u.CreatedAt, &u.LastLoginAt, &u.PlanID)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -48,14 +48,14 @@ func (r *UserRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.User, err
 	var pCreatedAt, pUpdatedAt *time.Time
 
 	err := r.db.Pool.QueryRow(ctx,
-		`SELECT u.id, u.github_id, u.username, u.email, u.avatar_url, u.github_token, u.role, u.created_at, u.last_login_at, u.plan_id,
+		`SELECT u.id, u.github_id, u.username, u.email, u.avatar_url, u.github_token, u.installation_id, u.role, u.created_at, u.last_login_at, u.plan_id,
 		        p.id, p.name, p.description, p.price, p.currency, p.billing_cycle, p.max_apps, p.max_cpu_per_app,
 		        p.max_memory_per_app, p.max_disk_per_app, p.max_services_per_app, p.max_mailboxes_per_app, p.max_mailbox_storage, p.auto_deploy_enabled,
 		        p.custom_domain_enabled, p.priority_builds, p.highlighted, p.sort_order, p.features,
 		        p.is_active, p.is_default, p.created_at, p.updated_at
 		 FROM users u LEFT JOIN plans p ON u.plan_id = p.id
 		 WHERE u.id = $1`, id,
-	).Scan(&u.ID, &u.GitHubID, &u.Username, &u.Email, &u.AvatarURL, &u.GitHubToken, &u.Role, &u.CreatedAt, &u.LastLoginAt, &u.PlanID,
+	).Scan(&u.ID, &u.GitHubID, &u.Username, &u.Email, &u.AvatarURL, &u.GitHubToken, &u.InstallationID, &u.Role, &u.CreatedAt, &u.LastLoginAt, &u.PlanID,
 		&planID, &pName, &pDescription, &pPrice, &pCurrency, &pBillingCycle, &pMaxApps, &pMaxCPU,
 		&pMaxMemory, &pMaxDisk, &pMaxServicesPerApp, &pMaxMailboxesPerApp, &pMaxMailboxStorage, &pAutoDeploy,
 		&pCustomDomain, &pPriorityBuilds, &pHighlighted, &pSortOrder, &pFeatures,
@@ -176,6 +176,29 @@ func (r *UserRepo) UpdatePlanID(ctx context.Context, userID uuid.UUID, planID uu
 		return fmt.Errorf("update user plan_id: %w", err)
 	}
 	return nil
+}
+
+func (r *UserRepo) UpdateInstallationID(ctx context.Context, userID uuid.UUID, installationID int64) error {
+	_, err := r.db.Pool.Exec(ctx, `UPDATE users SET installation_id = $1 WHERE id = $2`, installationID, userID)
+	if err != nil {
+		return fmt.Errorf("update installation_id: %w", err)
+	}
+	return nil
+}
+
+func (r *UserRepo) FindByInstallationID(ctx context.Context, installationID int64) (*model.User, error) {
+	var u model.User
+	err := r.db.Pool.QueryRow(ctx,
+		`SELECT id, github_id, username, email, avatar_url, github_token, installation_id, role, created_at, last_login_at, plan_id
+		 FROM users WHERE installation_id = $1`, installationID,
+	).Scan(&u.ID, &u.GitHubID, &u.Username, &u.Email, &u.AvatarURL, &u.GitHubToken, &u.InstallationID, &u.Role, &u.CreatedAt, &u.LastLoginAt, &u.PlanID)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find user by installation_id: %w", err)
+	}
+	return &u, nil
 }
 
 // Helper functions for nullable scan fields

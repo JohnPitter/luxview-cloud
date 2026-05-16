@@ -10,6 +10,7 @@ export interface User {
   createdAt: string;
   planId?: string;
   plan?: Plan;
+  appInstalled?: boolean;
 }
 
 export interface AuthResponse {

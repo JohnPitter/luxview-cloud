@@ -65,7 +65,6 @@
   "common.units.cores": "cores",
   "common.units.total": "total",
   "common.units.coresTotal": "cores total",
-
   "landing.brand.tagline": "Deploy control tower",
   "landing.nav.features": "Features",
   "landing.nav.howItWorks": "How it Works",
@@ -169,7 +168,6 @@
   "landing.demo.requests": "Requests",
   "landing.demo.liveLogs": "Live logs",
   "landing.demo.streaming": "Streaming",
-
   "status.title": "System Status",
   "status.allOperational": "All systems operational",
   "status.degraded": "Some services degraded",
@@ -179,7 +177,6 @@
   "status.lastChecked": "Last checked",
   "status.autoRefresh": "Auto-refreshes every 30s",
   "status.refresh": "Refresh",
-
   "docs.title": "Documentation",
   "docs.subtitle": "Everything you need to deploy and manage applications on LuxView Cloud.",
   "docs.readFull": "Read full documentation",
@@ -230,9 +227,7 @@
   "docs.api.apps": "CRUD for apps, deploy, restart, stop, logs streaming (SSE), subdomain check",
   "docs.api.services": "Provision PostgreSQL, Redis, MongoDB, RabbitMQ, Storage — auto-injects env vars",
   "docs.api.metrics": "Real-time CPU/memory metrics, alert configuration, deployment history",
-
   "login.authenticating": "Authenticating with GitHub...",
-
   "dashboard.welcomeBack": "Welcome back, {{name}}",
   "dashboard.subtitle": "Here's what's happening with your applications",
   "dashboard.stats.totalApps": "Total Apps",
@@ -251,7 +246,6 @@
   "dashboard.quickLinks.viewResources": "View Resources",
   "dashboard.quickLinks.monitoring": "Monitoring",
   "dashboard.quickLinks.buildLogs": "Build Logs",
-
   "app.title": "Deploy New App",
   "app.subtitle": "Select a repository and configure your deployment",
   "app.tabs.overview": "Overview",
@@ -370,7 +364,6 @@
   "app.notifications.deploySuccess": "Deployment completed successfully!",
   "app.notifications.deployFailed": "Deployment failed. Check the build logs.",
   "app.notifications.failedToLoadRepos": "Failed to load repositories",
-
   "settings.title": "Settings",
   "settings.subtitle": "Manage your preferences",
   "settings.appearance": "Appearance",
@@ -382,7 +375,6 @@
   "settings.account.role": "Role",
   "settings.account.memberSince": "Member since",
   "settings.githubConnection": "GitHub Connection",
-
   "admin.title": "Admin Panel",
   "admin.subtitle": "Platform management and user access control",
   "admin.loadingData": "Loading admin data...",
@@ -453,7 +445,6 @@
   "admin.deleteDialog.confirm": "Delete",
   "admin.deleteDialog.deleted": "{{name}} deleted",
   "admin.deleteDialog.failedToDelete": "Failed to delete app",
-
   "admin.tabs.plans": "Plans",
   "admin.plans.subtitle": "{{count}} plans configured",
   "admin.plans.addPlan": "Add Plan",
@@ -503,7 +494,6 @@
   "admin.plans.failedToAssign": "Failed to assign plan",
   "admin.users.tableHeaders.plan": "Plan",
   "admin.users.changePlan": "Change Plan",
-
   "landing.pricing.recommended": "Recommended",
   "landing.pricing.free": "Free",
   "landing.pricing.mo": "mo",
@@ -515,7 +505,6 @@
   "landing.pricing.autoDeploy": "Auto deploy on push",
   "landing.pricing.customDomain": "Custom domains",
   "landing.pricing.priorityBuilds": "Priority builds",
-
   "resources.title": "Resources",
   "resources.subtitle.withCount": "{{count}} resource across your apps",
   "resources.subtitle.withCount_plural": "{{count}} resources across your apps",
@@ -549,7 +538,6 @@
   "resources.explorer.browseFiles": "Browse Files",
   "resources.explorer.openExplorer": "Open Explorer",
   "resources.service.removeService": "Remove service",
-
   "resources.db.title": "Database Explorer",
   "resources.db.subtitle": "Browse tables, view schemas, and execute SQL queries",
   "resources.db.tables": "Tables",
@@ -582,7 +570,6 @@
   "resources.db.schemaHeaders.default": "Default",
   "resources.db.nullable": "nullable",
   "resources.db.notNull": "not null",
-
   "resources.storage.title": "Storage",
   "resources.storage.subtitle": "Browse and manage files in your storage volume",
   "resources.storage.upload": "Upload",
@@ -604,7 +591,6 @@
   "resources.storage.delete": "Delete",
   "resources.storage.preview": "Preview",
   "resources.storage.loadingPreview": "Loading preview...",
-
   "deploy.wizard.steps.selectRepository": "Select Repository",
   "deploy.wizard.steps.configure": "Configure",
   "deploy.wizard.steps.environment": "Environment",
@@ -652,7 +638,6 @@
   "deploy.history.rollback": "Rollback",
   "deploy.buildLog.title": "Build Output",
   "deploy.buildLog.titleLive": "Build Output (live)",
-
   "monitoring.metrics.cpuUsage": "CPU Usage",
   "monitoring.metrics.memoryUsage": "Memory Usage",
   "monitoring.metrics.networkIn": "Network In (KB/s)",
@@ -705,7 +690,6 @@
   "monitoring.terminal.noMatchingEntries": "No matching log entries",
   "monitoring.terminal.waitingForOutput": "Waiting for output...",
   "monitoring.terminal.connecting": "Connecting to log stream...",
-
   "services.card.connectionUrl": "Connection URL",
   "services.card.showCredentials": "Show credentials",
   "services.card.hideCredentials": "Hide credentials",
@@ -756,7 +740,6 @@
   "resources.email.resetPassword": "Reset Password",
   "resources.email.deleteTitle": "Delete Mailbox",
   "resources.email.deleteMessage": "Are you sure you want to delete {{address}}? All emails will be permanently lost.",
-
   "logs.title": "Deployment Logs",
   "logs.subtitle": "Build and deployment history across all apps",
   "logs.searchPlaceholder": "Filter by app, commit, or status...",
@@ -766,7 +749,6 @@
   "logs.noLogsAvailable": "No logs available.",
   "logs.failedToLoadLogs": "Failed to load logs.",
   "logs.loading": "Loading...",
-
   "profile.title": "Profile",
   "profile.subtitle": "Your account information",
   "profile.stats.totalApps": "Total Apps",
@@ -775,7 +757,6 @@
   "profile.github.title": "GitHub Account",
   "profile.github.viewProfile": "View Profile",
   "profile.joined": "Joined {{date}}",
-
   "layout.sidebar.dashboard": "Dashboard",
   "layout.sidebar.newApp": "New App",
   "layout.sidebar.settings": "Settings",
@@ -788,7 +769,6 @@
   "layout.toolbar.switchToLight": "Switch to light mode",
   "layout.toolbar.switchToDark": "Switch to dark mode",
   "layout.toolbar.luxviewCloud": "LuxView Cloud",
-
   "settings.language": "Language",
   "settings.selectLanguage": "Select your preferred language",
   "settings.notifications.title": "Notifications",
@@ -803,11 +783,9 @@
   "settings.replayTours": "Replay Tutorials",
   "settings.replayToursDescription": "Reset all guided tours so you can see them again",
   "settings.toursReset": "All tutorials have been reset",
-
   "common.next": "Next",
   "common.previous": "Previous",
   "common.finish": "Finish",
-
   "tour.skipTour": "Skip tour",
   "tour.dashboard.welcome.title": "Welcome to your Dashboard!",
   "tour.dashboard.welcome.content": "This is your command center. Here you can see all your apps, recent deploys, and quick stats at a glance.",
@@ -819,14 +797,12 @@
   "tour.dashboard.apps.content": "All your deployed applications appear here with real-time status, metrics, and quick actions.",
   "tour.dashboard.deploys.title": "Recent Deploys",
   "tour.dashboard.deploys.content": "Track your latest deployments. Click any deploy to jump to that app's details.",
-
   "tour.newApp.welcome.title": "Deploy a New App",
   "tour.newApp.welcome.content": "Follow the wizard to deploy an application from your GitHub repository in just a few steps.",
   "tour.newApp.repos.title": "Select a Repository",
   "tour.newApp.repos.content": "Choose from your GitHub repositories. We'll auto-detect the stack and configure the build.",
   "tour.newApp.config.title": "Configure Deployment",
   "tour.newApp.config.content": "Set the branch, subdomain, and environment variables for your deployment.",
-
   "tour.appDetail.welcome.title": "App Details",
   "tour.appDetail.welcome.content": "This is the control panel for your application. Manage deployments, logs, services, and settings.",
   "tour.appDetail.overview.title": "Overview",
@@ -839,21 +815,18 @@
   "tour.appDetail.services.content": "Add databases, caches, and message brokers. Credentials are auto-injected into your app.",
   "tour.appDetail.deploys.title": "Deployments",
   "tour.appDetail.deploys.content": "View deployment history and roll back to any previous version with one click.",
-
   "tour.resources.welcome.title": "Resources Overview",
   "tour.resources.welcome.content": "Here you can see all provisioned services across your apps — databases, caches, queues, and storage.",
   "tour.resources.services.title": "Your Services",
   "tour.resources.services.content": "Each card shows connection details and credentials. Click to explore databases or browse storage files.",
   "tour.resources.addService.title": "Adding Services",
   "tour.resources.addService.content": "To add a new service, go to an app's Services tab and click 'Add Service'.",
-
   "tour.settings.theme.title": "Theme",
   "tour.settings.theme.content": "Switch between dark and light mode to match your preference.",
   "tour.settings.language.title": "Language",
   "tour.settings.language.content": "Choose your preferred language. The entire dashboard will be translated.",
   "tour.settings.tours.title": "Replay Tutorials",
   "tour.settings.tours.content": "Reset all guided tours if you want to see them again.",
-
   "analyze.title": "Repository Analysis",
   "analyze.failureTitle": "Deploy Failure Diagnosis",
   "analyze.analyzingRepo": "Analyzing your repository...",
@@ -918,7 +891,6 @@
   "admin.ai.testSuccess": "Connection successful ({{model}})",
   "admin.ai.testFailed": "Connection failed",
   "admin.ai.testError": "Failed to test connection",
-
   "admin.tabs.cleanup": "Cleanup",
   "admin.cleanup.diskUsage": "Disk Usage",
   "admin.cleanup.rootDisk": "Root Disk",
@@ -985,12 +957,10 @@
   "admin.audit.resources.alert": "Alert",
   "admin.audit.resources.cleanup": "Cleanup",
   "admin.audit.resources.mailbox": "Mailbox",
-
   "app.notFound.title": "Application not found",
   "app.notFound.description": "This application has been removed or no longer exists. If you believe this is an error, please contact support.",
   "app.notFound.support": "If you need help, reach out to your account administrator or platform support.",
   "app.notFound.backToDashboard": "Back to Dashboard",
-
   "analytics.title": "Analytics",
   "analytics.subtitle": "Traffic and visitor insights for your applications",
   "analytics.platform": "Platform (luxview.cloud)",
@@ -1054,5 +1024,51 @@
   "backups.errors.saveFailed": "Failed to save settings",
   "backups.errors.triggerFailed": "Failed to start backup",
   "backups.errors.deleteFailed": "Failed to delete backup",
-  "backups.errors.restoreFailed": "Failed to start restore"
+  "backups.errors.restoreFailed": "Failed to start restore",
+  "app.tabs.actions": "Actions",
+  "actions.runs": "Runs",
+  "actions.triggerRun": "Run Workflow",
+  "actions.triggered": "Workflow triggered",
+  "actions.triggerFailed": "Failed to trigger workflow",
+  "actions.noRuns": "No workflow runs yet. Trigger a run manually or push to the branch.",
+  "actions.runNotFound": "Run not found",
+  "actions.started": "Started",
+  "actions.duration": "Duration",
+  "actions.created": "Created",
+  "actions.noSteps": "No steps",
+  "actions.artifacts": "Artifacts",
+  "actions.secrets.title": "Secrets",
+  "actions.secrets.description": "Secrets are injected as environment variables during workflow runs. Keys must be uppercase letters, digits, and underscores.",
+  "actions.secrets.keyPlaceholder": "SECRET_KEY",
+  "actions.secrets.valuePlaceholder": "secret value",
+  "actions.secrets.saved": "Secret saved",
+  "actions.secrets.saveFailed": "Failed to save secret",
+  "actions.secrets.deleted": "Secret deleted",
+  "actions.secrets.deleteFailed": "Failed to delete secret",
+  "actions.secrets.empty": "No secrets configured",
+  "actions.secrets.show": "Show",
+  "actions.secrets.hide": "Hide",
+  "github.app.installed": "GitHub App connected",
+  "github.app.installTitle": "Connect GitHub App",
+  "github.app.installDescription": "Install the LuxView GitHub App to create repositories, commit workflows and sync secrets.",
+  "github.app.installButton": "Install App",
+  "github.setup.title": "GitHub Repository Setup",
+  "github.setup.createRepo": "Create repository",
+  "github.setup.commitWorkflow": "Add CI workflow",
+  "github.setup.syncSecrets": "Sync secrets to GitHub",
+  "github.setup.repoNamePlaceholder": "my-project",
+  "github.setup.repoDescPlaceholder": "Short description (optional)",
+  "github.setup.private": "Private",
+  "github.setup.public": "Public",
+  "github.setup.createButton": "Create repository",
+  "github.setup.repoCreated": "Repository created",
+  "github.setup.createFailed": "Failed to create repository",
+  "github.setup.commitButton": "Commit workflow",
+  "github.setup.workflowCommitted": "Workflow committed to repository",
+  "github.setup.workflowFailed": "Failed to commit workflow",
+  "github.setup.syncSecretsDescription": "Your LuxView Actions secrets will be mirrored as GitHub Actions repository secrets.",
+  "github.setup.syncButton": "Sync secrets",
+  "github.setup.noSecrets": "No secrets to sync",
+  "github.setup.secretsManual": "Secret keys listed � set values directly on GitHub.",
+  "github.setup.syncFailed": "Failed to sync secrets"
 }

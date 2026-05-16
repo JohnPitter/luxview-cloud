@@ -224,9 +224,9 @@ Notes: replace <binary_name> with the name from Cargo.toml [package].name.
 DO NOT use multi-stage builds — pnpm symlinks break with COPY --from=builder.
 CRITICAL: NODE_ENV must NOT be "production" during install/build — devDependencies (tsup, typescript, etc.) are needed. Set NODE_ENV=production only AFTER the build.
 
-  FROM node:20-alpine
+  FROM node:22-alpine
   ENV CI=true
-  RUN corepack enable && corepack prepare pnpm@latest --activate
+  RUN corepack enable && corepack prepare pnpm@10 --activate
   WORKDIR /app
   COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json* tsconfig.json* ./
   COPY packages/ ./packages/
@@ -277,10 +277,10 @@ Detection signals:
 - Backend does NOT import @fastify/static, express.static, or @nestjs/serve-static → it cannot serve frontend files itself
 
 In this case, use nginx inside the final image to serve static files and reverse proxy /api to the backend. Template:
-  FROM node:20-alpine
+  FROM node:22-alpine
   ENV CI=true
   RUN apk add --no-cache build-base python3 nginx
-  RUN corepack enable && corepack prepare pnpm@latest --activate
+  RUN corepack enable && corepack prepare pnpm@10 --activate
   WORKDIR /app
   COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json* tsconfig.json* ./
   COPY apps/ ./apps/

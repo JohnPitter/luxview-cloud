@@ -45,8 +45,9 @@ import { appsApi } from '../api/apps';
 import { analyzeApi, type AnalysisResult } from '../api/analyze';
 import { DeployAnalysis } from '../components/deploy/DeployAnalysis';
 import { CustomDomainSettings } from '../components/apps/CustomDomainSettings';
+import { ActionRunList } from '../components/actions/ActionRunList';
 
-type Tab = 'overview' | 'deployments' | 'logs' | 'env' | 'services' | 'metrics' | 'alerts' | 'settings';
+type Tab = 'overview' | 'deployments' | 'logs' | 'env' | 'services' | 'metrics' | 'alerts' | 'actions' | 'settings';
 
 export function AppDetail() {
   const { t } = useTranslation();
@@ -64,6 +65,7 @@ export function AppDetail() {
     { id: 'services', label: t('app.tabs.services') },
     { id: 'metrics', label: t('app.tabs.metrics') },
     { id: 'alerts', label: t('app.tabs.alerts') },
+    { id: 'actions', label: t('app.tabs.actions') },
     { id: 'settings', label: t('app.tabs.settings') },
   ];
 
@@ -1004,6 +1006,11 @@ export function AppDetail() {
               }
             }}
           />
+        )}
+
+        {/* ==================== ACTIONS ==================== */}
+        {activeTab === 'actions' && appId && (
+          <ActionRunList appId={appId} />
         )}
 
         {/* ==================== SETTINGS ==================== */}

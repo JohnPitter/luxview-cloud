@@ -20,6 +20,14 @@ type Config struct {
 	GitHubClientID     string
 	GitHubClientSecret string
 
+	// GitHub App (replaces OAuth for new installations)
+	GitHubAppID          int64
+	GitHubAppSlug        string // e.g. "luxview-cloud"
+	GitHubAppClientID    string
+	GitHubAppClientSecret string
+	GitHubAppPrivateKey  string // PEM-encoded RSA private key
+	GitHubAppWebhookSecret string
+
 	SharedPGHost     string
 	SharedPGPort     int
 	SharedPGUser     string
@@ -42,6 +50,7 @@ type Config struct {
 	StorageBasePath    string // base path for local storage volumes
 	MailContainerName  string // docker-mailserver container name
 	BackupDir          string // base directory for backup files
+	ActionArtifactsDir string // base directory for action artifacts
 
 	BuildConcurrency int
 	PortRangeStart   int
@@ -79,6 +88,13 @@ func Load() (*Config, error) {
 		GitHubClientID:     envStr("GITHUB_CLIENT_ID", ""),
 		GitHubClientSecret: envStr("GITHUB_CLIENT_SECRET", ""),
 
+		GitHubAppID:            envInt64("GITHUB_APP_ID", 0),
+		GitHubAppSlug:          envStr("GITHUB_APP_SLUG", ""),
+		GitHubAppClientID:      envStr("GITHUB_APP_CLIENT_ID", ""),
+		GitHubAppClientSecret:  envStr("GITHUB_APP_CLIENT_SECRET", ""),
+		GitHubAppPrivateKey:    envStr("GITHUB_APP_PRIVATE_KEY", ""),
+		GitHubAppWebhookSecret: envStr("GITHUB_APP_WEBHOOK_SECRET", ""),
+
 		SharedPGHost:     envStr("SHARED_PG_HOST", "pg-shared"),
 		SharedPGPort:     envInt("SHARED_PG_PORT", 5432),
 		SharedPGUser:     envStr("SHARED_PG_USER", "luxview_admin"),
@@ -98,9 +114,10 @@ func Load() (*Config, error) {
 		SharedRabbitUser:     envStr("SHARED_RABBIT_USER", "luxview_admin"),
 		SharedRabbitPassword: envStr("SHARED_RABBIT_PASSWORD", ""),
 
-		StorageBasePath:   envStr("STORAGE_BASE_PATH", "/data/luxview/storage"),
-		MailContainerName: envStr("MAIL_CONTAINER_NAME", "luxview-mailserver"),
-		BackupDir:         envStr("BACKUP_DIR", "/backups"),
+		StorageBasePath:    envStr("STORAGE_BASE_PATH", "/data/luxview/storage"),
+		MailContainerName:  envStr("MAIL_CONTAINER_NAME", "luxview-mailserver"),
+		BackupDir:          envStr("BACKUP_DIR", "/backups"),
+		ActionArtifactsDir: envStr("ACTION_ARTIFACTS_DIR", "/data/luxview/action-artifacts"),
 
 		BuildConcurrency: envInt("BUILD_CONCURRENCY", 3),
 		PortRangeStart:   envInt("PORT_RANGE_START", 10000),
@@ -162,6 +179,15 @@ func envStr(key, fallback string) string {
 func envInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if i, err := strconv.Atoi(v); err == nil {
+			return i
+		}
+	}
+	return fallback
+}
+
+func envInt64(key string, fallback int64) int64 {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return i
 		}
 	}

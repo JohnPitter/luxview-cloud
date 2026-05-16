@@ -16,6 +16,7 @@ import (
 	"github.com/luxview/engine/internal/worker"
 	"github.com/luxview/engine/pkg/crypto"
 	dockerclient "github.com/luxview/engine/pkg/docker"
+	pkggithub "github.com/luxview/engine/pkg/github"
 	"github.com/luxview/engine/pkg/logger"
 )
 
@@ -55,6 +56,7 @@ func main() {
 	userRepo := repository.NewUserRepo(db)
 	appRepo := repository.NewAppRepo(db)
 	deployRepo := repository.NewDeploymentRepo(db)
+	actionRepo := repository.NewActionRepo(db, encryptionKey)
 	serviceRepo := repository.NewServiceRepo(db)
 	metricRepo := repository.NewMetricRepo(db)
 	alertRepo := repository.NewAlertRepo(db)
@@ -90,7 +92,21 @@ func main() {
 	buildWorker, buildQueue := worker.NewBuildWorker(deployer, cfg.BuildConcurrency)
 	buildWorker.Start(ctx)
 
-	webhookSvc := service.NewWebhookService(appRepo, buildQueue)
+	actionSvc := service.NewActionService(actionRepo, appRepo, userRepo, encryptionKey, buildQueue, cfg.ActionArtifactsDir)
+	webhookSvc := service.NewWebhookService(appRepo, buildQueue, actionSvc)
+
+	// GitHub App service (optional — only when GITHUB_APP_ID is set)
+	var githubAppSvc *service.GitHubAppService
+	if cfg.GitHubAppID != 0 && cfg.GitHubAppPrivateKey != "" {
+		appClient, err := pkggithub.NewAppClient(cfg.GitHubAppID, []byte(cfg.GitHubAppPrivateKey))
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to create GitHub App client")
+		}
+		githubAppSvc = service.NewGitHubAppService(appClient, userRepo, encryptionKey)
+		log.Info().Int64("app_id", cfg.GitHubAppID).Msg("GitHub App integration enabled")
+	} else {
+		log.Info().Msg("GitHub App integration disabled (GITHUB_APP_ID not set)")
+	}
 
 	metricsWorker := worker.NewMetricsWorker(metricsCollector, cfg.MetricsInterval)
 	go metricsWorker.Start(ctx)
@@ -106,6 +122,9 @@ func main() {
 
 	staleDeployWorker := worker.NewStaleDeployWorker(deployRepo, 60, cfg.BuildTimeout*2)
 	go staleDeployWorker.Start(ctx)
+
+	actionWorker := worker.NewActionWorker(actionRepo, actionSvc, cfg.BuildConcurrency)
+	actionWorker.Start(ctx)
 
 	// Analytics (GeoIP + log parser + worker)
 	geoipSvc := service.NewGeoIP(cfg.GeoLite2Path)
@@ -131,19 +150,22 @@ func main() {
 
 	// Router
 	router := api.NewRouter(api.Deps{
-		Config:      cfg,
-		UserRepo:    userRepo,
-		AppRepo:     appRepo,
-		DeployRepo:  deployRepo,
-		ServiceRepo: serviceRepo,
-		MetricRepo:  metricRepo,
-		AlertRepo:   alertRepo,
-		PlanRepo:    planRepo,
-		Container:   containerMgr,
-		Provisioner: provisioner,
-		Router:      routerSvc,
-		WebhookSvc:  webhookSvc,
-		BuildQueue:  buildQueue,
+		Config:       cfg,
+		UserRepo:     userRepo,
+		AppRepo:      appRepo,
+		DeployRepo:   deployRepo,
+		ActionRepo:   actionRepo,
+		ServiceRepo:  serviceRepo,
+		MetricRepo:   metricRepo,
+		AlertRepo:    alertRepo,
+		PlanRepo:     planRepo,
+		Container:    containerMgr,
+		Provisioner:  provisioner,
+		Router:       routerSvc,
+		WebhookSvc:   webhookSvc,
+		ActionSvc:    actionSvc,
+		GitHubAppSvc: githubAppSvc,
+		BuildQueue:   buildQueue,
 		EncryptKey:   encryptionKey,
 		SettingsRepo: settingsRepo,
 		Docker:       docker,
@@ -180,6 +202,7 @@ func main() {
 		}
 
 		buildWorker.Stop()
+		actionWorker.Stop()
 		log.Info().Msg("server stopped gracefully")
 	}()
 

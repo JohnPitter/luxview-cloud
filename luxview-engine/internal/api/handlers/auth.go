@@ -19,16 +19,18 @@ type AuthHandler struct {
 	userRepo      *repository.UserRepo
 	settingsRepo  *repository.SettingsRepo
 	github        *service.GitHubClient
+	githubAppSvc  *service.GitHubAppService
 	encryptionKey []byte
 	auditSvc      *service.AuditService
 }
 
-func NewAuthHandler(cfg *config.Config, userRepo *repository.UserRepo, settingsRepo *repository.SettingsRepo, encryptionKey []byte, auditSvc *service.AuditService) *AuthHandler {
+func NewAuthHandler(cfg *config.Config, userRepo *repository.UserRepo, settingsRepo *repository.SettingsRepo, encryptionKey []byte, auditSvc *service.AuditService, githubAppSvc *service.GitHubAppService) *AuthHandler {
 	return &AuthHandler{
 		cfg:           cfg,
 		userRepo:      userRepo,
 		settingsRepo:  settingsRepo,
 		github:        service.NewGitHubClient(),
+		githubAppSvc:  githubAppSvc,
 		encryptionKey: encryptionKey,
 		auditSvc:      auditSvc,
 	}
@@ -143,6 +145,51 @@ func (h *AuthHandler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Redirect to dashboard with token
 	dashboardURL := fmt.Sprintf("%s/auth/callback?token=%s", h.cfg.BaseURL, jwt)
+	http.Redirect(w, r, dashboardURL, http.StatusTemporaryRedirect)
+}
+
+// GitHubAppInstallRedirect redirects the user to install the GitHub App.
+func (h *AuthHandler) GitHubAppInstallRedirect(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.GitHubAppSlug == "" {
+		writeError(w, http.StatusNotImplemented, "GitHub App not configured")
+		return
+	}
+	url := fmt.Sprintf("https://github.com/apps/%s/installations/new?state=install", h.cfg.GitHubAppSlug)
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+}
+
+// GitHubAppCallback handles the redirect back after a user installs the GitHub App.
+// GitHub redirects to: /api/auth/github/app/callback?installation_id=xxx&setup_action=install
+func (h *AuthHandler) GitHubAppCallback(w http.ResponseWriter, r *http.Request) {
+	log := logger.With("auth")
+	ctx := r.Context()
+
+	installationIDStr := r.URL.Query().Get("installation_id")
+	if installationIDStr == "" {
+		writeError(w, http.StatusBadRequest, "missing installation_id")
+		return
+	}
+	var installationID int64
+	if _, err := fmt.Sscanf(installationIDStr, "%d", &installationID); err != nil || installationID == 0 {
+		writeError(w, http.StatusBadRequest, "invalid installation_id")
+		return
+	}
+
+	user := middleware.GetUser(ctx)
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "must be logged in to install the GitHub App")
+		return
+	}
+
+	if err := h.githubAppSvc.CompleteInstallation(ctx, user.ID, installationID); err != nil {
+		log.Error().Err(err).Msg("failed to link installation")
+		writeError(w, http.StatusInternalServerError, "failed to link installation")
+		return
+	}
+
+	log.Info().Str("user", user.Username).Int64("installation_id", installationID).Msg("GitHub App installation linked")
+
+	dashboardURL := fmt.Sprintf("%s/dashboard?app_installed=1", h.cfg.BaseURL)
 	http.Redirect(w, r, dashboardURL, http.StatusTemporaryRedirect)
 }
 

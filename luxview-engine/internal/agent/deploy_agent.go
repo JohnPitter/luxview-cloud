@@ -316,10 +316,20 @@ var validDockerfileInstructions = map[string]bool{
 	"STOPSIGNAL": true, "HEALTHCHECK": true, "SHELL": true,
 }
 
+const (
+	node20AlpineImage      = "node:20-alpine"
+	node22AlpineImage      = "node:22-alpine"
+	pnpmCommandToken       = "pnpm "
+	pnpmSpecToken          = "pnpm@"
+	latestPnpmCorepackSpec = "pnpm@latest"
+	pnpm10CorepackSpec     = "pnpm@10"
+)
+
 // sanitizeDockerfile removes lines that are not valid Dockerfile instructions.
 // This catches LLM hallucinations like bare words ("alpine", "node") on their own line.
 func sanitizeDockerfile(dockerfile string) string {
 	log := logger.With("deploy-agent")
+	dockerfile = normalizeDockerfileCompatibility(dockerfile)
 	lines := strings.Split(dockerfile, "\n")
 	var clean []string
 	removed := 0
@@ -358,6 +368,14 @@ func sanitizeDockerfile(dockerfile string) string {
 		log.Info().Int("removed_lines", removed).Msg("sanitized Dockerfile")
 	}
 	return strings.Join(clean, "\n")
+}
+
+func normalizeDockerfileCompatibility(dockerfile string) string {
+	dockerfile = strings.ReplaceAll(dockerfile, latestPnpmCorepackSpec, pnpm10CorepackSpec)
+	if strings.Contains(dockerfile, pnpmCommandToken) || strings.Contains(dockerfile, pnpmSpecToken) {
+		dockerfile = strings.ReplaceAll(dockerfile, node20AlpineImage, node22AlpineImage)
+	}
+	return dockerfile
 }
 
 // extractJSON attempts to find a JSON object in a string that may contain surrounding text.

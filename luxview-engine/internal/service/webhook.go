@@ -6,23 +6,26 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/luxview/engine/internal/repository"
 	"github.com/luxview/engine/pkg/logger"
+	"github.com/rs/zerolog"
 )
 
 // WebhookService processes GitHub webhook events.
 type WebhookService struct {
 	appRepo    *repository.AppRepo
-	deployer   *Deployer
+	actionSvc  *ActionService
 	buildQueue chan<- DeployRequest
 }
 
-func NewWebhookService(appRepo *repository.AppRepo, buildQueue chan<- DeployRequest) *WebhookService {
+func NewWebhookService(appRepo *repository.AppRepo, buildQueue chan<- DeployRequest, actionSvc *ActionService) *WebhookService {
 	return &WebhookService{
 		appRepo:    appRepo,
+		actionSvc:  actionSvc,
 		buildQueue: buildQueue,
 	}
 }
@@ -94,25 +97,45 @@ func (ws *WebhookService) ProcessPush(ctx context.Context, payload []byte) error
 			continue
 		}
 
-		req := DeployRequest{
+		if ws.actionSvc != nil {
+			_, err := ws.actionSvc.TriggerRun(ctx, app.ID, TriggerActionRequest{
+				CommitSHA: event.HeadCommit.ID,
+				Trigger:   actionTriggerPush,
+			})
+			if err == nil {
+				matched++
+				log.Info().Str("app", app.Subdomain).Msg("action run queued from webhook")
+				continue
+			}
+			if !errors.Is(err, ErrActionWorkflowNotFound) {
+				log.Warn().Err(err).Str("app", app.Subdomain).Msg("failed to queue action run, falling back to deploy")
+			}
+		}
+
+		if ws.queueDeploy(log, app.ID.String(), DeployRequest{
 			AppID:     app.ID,
 			UserID:    app.UserID,
 			CommitSHA: event.HeadCommit.ID,
 			CommitMsg: event.HeadCommit.Message,
 			Source:    "auto",
-		}
-
-		select {
-		case ws.buildQueue <- req:
+		}) {
 			matched++
-			log.Info().Str("app", app.Subdomain).Msg("deploy queued from webhook")
-		default:
-			log.Warn().Str("app", app.Subdomain).Msg("build queue full, skipping")
 		}
 	}
 
 	log.Info().Int("matched", matched).Msg("push event processed")
 	return nil
+}
+
+func (ws *WebhookService) queueDeploy(log zerolog.Logger, appID string, req DeployRequest) bool {
+	select {
+	case ws.buildQueue <- req:
+		log.Info().Str("app_id", appID).Msg("deploy queued from webhook")
+		return true
+	default:
+		log.Warn().Str("app_id", appID).Msg("build queue full, skipping")
+		return false
+	}
 }
 
 // VerifySignature verifies the GitHub webhook signature.
