@@ -77,7 +77,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(deps.Config, deps.UserRepo, deps.SettingsRepo, deps.EncryptKey, deps.AuditSvc, deps.GitHubAppSvc)
 	webhookURL := deps.Config.BaseURL + "/api/webhooks/github"
-	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.BuildQueue, deps.EncryptKey, deps.AuditSvc, webhookURL, deps.Config.InternalToken)
+	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.RepositoryRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.RepositorySvc, deps.BuildQueue, deps.EncryptKey, deps.AuditSvc, webhookURL, deps.Config.InternalToken)
 	deployHandler := handlers.NewDeploymentHandler(deps.DeployRepo, deps.AppRepo, deps.BuildQueue, deps.AuditSvc)
 	actionHandler := handlers.NewActionHandler(deps.ActionRepo, deps.AppRepo, deps.ActionSvc, deps.AuditSvc)
 	serviceHandler := handlers.NewServiceHandler(deps.ServiceRepo, deps.AppRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,25 +24,29 @@ import (
 var subdomainRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 type AppHandler struct {
-	appRepo       *repository.AppRepo
-	userRepo      *repository.UserRepo
-	serviceRepo   *repository.ServiceRepo
-	container     *service.ContainerManager
-	provisioner   *service.Provisioner
-	github        *service.GitHubClient
-	buildQueue    chan<- service.DeployRequest
-	encryptionKey []byte
-	auditSvc      *service.AuditService
-	webhookURL    string
-	webhookSecret string
+	appRepo        *repository.AppRepo
+	repositoryRepo *repository.RepositoryRepo
+	userRepo       *repository.UserRepo
+	serviceRepo    *repository.ServiceRepo
+	container      *service.ContainerManager
+	provisioner    *service.Provisioner
+	repositorySvc  *service.RepositoryService
+	github         *service.GitHubClient
+	buildQueue     chan<- service.DeployRequest
+	encryptionKey  []byte
+	auditSvc       *service.AuditService
+	webhookURL     string
+	webhookSecret  string
 }
 
 func NewAppHandler(
 	appRepo *repository.AppRepo,
+	repositoryRepo *repository.RepositoryRepo,
 	userRepo *repository.UserRepo,
 	serviceRepo *repository.ServiceRepo,
 	container *service.ContainerManager,
 	provisioner *service.Provisioner,
+	repositorySvc *service.RepositoryService,
 	buildQueue chan<- service.DeployRequest,
 	encryptionKey []byte,
 	auditSvc *service.AuditService,
@@ -49,17 +54,19 @@ func NewAppHandler(
 	webhookSecret string,
 ) *AppHandler {
 	return &AppHandler{
-		appRepo:       appRepo,
-		userRepo:      userRepo,
-		serviceRepo:   serviceRepo,
-		container:     container,
-		provisioner:   provisioner,
-		github:        service.NewGitHubClient(),
-		buildQueue:    buildQueue,
-		encryptionKey: encryptionKey,
-		auditSvc:      auditSvc,
-		webhookURL:    webhookURL,
-		webhookSecret: webhookSecret,
+		appRepo:        appRepo,
+		repositoryRepo: repositoryRepo,
+		userRepo:       userRepo,
+		serviceRepo:    serviceRepo,
+		container:      container,
+		provisioner:    provisioner,
+		repositorySvc:  repositorySvc,
+		github:         service.NewGitHubClient(),
+		buildQueue:     buildQueue,
+		encryptionKey:  encryptionKey,
+		auditSvc:       auditSvc,
+		webhookURL:     webhookURL,
+		webhookSecret:  webhookSecret,
 	}
 }
 
@@ -76,8 +83,8 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate
-	if req.Name == "" || req.Subdomain == "" || req.RepoURL == "" {
-		writeError(w, http.StatusBadRequest, "name, subdomain, and repo_url are required")
+	if req.Name == "" || req.Subdomain == "" || (req.RepoURL == "" && req.RepositoryID == nil) {
+		writeError(w, http.StatusBadRequest, "name, subdomain, and repo_url or repository_id are required")
 		return
 	}
 
@@ -114,6 +121,25 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 		branch = "main"
 	}
 
+	repoURL := req.RepoURL
+	if req.RepositoryID != nil {
+		repo, err := h.repositoryRepo.FindByID(ctx, *req.RepositoryID)
+		if err != nil || repo == nil {
+			writeError(w, http.StatusNotFound, "repository not found")
+			return
+		}
+		if repo.UserID != userID {
+			writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		if req.RepoBranch == "" {
+			branch = repo.DefaultBranch
+		}
+		if repoURL == "" {
+			repoURL = "luxview://repositories/" + repo.ID.String()
+		}
+	}
+
 	autoDeploy := true
 	if req.AutoDeploy != nil {
 		autoDeploy = *req.AutoDeploy
@@ -134,13 +160,14 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app := &model.App{
-		UserID:     userID,
-		Name:       req.Name,
-		Subdomain:  subdomain,
-		RepoURL:    req.RepoURL,
-		RepoBranch: branch,
-		Status:     model.AppStatusStopped,
-		EnvVars:    envVarsEncrypted,
+		UserID:       userID,
+		Name:         req.Name,
+		Subdomain:    subdomain,
+		RepositoryID: req.RepositoryID,
+		RepoURL:      repoURL,
+		RepoBranch:   branch,
+		Status:       model.AppStatusStopped,
+		EnvVars:      envVarsEncrypted,
 		ResourceLimits: model.ResourceLimits{
 			CPU:    "0.5",
 			Memory: "512m",
@@ -157,12 +184,7 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Auto-deploy: queue a deploy immediately after creation
 	if autoDeploy {
-		token := user.GitHubToken
-		if decrypted, err := crypto.Decrypt(token, h.encryptionKey); err == nil {
-			token = decrypted
-		}
-		owner, repo := parseRepoURL(app.RepoURL)
-		commitSHA, commitMsg, err := h.github.GetLatestCommit(ctx, token, owner, repo, app.RepoBranch)
+		commitSHA, commitMsg, err := h.resolveLatestCommit(ctx, user, app, "initial deploy")
 		if err != nil {
 			commitSHA = "initial"
 			commitMsg = "initial deploy"
@@ -180,15 +202,22 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 			log.Warn().Str("app", app.Subdomain).Msg("build queue full, auto-deploy skipped")
 		}
 
-		// Create GitHub webhook for auto-deploy
-		if owner != "" && repo != "" {
-			hookID, whErr := h.github.CreateWebhook(ctx, token, owner, repo, h.webhookURL, h.webhookSecret)
-			if whErr != nil {
-				log.Warn().Err(whErr).Str("app", app.Subdomain).Msg("failed to create GitHub webhook on app creation")
-			} else {
-				app.WebhookID = &hookID
-				_ = h.appRepo.Update(ctx, app)
-				log.Info().Int64("hook_id", hookID).Str("app", app.Subdomain).Msg("GitHub webhook created on app creation")
+		// Create GitHub webhook for legacy GitHub-backed apps.
+		if app.RepositoryID == nil {
+			token := user.GitHubToken
+			if decrypted, err := crypto.Decrypt(token, h.encryptionKey); err == nil {
+				token = decrypted
+			}
+			owner, repo := parseRepoURL(app.RepoURL)
+			if owner != "" && repo != "" {
+				hookID, whErr := h.github.CreateWebhook(ctx, token, owner, repo, h.webhookURL, h.webhookSecret)
+				if whErr != nil {
+					log.Warn().Err(whErr).Str("app", app.Subdomain).Msg("failed to create GitHub webhook on app creation")
+				} else {
+					app.WebhookID = &hookID
+					_ = h.appRepo.Update(ctx, app)
+					log.Info().Int64("hook_id", hookID).Str("app", app.Subdomain).Msg("GitHub webhook created on app creation")
+				}
 			}
 		}
 	}
@@ -197,14 +226,14 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 	log.Info().Str("app", app.Subdomain).Str("user", userID.String()).Msg("app created")
 
 	h.auditSvc.Log(ctx, service.AuditEntry{
-		ActorID:      user.ID,
+		ActorID:       user.ID,
 		ActorUsername: user.Username,
-		Action:       "create",
-		ResourceType: "app",
-		ResourceID:   app.ID.String(),
-		ResourceName: app.Subdomain,
-		NewValues:    map[string]string{"name": app.Name, "subdomain": app.Subdomain, "repo_url": app.RepoURL, "branch": app.RepoBranch},
-		IPAddress:    clientIP(r),
+		Action:        "create",
+		ResourceType:  "app",
+		ResourceID:    app.ID.String(),
+		ResourceName:  app.Subdomain,
+		NewValues:     map[string]string{"name": app.Name, "subdomain": app.Subdomain, "repo_url": app.RepoURL, "branch": app.RepoBranch},
+		IPAddress:     clientIP(r),
 	})
 
 	writeJSON(w, http.StatusCreated, app)
@@ -386,7 +415,7 @@ func (h *AppHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Manage GitHub webhook when auto_deploy changes
-	if req.AutoDeploy != nil && *req.AutoDeploy != oldAutoDeploy {
+	if req.AutoDeploy != nil && *req.AutoDeploy != oldAutoDeploy && app.RepositoryID == nil {
 		u := middleware.GetUser(ctx)
 		token := u.GitHubToken
 		if decrypted, err := crypto.Decrypt(token, h.encryptionKey); err == nil {
@@ -425,15 +454,15 @@ func (h *AppHandler) Update(w http.ResponseWriter, r *http.Request) {
 		"disk":       app.ResourceLimits.Disk,
 	}
 	h.auditSvc.Log(ctx, service.AuditEntry{
-		ActorID:      user.ID,
+		ActorID:       user.ID,
 		ActorUsername: user.Username,
-		Action:       "update",
-		ResourceType: "app",
-		ResourceID:   app.ID.String(),
-		ResourceName: app.Subdomain,
-		OldValues:    oldValues,
-		NewValues:    newValues,
-		IPAddress:    clientIP(r),
+		Action:        "update",
+		ResourceType:  "app",
+		ResourceID:    app.ID.String(),
+		ResourceName:  app.Subdomain,
+		OldValues:     oldValues,
+		NewValues:     newValues,
+		IPAddress:     clientIP(r),
 	})
 
 	writeJSON(w, http.StatusOK, app)
@@ -501,14 +530,14 @@ func (h *AppHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	user := middleware.GetUser(ctx)
 	h.auditSvc.Log(ctx, service.AuditEntry{
-		ActorID:      user.ID,
+		ActorID:       user.ID,
 		ActorUsername: user.Username,
-		Action:       "delete",
-		ResourceType: "app",
-		ResourceID:   app.ID.String(),
-		ResourceName: app.Subdomain,
-		OldValues:    map[string]string{"name": app.Name, "subdomain": app.Subdomain},
-		IPAddress:    clientIP(r),
+		Action:        "delete",
+		ResourceType:  "app",
+		ResourceID:    app.ID.String(),
+		ResourceName:  app.Subdomain,
+		OldValues:     map[string]string{"name": app.Name, "subdomain": app.Subdomain},
+		IPAddress:     clientIP(r),
 	})
 
 	log.Info().Str("app", app.Subdomain).Msg("app deleted")
@@ -538,15 +567,7 @@ func (h *AppHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get latest commit from GitHub
-	token := user.GitHubToken
-	if decrypted, err := crypto.Decrypt(token, h.encryptionKey); err == nil {
-		token = decrypted
-	}
-
-	// Parse owner/repo from URL
-	owner, repo := parseRepoURL(app.RepoURL)
-	commitSHA, commitMsg, err := h.github.GetLatestCommit(ctx, token, owner, repo, app.RepoBranch)
+	commitSHA, commitMsg, err := h.resolveLatestCommit(ctx, user, app, "manual deploy")
 	if err != nil {
 		log.Warn().Err(err).Msg("failed to get latest commit, using placeholder")
 		commitSHA = "manual"
@@ -577,14 +598,14 @@ func (h *AppHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 	case h.buildQueue <- deployReq:
 		log.Info().Str("app", app.Subdomain).Msg("deploy queued")
 		h.auditSvc.Log(ctx, service.AuditEntry{
-			ActorID:      user.ID,
+			ActorID:       user.ID,
 			ActorUsername: user.Username,
-			Action:       "deploy",
-			ResourceType: "app",
-			ResourceID:   app.ID.String(),
-			ResourceName: app.Subdomain,
-			NewValues:    map[string]string{"branch": app.RepoBranch},
-			IPAddress:    clientIP(r),
+			Action:        "deploy",
+			ResourceType:  "app",
+			ResourceID:    app.ID.String(),
+			ResourceName:  app.Subdomain,
+			NewValues:     map[string]string{"branch": app.RepoBranch},
+			IPAddress:     clientIP(r),
 		})
 		writeJSON(w, http.StatusAccepted, map[string]string{
 			"message":    "deploy queued",
@@ -593,6 +614,23 @@ func (h *AppHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusServiceUnavailable, "build queue is full, try again later")
 	}
+}
+
+func (h *AppHandler) resolveLatestCommit(ctx context.Context, user *model.User, app *model.App, fallbackMessage string) (string, string, error) {
+	if app.RepositoryID != nil {
+		commitSHA, err := h.repositorySvc.ResolveRef(ctx, *app.RepositoryID, app.RepoBranch)
+		if err != nil {
+			return "", "", err
+		}
+		return commitSHA, fallbackMessage, nil
+	}
+
+	token := user.GitHubToken
+	if decrypted, err := crypto.Decrypt(token, h.encryptionKey); err == nil {
+		token = decrypted
+	}
+	owner, repo := parseRepoURL(app.RepoURL)
+	return h.github.GetLatestCommit(ctx, token, owner, repo, app.RepoBranch)
 }
 
 // Restart restarts the app's container.
@@ -626,13 +664,13 @@ func (h *AppHandler) Restart(w http.ResponseWriter, r *http.Request) {
 
 	user := middleware.GetUser(ctx)
 	h.auditSvc.Log(ctx, service.AuditEntry{
-		ActorID:      user.ID,
+		ActorID:       user.ID,
 		ActorUsername: user.Username,
-		Action:       "restart",
-		ResourceType: "app",
-		ResourceID:   app.ID.String(),
-		ResourceName: app.Subdomain,
-		IPAddress:    clientIP(r),
+		Action:        "restart",
+		ResourceType:  "app",
+		ResourceID:    app.ID.String(),
+		ResourceName:  app.Subdomain,
+		IPAddress:     clientIP(r),
 	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "app restarted"})
@@ -668,13 +706,13 @@ func (h *AppHandler) Stop(w http.ResponseWriter, r *http.Request) {
 
 	user := middleware.GetUser(ctx)
 	h.auditSvc.Log(ctx, service.AuditEntry{
-		ActorID:      user.ID,
+		ActorID:       user.ID,
 		ActorUsername: user.Username,
-		Action:       "stop",
-		ResourceType: "app",
-		ResourceID:   app.ID.String(),
-		ResourceName: app.Subdomain,
-		IPAddress:    clientIP(r),
+		Action:        "stop",
+		ResourceType:  "app",
+		ResourceID:    app.ID.String(),
+		ResourceName:  app.Subdomain,
+		IPAddress:     clientIP(r),
 	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "app stopped"})
@@ -722,14 +760,14 @@ func (h *AppHandler) SetMaintenance(w http.ResponseWriter, r *http.Request) {
 
 	user := middleware.GetUser(ctx)
 	h.auditSvc.Log(ctx, service.AuditEntry{
-		ActorID:      user.ID,
+		ActorID:       user.ID,
 		ActorUsername: user.Username,
-		Action:       "maintenance",
-		ResourceType: "app",
-		ResourceID:   app.ID.String(),
-		ResourceName: app.Subdomain,
-		NewValues:    map[string]interface{}{"maintenance": body.Enabled},
-		IPAddress:    clientIP(r),
+		Action:        "maintenance",
+		ResourceType:  "app",
+		ResourceID:    app.ID.String(),
+		ResourceName:  app.Subdomain,
+		NewValues:     map[string]interface{}{"maintenance": body.Enabled},
+		IPAddress:     clientIP(r),
 	})
 
 	msg := "maintenance mode enabled"
