@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Rocket, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Rocket, Copy, Check, Trash2 } from 'lucide-react';
 import { PillButton } from '../components/common/PillButton';
 import { GlassCard } from '../components/common/GlassCard';
 import { RepositoryBackupPanel } from '../components/repositories/RepositoryBackupPanel';
 import { useThemeStore } from '../stores/theme.store';
+import { useNotificationsStore } from '../stores/notifications.store';
 import { repositoriesApi, type LuxViewRepository } from '../api/repositories';
 
 export function RepositoryDetail() {
@@ -13,8 +14,25 @@ export function RepositoryDetail() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const addNotification = useNotificationsStore((s) => s.add);
   const [repo, setRepo] = useState<LuxViewRepository | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  async function handleDelete() {
+    if (!repoId) return;
+    setDeleting(true);
+    try {
+      await repositoriesApi.delete(repoId);
+      addNotification({ type: 'success', title: t('repo.detail.deleted') });
+      navigate('/dashboard/repositories');
+    } catch {
+      addNotification({ type: 'error', title: t('repo.detail.deleteFailed') });
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
 
   function copyToClipboard(text: string, key: string) {
     navigator.clipboard.writeText(text);
@@ -54,15 +72,51 @@ export function RepositoryDetail() {
           </div>
         </div>
 
-        <PillButton
-          variant="primary"
-          size="sm"
-          icon={<Rocket size={14} />}
-          onClick={() => navigate(`/dashboard/new?source=luxview&repoId=${repoId}`)}
-        >
-          {t('repo.detail.createApp')}
-        </PillButton>
+        <div className="flex items-center gap-2">
+          <PillButton
+            variant="primary"
+            size="sm"
+            icon={<Rocket size={14} />}
+            onClick={() => navigate(`/dashboard/new?source=luxview&repoId=${repoId}`)}
+          >
+            {t('repo.detail.createApp')}
+          </PillButton>
+          <PillButton
+            variant="ghost"
+            size="sm"
+            icon={<Trash2 size={14} className="text-red-400" />}
+            onClick={() => setConfirmDelete(true)}
+          >
+            <span className="text-red-400">{t('repo.detail.delete')}</span>
+          </PillButton>
+        </div>
       </div>
+
+      {confirmDelete && (
+        <GlassCard padding="md" className={`border ${isDark ? 'border-red-500/30 bg-red-500/5' : 'border-red-200 bg-red-50'}`}>
+          <p className={`text-sm font-medium mb-1 ${isDark ? 'text-red-300' : 'text-red-700'}`}>
+            {t('repo.detail.deleteConfirmTitle')}
+          </p>
+          <p className="text-xs text-zinc-500 mb-3">{t('repo.detail.deleteConfirmMsg')}</p>
+          <div className="flex gap-2">
+            <PillButton
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmDelete(false)}
+              disabled={deleting}
+            >
+              {t('common.cancel')}
+            </PillButton>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors disabled:opacity-50"
+            >
+              {deleting ? t('common.loading') : t('repo.detail.deleteConfirm')}
+            </button>
+          </div>
+        </GlassCard>
+      )}
 
       {repo && (() => {
         const cloneUrl = `${window.location.origin}/git/${repo.slug}.git`;

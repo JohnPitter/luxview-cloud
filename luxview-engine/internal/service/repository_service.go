@@ -26,6 +26,7 @@ type RepositoryStore interface {
 	Create(ctx context.Context, repo *model.Repository) error
 	FindByID(ctx context.Context, id uuid.UUID) (*model.Repository, error)
 	FindByUserAndSlug(ctx context.Context, userID uuid.UUID, slug string) (*model.Repository, error)
+	Delete(ctx context.Context, id uuid.UUID) error
 	CreateRemote(ctx context.Context, remote *model.RepositoryRemote) error
 	ListRemotes(ctx context.Context, repositoryID uuid.UUID) ([]model.RepositoryRemote, error)
 	UpdateRemoteSyncStatus(ctx context.Context, remoteID uuid.UUID, status model.RepositorySyncStatus, errMsg string) error
@@ -121,6 +122,21 @@ func (s *RepositoryService) Create(ctx context.Context, req CreateRepositoryRequ
 		}
 	}
 	return repo, nil
+}
+
+func (s *RepositoryService) Delete(ctx context.Context, repositoryID uuid.UUID, userID uuid.UUID) error {
+	repo, err := s.findRepository(ctx, repositoryID)
+	if err != nil {
+		return err
+	}
+	if repo.UserID != userID {
+		return fmt.Errorf("forbidden")
+	}
+	if err := s.store.Delete(ctx, repositoryID); err != nil {
+		return err
+	}
+	_ = os.RemoveAll(repo.StoragePath)
+	return nil
 }
 
 func (s *RepositoryService) ListBranches(ctx context.Context, repositoryID uuid.UUID) ([]string, error) {

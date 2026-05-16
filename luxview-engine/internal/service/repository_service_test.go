@@ -46,6 +46,11 @@ func (s *fakeRepositoryStore) FindByUserAndSlug(_ context.Context, userID uuid.U
 	return nil, nil
 }
 
+func (s *fakeRepositoryStore) Delete(_ context.Context, id uuid.UUID) error {
+	delete(s.repos, id)
+	return nil
+}
+
 func (s *fakeRepositoryStore) CreateRemote(_ context.Context, remote *model.RepositoryRemote) error {
 	remote.ID = uuid.New()
 	s.remotes = append(s.remotes, *remote)

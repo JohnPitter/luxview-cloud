@@ -86,6 +86,14 @@ func (r *RepositoryRepo) ListByUserID(ctx context.Context, userID uuid.UUID, lim
 	return repos, total, nil
 }
 
+func (r *RepositoryRepo) Delete(ctx context.Context, id uuid.UUID) error {
+	_, err := r.db.Pool.Exec(ctx, `DELETE FROM repositories WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete repository: %w", err)
+	}
+	return nil
+}
+
 func (r *RepositoryRepo) CreateRemote(ctx context.Context, remote *model.RepositoryRemote) error {
 	err := r.db.Pool.QueryRow(ctx,
 		`INSERT INTO repository_remotes (repository_id, provider, remote_url, mode)

@@ -67,4 +67,8 @@ export const repositoriesApi = {
   async syncRemote(repositoryId: string, remoteId: string): Promise<void> {
     await api.post(`/repositories/${repositoryId}/remotes/${remoteId}/sync`);
   },
+
+  async delete(repositoryId: string): Promise<void> {
+    await api.delete(`/repositories/${repositoryId}`);
+  },
 };

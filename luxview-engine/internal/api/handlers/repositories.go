@@ -183,6 +183,34 @@ func (h *RepositoryHandler) SyncRemote(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"message": "sync started"})
 }
 
+func (h *RepositoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user := middleware.GetUser(ctx)
+	repo, ok := h.authorizeRepo(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.repositorySvc.Delete(ctx, repo.ID, user.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete repository")
+		return
+	}
+
+	if h.auditSvc != nil {
+		h.auditSvc.Log(ctx, service.AuditEntry{
+			ActorID:       user.ID,
+			ActorUsername: user.Username,
+			Action:        "delete",
+			ResourceType:  "repository",
+			ResourceID:    repo.ID.String(),
+			ResourceName:  repo.Slug,
+			IPAddress:     clientIP(r),
+		})
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *RepositoryHandler) authorizeRepo(w http.ResponseWriter, r *http.Request) (*model.Repository, bool) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)
