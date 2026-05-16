@@ -27,9 +27,13 @@ export function NewApp() {
   const addNotification = useNotificationsStore((s) => s.add);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
-  const initialSource = searchParams.get('source') as AppSource | null;
-  const initialRepoId = searchParams.get('repoId');
-  const [source, setSource] = useState<AppSource | null>(initialSource);
+  const [source, setSource] = useState<AppSource | null>(
+    searchParams.get('source') as AppSource | null,
+  );
+
+  useEffect(() => {
+    setSource(searchParams.get('source') as AppSource | null);
+  }, [searchParams]);
 
   // LuxView repo flow
   const [luxRepos, setLuxRepos] = useState<LuxViewRepository[]>([]);
@@ -73,13 +77,14 @@ export function NewApp() {
 
   useEffect(() => {
     if (source !== 'luxview') return;
+    const repoId = searchParams.get('repoId');
     setLoadingLuxRepos(true);
     repositoriesApi
       .list()
       .then((repos) => {
         setLuxRepos(repos);
-        if (initialRepoId) {
-          const found = repos.find((r) => r.id === initialRepoId);
+        if (repoId) {
+          const found = repos.find((r) => r.id === repoId);
           if (found) handleSelectLuxRepo(found);
         }
       })
@@ -88,7 +93,7 @@ export function NewApp() {
       })
       .finally(() => setLoadingLuxRepos(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source]);
+  }, [source, searchParams]);
 
   useEffect(() => {
     aiSettingsApi
