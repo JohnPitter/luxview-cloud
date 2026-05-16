@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Github, Server, GitBranch, Loader2, Plus, Rocket, Settings } from 'lucide-react';
 import { DeployWizard, type DeployConfig } from '../components/deploy/DeployWizard';
@@ -19,6 +19,7 @@ type AppSource = 'github' | 'luxview';
 
 export function NewApp() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { t } = useTranslation();
   const createApp = useAppsStore((s) => s.createApp);
   const apps = useAppsStore((s) => s.apps);
@@ -26,7 +27,9 @@ export function NewApp() {
   const addNotification = useNotificationsStore((s) => s.add);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
-  const [source, setSource] = useState<AppSource | null>(null);
+  const initialSource = searchParams.get('source') as AppSource | null;
+  const initialRepoId = searchParams.get('repoId');
+  const [source, setSource] = useState<AppSource | null>(initialSource);
 
   // LuxView repo flow
   const [luxRepos, setLuxRepos] = useState<LuxViewRepository[]>([]);
@@ -73,12 +76,19 @@ export function NewApp() {
     setLoadingLuxRepos(true);
     repositoriesApi
       .list()
-      .then(setLuxRepos)
+      .then((repos) => {
+        setLuxRepos(repos);
+        if (initialRepoId) {
+          const found = repos.find((r) => r.id === initialRepoId);
+          if (found) handleSelectLuxRepo(found);
+        }
+      })
       .catch(() => {
         addNotification({ type: 'error', title: t('app.notifications.failedToLoadRepos') });
       })
       .finally(() => setLoadingLuxRepos(false));
-  }, [source, addNotification, t]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source]);
 
   useEffect(() => {
     aiSettingsApi
