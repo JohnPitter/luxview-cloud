@@ -32,22 +32,22 @@ type DeployRequest struct {
 
 // Deployer orchestrates the full deploy flow.
 type Deployer struct {
-	appRepo       *repository.AppRepo
-	deployRepo    *repository.DeploymentRepo
-	userRepo      *repository.UserRepo
-	serviceRepo   *repository.ServiceRepo
-	settingsRepo  *repository.SettingsRepo
-	provisioner   *Provisioner
-	detector      *Detector
-	builder       *Builder
-	container     *ContainerManager
-	portManager   *PortManager
-	healthChecker *HealthChecker
-	docker        *dockerclient.Client
-	encryptionKey []byte
-	repoCloner    *RepoCloner
-	buildTimeout  time.Duration
-	appLocks      sync.Map // per-app deploy lock to prevent concurrent deploys
+	appRepo        *repository.AppRepo
+	deployRepo     *repository.DeploymentRepo
+	userRepo       *repository.UserRepo
+	serviceRepo    *repository.ServiceRepo
+	settingsRepo   *repository.SettingsRepo
+	provisioner    *Provisioner
+	detector       *Detector
+	builder        *Builder
+	container      *ContainerManager
+	portManager    *PortManager
+	healthChecker  *HealthChecker
+	docker         *dockerclient.Client
+	encryptionKey  []byte
+	sourceCheckout SourceCheckout
+	buildTimeout   time.Duration
+	appLocks       sync.Map // per-app deploy lock to prevent concurrent deploys
 }
 
 func NewDeployer(
@@ -60,26 +60,30 @@ func NewDeployer(
 	docker *dockerclient.Client,
 	portManager *PortManager,
 	encryptionKey []byte,
+	sourceCheckout SourceCheckout,
 	buildTimeout time.Duration,
 	appNetwork string,
 ) *Deployer {
 	container := NewContainerManager(docker, appNetwork)
+	if sourceCheckout == nil {
+		sourceCheckout = NewGitHubSourceCheckout(userRepo, encryptionKey, "deployer")
+	}
 	return &Deployer{
-		appRepo:       appRepo,
-		deployRepo:    deployRepo,
-		userRepo:      userRepo,
-		serviceRepo:   serviceRepo,
-		settingsRepo:  settingsRepo,
-		provisioner:   provisioner,
-		detector:      NewDetector(),
-		builder:       NewBuilder(docker),
-		container:     container,
-		portManager:   portManager,
-		healthChecker: NewHealthChecker(appRepo, container),
-		docker:        docker,
-		encryptionKey: encryptionKey,
-		repoCloner:    NewRepoCloner(userRepo, encryptionKey, "deployer"),
-		buildTimeout:  buildTimeout,
+		appRepo:        appRepo,
+		deployRepo:     deployRepo,
+		userRepo:       userRepo,
+		serviceRepo:    serviceRepo,
+		settingsRepo:   settingsRepo,
+		provisioner:    provisioner,
+		detector:       NewDetector(),
+		builder:        NewBuilder(docker),
+		container:      container,
+		portManager:    portManager,
+		healthChecker:  NewHealthChecker(appRepo, container),
+		docker:         docker,
+		encryptionKey:  encryptionKey,
+		sourceCheckout: sourceCheckout,
+		buildTimeout:   buildTimeout,
 	}
 }
 
@@ -145,9 +149,17 @@ func (d *Deployer) Deploy(ctx context.Context, req DeployRequest) error {
 	buildDir := filepath.Join(os.TempDir(), "luxview-builds", deployment.ID.String())
 	defer os.RemoveAll(buildDir)
 
-	if err := d.repoCloner.Clone(ctx, app, buildDir); err != nil {
+	checkoutRef := req.CommitSHA
+	if checkoutRef == "" {
+		checkoutRef = app.RepoBranch
+	}
+	checkout, err := d.sourceCheckout.Checkout(ctx, app, checkoutRef, buildDir)
+	if err != nil {
 		d.failDeploy(ctx, deployment, app, "clone failed: "+err.Error(), start)
 		return err
+	}
+	if checkout != nil && checkout.CommitSHA != "" && deployment.CommitSHA == "" {
+		deployment.CommitSHA = checkout.CommitSHA
 	}
 
 	log.Debug().Str("build_dir", buildDir).Msg("repo cloned, build directory ready")

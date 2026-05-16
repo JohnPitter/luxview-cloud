@@ -16,30 +16,32 @@ import (
 
 // Deps holds all dependencies needed to set up the router.
 type Deps struct {
-	Config        *config.Config
-	UserRepo      *repository.UserRepo
-	AppRepo       *repository.AppRepo
-	DeployRepo    *repository.DeploymentRepo
-	ActionRepo    *repository.ActionRepo
-	ServiceRepo   *repository.ServiceRepo
-	MetricRepo    *repository.MetricRepo
-	AlertRepo     *repository.AlertRepo
-	Container     *service.ContainerManager
-	Provisioner   *service.Provisioner
-	Router        *service.RouterService
-	WebhookSvc    *service.WebhookService
-	ActionSvc     *service.ActionService
-	GitHubAppSvc  *service.GitHubAppService
-	BuildQueue    chan<- service.DeployRequest
-	EncryptKey    []byte
-	PlanRepo      *repository.PlanRepo
-	SettingsRepo  *repository.SettingsRepo
-	Docker        *dockerclient.Client
-	AuditRepo     *repository.AuditLogRepo
-	AuditSvc      *service.AuditService
-	PageviewRepo  *repository.PageviewRepo
-	MailboxRepo   *repository.MailboxRepo
-	BackupSvc     *service.BackupService
+	Config         *config.Config
+	UserRepo       *repository.UserRepo
+	RepositoryRepo *repository.RepositoryRepo
+	AppRepo        *repository.AppRepo
+	DeployRepo     *repository.DeploymentRepo
+	ActionRepo     *repository.ActionRepo
+	ServiceRepo    *repository.ServiceRepo
+	MetricRepo     *repository.MetricRepo
+	AlertRepo      *repository.AlertRepo
+	Container      *service.ContainerManager
+	Provisioner    *service.Provisioner
+	Router         *service.RouterService
+	WebhookSvc     *service.WebhookService
+	ActionSvc      *service.ActionService
+	RepositorySvc  *service.RepositoryService
+	GitHubAppSvc   *service.GitHubAppService
+	BuildQueue     chan<- service.DeployRequest
+	EncryptKey     []byte
+	PlanRepo       *repository.PlanRepo
+	SettingsRepo   *repository.SettingsRepo
+	Docker         *dockerclient.Client
+	AuditRepo      *repository.AuditLogRepo
+	AuditSvc       *service.AuditService
+	PageviewRepo   *repository.PageviewRepo
+	MailboxRepo    *repository.MailboxRepo
+	BackupSvc      *service.BackupService
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -86,6 +88,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	traefikHandler := handlers.NewTraefikHandler(deps.Router)
 	webhookHandler := handlers.NewWebhookHandler(deps.WebhookSvc, deps.Config.InternalToken, deps.Config.GitHubAppWebhookSecret, deps.GitHubAppSvc)
 	githubHandler := handlers.NewGitHubHandler(deps.GitHubAppSvc)
+	repositoryHandler := handlers.NewRepositoryHandler(deps.RepositoryRepo, deps.RepositorySvc, deps.AuditSvc)
 	planHandler := handlers.NewPlanHandler(deps.PlanRepo, deps.UserRepo, deps.AppRepo, deps.AuditSvc)
 	settingsHandler := handlers.NewSettingsHandler(deps.SettingsRepo, deps.AuditSvc)
 	analyzeHandler := handlers.NewAnalyzeHandler(deps.AppRepo, deps.UserRepo, deps.DeployRepo, deps.SettingsRepo, deps.ServiceRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)
@@ -146,6 +149,11 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Post("/github/repos", githubHandler.CreateRepo)
 			r.Put("/github/workflow", githubHandler.CommitWorkflow)
 			r.Post("/github/sync-secrets", githubHandler.SyncSecrets)
+
+			// LuxView repositories
+			r.Get("/repositories", repositoryHandler.List)
+			r.Post("/repositories", repositoryHandler.Create)
+			r.Get("/repositories/{id}/branches", repositoryHandler.ListBranches)
 
 			// Apps
 			r.Get("/apps/check-subdomain/{subdomain}", appHandler.CheckSubdomain)

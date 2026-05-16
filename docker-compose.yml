@@ -47,6 +47,7 @@ services:
       - traefik-logs:/var/log/traefik:ro
       - traefik-certs:/letsencrypt:ro
       - /data/luxview/storage:/data/luxview/storage
+      - /data/luxview/repositories:/data/luxview/repositories
       - /backups:/backups
     environment:
       - PORT=${ENGINE_PORT:-8080}
@@ -72,6 +73,7 @@ services:
       - SHARED_RABBITMQ_USER=${SHARED_RABBITMQ_USER:-luxview_admin}
       - SHARED_RABBITMQ_PASSWORD=${SHARED_RABBITMQ_PASSWORD}
       - STORAGE_BASE_PATH=/data/luxview/storage
+      - REPOSITORY_BASE_PATH=/data/luxview/repositories
       - BUILD_CONCURRENCY=${BUILD_CONCURRENCY:-3}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - TRAEFIK_LOG_PATH=/var/log/traefik/access.json

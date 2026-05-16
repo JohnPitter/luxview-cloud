@@ -45,19 +45,19 @@ var defaultWorkflowPaths = []string{
 type ActionService struct {
 	actionRepo      *repository.ActionRepo
 	appRepo         *repository.AppRepo
-	repoCloner      *RepoCloner
+	sourceCheckout  SourceCheckout
 	buildQueue      chan<- DeployRequest
 	artifactBaseDir string
 }
 
-func NewActionService(actionRepo *repository.ActionRepo, appRepo *repository.AppRepo, userRepo *repository.UserRepo, encryptionKey []byte, buildQueue chan<- DeployRequest, artifactBaseDir string) *ActionService {
+func NewActionService(actionRepo *repository.ActionRepo, appRepo *repository.AppRepo, sourceCheckout SourceCheckout, buildQueue chan<- DeployRequest, artifactBaseDir string) *ActionService {
 	if artifactBaseDir == "" {
 		artifactBaseDir = filepath.Join(os.TempDir(), "luxview-action-artifacts")
 	}
 	return &ActionService{
 		actionRepo:      actionRepo,
 		appRepo:         appRepo,
-		repoCloner:      NewRepoCloner(userRepo, encryptionKey, "actions"),
+		sourceCheckout:  sourceCheckout,
 		buildQueue:      buildQueue,
 		artifactBaseDir: artifactBaseDir,
 	}
@@ -82,7 +82,7 @@ func (s *ActionService) TriggerRun(ctx context.Context, appID uuid.UUID, req Tri
 
 	parseDir := filepath.Join(os.TempDir(), actionWorkspaceRoot, "parse-"+uuid.NewString())
 	defer os.RemoveAll(parseDir)
-	if err := s.repoCloner.Clone(ctx, app, parseDir); err != nil {
+	if _, err := s.sourceCheckout.Checkout(ctx, app, app.RepoBranch, parseDir); err != nil {
 		return nil, err
 	}
 
@@ -131,7 +131,11 @@ func (s *ActionService) ExecuteRun(ctx context.Context, run *model.ActionRun) er
 
 	workspace := filepath.Join(os.TempDir(), actionWorkspaceRoot, run.ID.String())
 	defer os.RemoveAll(workspace)
-	if err := s.repoCloner.Clone(ctx, app, workspace); err != nil {
+	checkoutRef := run.CommitSHA
+	if checkoutRef == "" {
+		checkoutRef = run.Branch
+	}
+	if _, err := s.sourceCheckout.Checkout(ctx, app, checkoutRef, workspace); err != nil {
 		_ = s.actionRepo.UpdateRunStatus(ctx, run.ID, model.ActionFailed)
 		return err
 	}

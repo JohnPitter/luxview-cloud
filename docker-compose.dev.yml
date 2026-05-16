@@ -32,6 +32,7 @@ services:
       - ./luxview-engine:/app
       - /var/run/docker.sock:/var/run/docker.sock
       - build-cache:/tmp/builds
+      - ./data/repositories:/data/luxview/repositories
       - ./backups:/backups
     environment:
       - PORT=8080
@@ -57,6 +58,7 @@ services:
       - SHARED_RABBITMQ_PORT=5672
       - SHARED_RABBITMQ_USER=luxview_admin
       - SHARED_RABBITMQ_PASSWORD=${SHARED_RABBITMQ_PASSWORD:-devpassword}
+      - REPOSITORY_BASE_PATH=/data/luxview/repositories
       - BUILD_CONCURRENCY=2
     labels:
       - "traefik.enable=true"

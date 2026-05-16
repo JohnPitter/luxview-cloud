@@ -17,6 +17,7 @@ build/
 # -- Go -----------------------------------------------------------------------
 luxview-engine/tmp/
 luxview-engine/engine
+luxview-engine/luxview-engine-linux
 
 # -- Docker volumes (local dev) -----------------------------------------------
 volumes/

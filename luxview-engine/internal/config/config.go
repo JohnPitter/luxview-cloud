@@ -21,11 +21,11 @@ type Config struct {
 	GitHubClientSecret string
 
 	// GitHub App (replaces OAuth for new installations)
-	GitHubAppID          int64
-	GitHubAppSlug        string // e.g. "luxview-cloud"
-	GitHubAppClientID    string
-	GitHubAppClientSecret string
-	GitHubAppPrivateKey  string // PEM-encoded RSA private key
+	GitHubAppID            int64
+	GitHubAppSlug          string // e.g. "luxview-cloud"
+	GitHubAppClientID      string
+	GitHubAppClientSecret  string
+	GitHubAppPrivateKey    string // PEM-encoded RSA private key
 	GitHubAppWebhookSecret string
 
 	SharedPGHost     string
@@ -48,6 +48,7 @@ type Config struct {
 	SharedRabbitPassword string
 
 	StorageBasePath    string // base path for local storage volumes
+	RepositoryBasePath string // base path for LuxView-hosted Git repositories
 	MailContainerName  string // docker-mailserver container name
 	BackupDir          string // base directory for backup files
 	ActionArtifactsDir string // base directory for action artifacts
@@ -115,6 +116,7 @@ func Load() (*Config, error) {
 		SharedRabbitPassword: envStr("SHARED_RABBIT_PASSWORD", ""),
 
 		StorageBasePath:    envStr("STORAGE_BASE_PATH", "/data/luxview/storage"),
+		RepositoryBasePath: envStr("REPOSITORY_BASE_PATH", "/data/luxview/repositories"),
 		MailContainerName:  envStr("MAIL_CONTAINER_NAME", "luxview-mailserver"),
 		BackupDir:          envStr("BACKUP_DIR", "/backups"),
 		ActionArtifactsDir: envStr("ACTION_ARTIFACTS_DIR", "/data/luxview/action-artifacts"),

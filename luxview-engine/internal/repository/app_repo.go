@@ -20,10 +20,10 @@ func NewAppRepo(db *DB) *AppRepo {
 
 func (r *AppRepo) Create(ctx context.Context, app *model.App) error {
 	err := r.db.Pool.QueryRow(ctx,
-		`INSERT INTO apps (user_id, name, subdomain, repo_url, repo_branch, stack, status, env_vars, resource_limits, auto_deploy, custom_dockerfile, custom_domain)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		`INSERT INTO apps (user_id, name, subdomain, repository_id, repo_url, repo_branch, stack, status, env_vars, resource_limits, auto_deploy, custom_dockerfile, custom_domain)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		 RETURNING id, created_at, updated_at`,
-		app.UserID, app.Name, app.Subdomain, app.RepoURL, app.RepoBranch,
+		app.UserID, app.Name, app.Subdomain, app.RepositoryID, app.RepoURL, app.RepoBranch,
 		app.Stack, app.Status, app.EnvVars, mustJSON(app.ResourceLimits), app.AutoDeploy, app.CustomDockerfile, app.CustomDomain,
 	).Scan(&app.ID, &app.CreatedAt, &app.UpdatedAt)
 	if err != nil {
@@ -36,12 +36,13 @@ func (r *AppRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.App, error
 	var app model.App
 	var rl json.RawMessage
 	var assignedPort *int
+	var repositoryID *uuid.UUID
 	err := r.db.Pool.QueryRow(ctx,
-		`SELECT id, user_id, name, subdomain, repo_url, repo_branch, stack, status,
+		`SELECT id, user_id, name, subdomain, repository_id, repo_url, repo_branch, stack, status,
 		        container_id, internal_port, assigned_port, env_vars, resource_limits,
 		        auto_deploy, webhook_id, custom_dockerfile, custom_domain, created_at, updated_at
 		 FROM apps WHERE id = $1`, id,
-	).Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain, &app.RepoURL,
+	).Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain, &repositoryID, &app.RepoURL,
 		&app.RepoBranch, &app.Stack, &app.Status, &app.ContainerID,
 		&app.InternalPort, &assignedPort, &app.EnvVars, &rl,
 		&app.AutoDeploy, &app.WebhookID, &app.CustomDockerfile, &app.CustomDomain, &app.CreatedAt, &app.UpdatedAt)
@@ -54,6 +55,7 @@ func (r *AppRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.App, error
 	if assignedPort != nil {
 		app.AssignedPort = *assignedPort
 	}
+	app.RepositoryID = repositoryID
 	_ = json.Unmarshal(rl, &app.ResourceLimits)
 	return &app, nil
 }
@@ -62,12 +64,13 @@ func (r *AppRepo) FindBySubdomain(ctx context.Context, subdomain string) (*model
 	var app model.App
 	var rl json.RawMessage
 	var assignedPort *int
+	var repositoryID *uuid.UUID
 	err := r.db.Pool.QueryRow(ctx,
-		`SELECT id, user_id, name, subdomain, repo_url, repo_branch, stack, status,
+		`SELECT id, user_id, name, subdomain, repository_id, repo_url, repo_branch, stack, status,
 		        container_id, internal_port, assigned_port, env_vars, resource_limits,
 		        auto_deploy, webhook_id, custom_dockerfile, custom_domain, created_at, updated_at
 		 FROM apps WHERE subdomain = $1`, subdomain,
-	).Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain, &app.RepoURL,
+	).Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain, &repositoryID, &app.RepoURL,
 		&app.RepoBranch, &app.Stack, &app.Status, &app.ContainerID,
 		&app.InternalPort, &assignedPort, &app.EnvVars, &rl,
 		&app.AutoDeploy, &app.WebhookID, &app.CustomDockerfile, &app.CustomDomain, &app.CreatedAt, &app.UpdatedAt)
@@ -80,6 +83,7 @@ func (r *AppRepo) FindBySubdomain(ctx context.Context, subdomain string) (*model
 	if assignedPort != nil {
 		app.AssignedPort = *assignedPort
 	}
+	app.RepositoryID = repositoryID
 	_ = json.Unmarshal(rl, &app.ResourceLimits)
 	return &app, nil
 }
@@ -88,12 +92,13 @@ func (r *AppRepo) FindByCustomDomain(ctx context.Context, domain string) (*model
 	var app model.App
 	var rl json.RawMessage
 	var assignedPort *int
+	var repositoryID *uuid.UUID
 	err := r.db.Pool.QueryRow(ctx,
-		`SELECT id, user_id, name, subdomain, repo_url, repo_branch, stack, status,
+		`SELECT id, user_id, name, subdomain, repository_id, repo_url, repo_branch, stack, status,
 		        container_id, internal_port, assigned_port, env_vars, resource_limits,
 		        auto_deploy, webhook_id, custom_dockerfile, custom_domain, created_at, updated_at
 		 FROM apps WHERE custom_domain = $1`, domain,
-	).Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain, &app.RepoURL,
+	).Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain, &repositoryID, &app.RepoURL,
 		&app.RepoBranch, &app.Stack, &app.Status, &app.ContainerID,
 		&app.InternalPort, &assignedPort, &app.EnvVars, &rl,
 		&app.AutoDeploy, &app.WebhookID, &app.CustomDockerfile, &app.CustomDomain, &app.CreatedAt, &app.UpdatedAt)
@@ -106,6 +111,7 @@ func (r *AppRepo) FindByCustomDomain(ctx context.Context, domain string) (*model
 	if assignedPort != nil {
 		app.AssignedPort = *assignedPort
 	}
+	app.RepositoryID = repositoryID
 	_ = json.Unmarshal(rl, &app.ResourceLimits)
 	return &app, nil
 }
@@ -117,7 +123,7 @@ func (r *AppRepo) ListByUserID(ctx context.Context, userID uuid.UUID, limit, off
 	}
 
 	rows, err := r.db.Pool.Query(ctx,
-		`SELECT id, user_id, name, subdomain, repo_url, repo_branch, stack, status,
+		`SELECT id, user_id, name, subdomain, repository_id, repo_url, repo_branch, stack, status,
 		        container_id, internal_port, assigned_port, resource_limits,
 		        auto_deploy, webhook_id, custom_dockerfile, custom_domain, created_at, updated_at
 		 FROM apps WHERE user_id = $1
@@ -132,8 +138,9 @@ func (r *AppRepo) ListByUserID(ctx context.Context, userID uuid.UUID, limit, off
 		var app model.App
 		var rl json.RawMessage
 		var assignedPort *int
+		var repositoryID *uuid.UUID
 		if err := rows.Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain,
-			&app.RepoURL, &app.RepoBranch, &app.Stack, &app.Status,
+			&repositoryID, &app.RepoURL, &app.RepoBranch, &app.Stack, &app.Status,
 			&app.ContainerID, &app.InternalPort, &assignedPort, &rl,
 			&app.AutoDeploy, &app.WebhookID, &app.CustomDockerfile, &app.CustomDomain, &app.CreatedAt, &app.UpdatedAt); err != nil {
 			return nil, 0, err
@@ -141,6 +148,7 @@ func (r *AppRepo) ListByUserID(ctx context.Context, userID uuid.UUID, limit, off
 		if assignedPort != nil {
 			app.AssignedPort = *assignedPort
 		}
+		app.RepositoryID = repositoryID
 		_ = json.Unmarshal(rl, &app.ResourceLimits)
 		apps = append(apps, app)
 	}
@@ -153,7 +161,7 @@ func (r *AppRepo) ListAllRunning(ctx context.Context) ([]model.App, error) {
 
 func (r *AppRepo) ListAllRunningOrError(ctx context.Context) ([]model.App, error) {
 	rows, err := r.db.Pool.Query(ctx,
-		`SELECT id, user_id, name, subdomain, repo_url, repo_branch, stack, status,
+		`SELECT id, user_id, name, subdomain, repository_id, repo_url, repo_branch, stack, status,
 		        container_id, internal_port, assigned_port, resource_limits,
 		        auto_deploy, webhook_id, custom_dockerfile, custom_domain, created_at, updated_at
 		 FROM apps WHERE status IN ('running', 'error', 'maintenance', 'building', 'deploying')`)
@@ -167,8 +175,9 @@ func (r *AppRepo) ListAllRunningOrError(ctx context.Context) ([]model.App, error
 		var app model.App
 		var rl json.RawMessage
 		var assignedPort *int
+		var repositoryID *uuid.UUID
 		if err := rows.Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain,
-			&app.RepoURL, &app.RepoBranch, &app.Stack, &app.Status,
+			&repositoryID, &app.RepoURL, &app.RepoBranch, &app.Stack, &app.Status,
 			&app.ContainerID, &app.InternalPort, &assignedPort, &rl,
 			&app.AutoDeploy, &app.WebhookID, &app.CustomDockerfile, &app.CustomDomain, &app.CreatedAt, &app.UpdatedAt); err != nil {
 			return nil, err
@@ -176,6 +185,7 @@ func (r *AppRepo) ListAllRunningOrError(ctx context.Context) ([]model.App, error
 		if assignedPort != nil {
 			app.AssignedPort = *assignedPort
 		}
+		app.RepositoryID = repositoryID
 		_ = json.Unmarshal(rl, &app.ResourceLimits)
 		apps = append(apps, app)
 	}
@@ -189,7 +199,7 @@ func (r *AppRepo) ListAll(ctx context.Context, limit, offset int) ([]model.App, 
 	}
 
 	rows, err := r.db.Pool.Query(ctx,
-		`SELECT id, user_id, name, subdomain, repo_url, repo_branch, stack, status,
+		`SELECT id, user_id, name, subdomain, repository_id, repo_url, repo_branch, stack, status,
 		        container_id, internal_port, assigned_port, resource_limits,
 		        auto_deploy, webhook_id, custom_dockerfile, custom_domain, created_at, updated_at
 		 FROM apps ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
@@ -203,8 +213,9 @@ func (r *AppRepo) ListAll(ctx context.Context, limit, offset int) ([]model.App, 
 		var app model.App
 		var rl json.RawMessage
 		var assignedPort *int
+		var repositoryID *uuid.UUID
 		if err := rows.Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain,
-			&app.RepoURL, &app.RepoBranch, &app.Stack, &app.Status,
+			&repositoryID, &app.RepoURL, &app.RepoBranch, &app.Stack, &app.Status,
 			&app.ContainerID, &app.InternalPort, &assignedPort, &rl,
 			&app.AutoDeploy, &app.WebhookID, &app.CustomDockerfile, &app.CustomDomain, &app.CreatedAt, &app.UpdatedAt); err != nil {
 			return nil, 0, err
@@ -212,6 +223,7 @@ func (r *AppRepo) ListAll(ctx context.Context, limit, offset int) ([]model.App, 
 		if assignedPort != nil {
 			app.AssignedPort = *assignedPort
 		}
+		app.RepositoryID = repositoryID
 		_ = json.Unmarshal(rl, &app.ResourceLimits)
 		apps = append(apps, app)
 	}
@@ -240,11 +252,11 @@ func (r *AppRepo) ListAllSubdomains(ctx context.Context) ([]model.App, error) {
 
 func (r *AppRepo) Update(ctx context.Context, app *model.App) error {
 	_, err := r.db.Pool.Exec(ctx,
-		`UPDATE apps SET name=$2, subdomain=$3, repo_url=$4, repo_branch=$5,
-		 stack=$6, status=$7, container_id=$8, internal_port=$9, assigned_port=$10,
-		 env_vars=$11, resource_limits=$12, auto_deploy=$13, webhook_id=$14, custom_dockerfile=$15, custom_domain=$16, updated_at=NOW()
+		`UPDATE apps SET name=$2, subdomain=$3, repository_id=$4, repo_url=$5, repo_branch=$6,
+		 stack=$7, status=$8, container_id=$9, internal_port=$10, assigned_port=$11,
+		 env_vars=$12, resource_limits=$13, auto_deploy=$14, webhook_id=$15, custom_dockerfile=$16, custom_domain=$17, updated_at=NOW()
 		 WHERE id=$1`,
-		app.ID, app.Name, app.Subdomain, app.RepoURL, app.RepoBranch,
+		app.ID, app.Name, app.Subdomain, app.RepositoryID, app.RepoURL, app.RepoBranch,
 		app.Stack, app.Status, app.ContainerID, app.InternalPort, app.AssignedPort,
 		app.EnvVars, mustJSON(app.ResourceLimits), app.AutoDeploy, app.WebhookID, app.CustomDockerfile, app.CustomDomain,
 	)

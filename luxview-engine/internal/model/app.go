@@ -25,44 +25,46 @@ type ResourceLimits struct {
 }
 
 type App struct {
-	ID             uuid.UUID       `json:"id"`
-	UserID         uuid.UUID       `json:"user_id"`
-	Name           string          `json:"name"`
-	Subdomain      string          `json:"subdomain"`
-	RepoURL        string          `json:"repo_url"`
-	RepoBranch     string          `json:"repo_branch"`
-	Stack          string          `json:"stack"`
-	Status         AppStatus       `json:"status"`
-	ContainerID    string          `json:"container_id,omitempty"`
-	InternalPort   int             `json:"internal_port"`
-	AssignedPort   int             `json:"assigned_port"`
-	EnvVars        json.RawMessage `json:"-"`        // encrypted, never directly exposed
-	EnvVarsPlain   map[string]string `json:"env_vars"` // decrypted for API responses
-	ResourceLimits ResourceLimits  `json:"resource_limits"`
-	AutoDeploy       bool            `json:"auto_deploy"`
-	WebhookID        *int64          `json:"webhook_id,omitempty"`
-	CustomDockerfile *string         `json:"custom_dockerfile,omitempty"`
-	CustomDomain    *string          `json:"custom_domain,omitempty"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
+	ID               uuid.UUID         `json:"id"`
+	UserID           uuid.UUID         `json:"user_id"`
+	Name             string            `json:"name"`
+	Subdomain        string            `json:"subdomain"`
+	RepositoryID     *uuid.UUID        `json:"repository_id,omitempty"`
+	RepoURL          string            `json:"repo_url"`
+	RepoBranch       string            `json:"repo_branch"`
+	Stack            string            `json:"stack"`
+	Status           AppStatus         `json:"status"`
+	ContainerID      string            `json:"container_id,omitempty"`
+	InternalPort     int               `json:"internal_port"`
+	AssignedPort     int               `json:"assigned_port"`
+	EnvVars          json.RawMessage   `json:"-"`        // encrypted, never directly exposed
+	EnvVarsPlain     map[string]string `json:"env_vars"` // decrypted for API responses
+	ResourceLimits   ResourceLimits    `json:"resource_limits"`
+	AutoDeploy       bool              `json:"auto_deploy"`
+	WebhookID        *int64            `json:"webhook_id,omitempty"`
+	CustomDockerfile *string           `json:"custom_dockerfile,omitempty"`
+	CustomDomain     *string           `json:"custom_domain,omitempty"`
+	CreatedAt        time.Time         `json:"created_at"`
+	UpdatedAt        time.Time         `json:"updated_at"`
 }
 
 type CreateAppRequest struct {
-	Name       string            `json:"name"`
-	Subdomain  string            `json:"subdomain"`
-	RepoURL    string            `json:"repo_url"`
-	RepoBranch string            `json:"repo_branch"`
-	EnvVars    map[string]string `json:"env_vars"`
-	AutoDeploy *bool             `json:"auto_deploy"`
+	Name         string            `json:"name"`
+	Subdomain    string            `json:"subdomain"`
+	RepositoryID *uuid.UUID        `json:"repository_id,omitempty"`
+	RepoURL      string            `json:"repo_url"`
+	RepoBranch   string            `json:"repo_branch"`
+	EnvVars      map[string]string `json:"env_vars"`
+	AutoDeploy   *bool             `json:"auto_deploy"`
 }
 
 type UpdateAppRequest struct {
-	Name           *string            `json:"name,omitempty"`
-	RepoBranch     *string            `json:"repo_branch,omitempty"`
-	EnvVars        map[string]string  `json:"env_vars,omitempty"`
-	ResourceLimits *ResourceLimits    `json:"resource_limits,omitempty"`
-	AutoDeploy     *bool              `json:"auto_deploy,omitempty"`
-	CustomDomain   *string            `json:"custom_domain,omitempty"`
+	Name           *string           `json:"name,omitempty"`
+	RepoBranch     *string           `json:"repo_branch,omitempty"`
+	EnvVars        map[string]string `json:"env_vars,omitempty"`
+	ResourceLimits *ResourceLimits   `json:"resource_limits,omitempty"`
+	AutoDeploy     *bool             `json:"auto_deploy,omitempty"`
+	CustomDomain   *string           `json:"custom_domain,omitempty"`
 }
 
 // ReservedSubdomains that cannot be used by users.

@@ -54,6 +54,7 @@ func main() {
 
 	// Repositories
 	userRepo := repository.NewUserRepo(db)
+	repositoryRepo := repository.NewRepositoryRepo(db)
 	appRepo := repository.NewAppRepo(db)
 	deployRepo := repository.NewDeploymentRepo(db)
 	actionRepo := repository.NewActionRepo(db, encryptionKey)
@@ -72,7 +73,12 @@ func main() {
 	containerMgr := service.NewContainerManager(docker, cfg.AppNetwork)
 	provisioner := service.NewProvisioner(serviceRepo, mailboxRepo, cfg, encryptionKey)
 	routerSvc := service.NewRouterService(appRepo, cfg.Domain)
-	deployer := service.NewDeployer(appRepo, deployRepo, userRepo, serviceRepo, settingsRepo, provisioner, docker, portManager, encryptionKey, time.Duration(cfg.BuildTimeout)*time.Second, cfg.AppNetwork)
+	repositorySvc := service.NewRepositoryService(repositoryRepo, cfg.RepositoryBasePath)
+	sourceCheckout := service.NewAppSourceCheckout(
+		service.NewGitHubSourceCheckout(userRepo, encryptionKey, "source-checkout"),
+		service.NewLuxViewSourceCheckout(repositorySvc),
+	)
+	deployer := service.NewDeployer(appRepo, deployRepo, userRepo, serviceRepo, settingsRepo, provisioner, docker, portManager, encryptionKey, sourceCheckout, time.Duration(cfg.BuildTimeout)*time.Second, cfg.AppNetwork)
 	metricsCollector := service.NewMetricsCollector(appRepo, metricRepo, docker)
 	healthChecker := service.NewHealthChecker(appRepo, containerMgr)
 	alerter := service.NewAlerter(alertRepo, metricRepo, appRepo)
@@ -92,7 +98,7 @@ func main() {
 	buildWorker, buildQueue := worker.NewBuildWorker(deployer, cfg.BuildConcurrency)
 	buildWorker.Start(ctx)
 
-	actionSvc := service.NewActionService(actionRepo, appRepo, userRepo, encryptionKey, buildQueue, cfg.ActionArtifactsDir)
+	actionSvc := service.NewActionService(actionRepo, appRepo, sourceCheckout, buildQueue, cfg.ActionArtifactsDir)
 	webhookSvc := service.NewWebhookService(appRepo, buildQueue, actionSvc)
 
 	// GitHub App service (optional — only when GITHUB_APP_ID is set)
@@ -150,30 +156,32 @@ func main() {
 
 	// Router
 	router := api.NewRouter(api.Deps{
-		Config:       cfg,
-		UserRepo:     userRepo,
-		AppRepo:      appRepo,
-		DeployRepo:   deployRepo,
-		ActionRepo:   actionRepo,
-		ServiceRepo:  serviceRepo,
-		MetricRepo:   metricRepo,
-		AlertRepo:    alertRepo,
-		PlanRepo:     planRepo,
-		Container:    containerMgr,
-		Provisioner:  provisioner,
-		Router:       routerSvc,
-		WebhookSvc:   webhookSvc,
-		ActionSvc:    actionSvc,
-		GitHubAppSvc: githubAppSvc,
-		BuildQueue:   buildQueue,
-		EncryptKey:   encryptionKey,
-		SettingsRepo: settingsRepo,
-		Docker:       docker,
-		AuditRepo:    auditRepo,
-		AuditSvc:     auditSvc,
-		PageviewRepo: pageviewRepo,
-		MailboxRepo:  mailboxRepo,
-		BackupSvc:    backupSvc,
+		Config:         cfg,
+		UserRepo:       userRepo,
+		RepositoryRepo: repositoryRepo,
+		AppRepo:        appRepo,
+		DeployRepo:     deployRepo,
+		ActionRepo:     actionRepo,
+		ServiceRepo:    serviceRepo,
+		MetricRepo:     metricRepo,
+		AlertRepo:      alertRepo,
+		PlanRepo:       planRepo,
+		Container:      containerMgr,
+		Provisioner:    provisioner,
+		Router:         routerSvc,
+		WebhookSvc:     webhookSvc,
+		ActionSvc:      actionSvc,
+		RepositorySvc:  repositorySvc,
+		GitHubAppSvc:   githubAppSvc,
+		BuildQueue:     buildQueue,
+		EncryptKey:     encryptionKey,
+		SettingsRepo:   settingsRepo,
+		Docker:         docker,
+		AuditRepo:      auditRepo,
+		AuditSvc:       auditSvc,
+		PageviewRepo:   pageviewRepo,
+		MailboxRepo:    mailboxRepo,
+		BackupSvc:      backupSvc,
 	})
 
 	// HTTP server

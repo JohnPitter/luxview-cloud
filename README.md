@@ -428,6 +428,7 @@ luxview-cloud/
 | `SHARED_MONGO_PASSWORD` | Shared MongoDB password | Yes |
 | `SHARED_RABBITMQ_PASSWORD` | Shared RabbitMQ password | Yes |
 | `ACME_EMAIL` | Let's Encrypt email | Production |
+| `REPOSITORY_BASE_PATH` | LuxView-hosted Git repository storage path (default: `/data/luxview/repositories`) | No |
 | `BUILD_CONCURRENCY` | Max concurrent builds (default: `3`) | No |
 | `LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` | No |
 
