@@ -66,7 +66,17 @@ export interface ActionSecret {
   updatedAt: string;
 }
 
+export interface WorkflowSummary {
+  path: string;
+  name: string;
+}
+
 export const actionsApi = {
+  async listWorkflows(appId: string): Promise<WorkflowSummary[]> {
+    const { data } = await api.get<{ workflows: WorkflowSummary[] }>(`/apps/${appId}/actions/workflows`);
+    return data.workflows ?? [];
+  },
+
   async listRuns(appId: string, limit = 20, offset = 0): Promise<{ runs: ActionRun[]; total: number }> {
     const { data } = await api.get<{ runs: ActionRun[]; total: number }>(
       `/apps/${appId}/actions/runs`,

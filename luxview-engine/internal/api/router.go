@@ -42,6 +42,7 @@ type Deps struct {
 	PageviewRepo   *repository.PageviewRepo
 	MailboxRepo    *repository.MailboxRepo
 	BackupSvc      *service.BackupService
+	PushEventSvc   *service.PushEventService
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -89,6 +90,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	webhookHandler := handlers.NewWebhookHandler(deps.WebhookSvc, deps.Config.InternalToken, deps.Config.GitHubAppWebhookSecret, deps.GitHubAppSvc)
 	githubHandler := handlers.NewGitHubHandler(deps.GitHubAppSvc)
 	repositoryHandler := handlers.NewRepositoryHandler(deps.RepositoryRepo, deps.RepositorySvc, deps.AuditSvc)
+	gitHandler := handlers.NewGitHandler(deps.RepositoryRepo, deps.RepositorySvc, deps.PushEventSvc)
 	planHandler := handlers.NewPlanHandler(deps.PlanRepo, deps.UserRepo, deps.AppRepo, deps.AuditSvc)
 	settingsHandler := handlers.NewSettingsHandler(deps.SettingsRepo, deps.AuditSvc)
 	analyzeHandler := handlers.NewAnalyzeHandler(deps.AppRepo, deps.UserRepo, deps.DeployRepo, deps.SettingsRepo, deps.ServiceRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)
@@ -101,6 +103,16 @@ func NewRouter(deps Deps) *chi.Mux {
 	domainCheckHandler := handlers.NewDomainCheckHandler(deps.AppRepo, domainChecker)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
+
+	// Git HTTP smart protocol — mounted outside /api, no 1MB body limit (pushes can be large).
+	// Limit set to 512MB per request to prevent abuse while allowing large repos.
+	r.Route("/git/{repo}.git", func(r chi.Router) {
+		r.Use(middleware.BodySizeLimit(512 << 20))
+		r.Use(authMiddleware)
+		r.Get("/info/refs", gitHandler.InfoRefs)
+		r.Post("/git-upload-pack", gitHandler.UploadPack)
+		r.Post("/git-receive-pack", gitHandler.ReceivePack)
+	})
 
 	r.Route("/api", func(r chi.Router) {
 		// Health check (public, for status page)
@@ -184,6 +196,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Post("/deployments/{id}/rollback", deployHandler.Rollback)
 
 			// Actions
+			r.Get("/apps/{id}/actions/workflows", actionHandler.ListWorkflows)
 			r.Get("/apps/{id}/actions/runs", actionHandler.ListRuns)
 			r.Post("/apps/{id}/actions/runs", actionHandler.TriggerRun)
 			r.Get("/apps/{id}/actions/secrets", actionHandler.ListSecrets)

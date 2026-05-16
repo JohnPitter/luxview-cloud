@@ -15,13 +15,14 @@ import {
   Trash2,
   Eye,
   EyeOff,
+  FileCode2,
 } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { PillButton } from '../common/PillButton';
 import { useThemeStore } from '../../stores/theme.store';
 import { useNotificationsStore } from '../../stores/notifications.store';
 import { formatRelativeTime } from '../../lib/format';
-import { actionsApi, type ActionRun, type ActionStatus, type ActionSecret } from '../../api/actions';
+import { actionsApi, type ActionRun, type ActionStatus, type ActionSecret, type WorkflowSummary } from '../../api/actions';
 import { ActionRunDetail } from './ActionRunDetail';
 
 interface ActionRunListProps {
@@ -46,19 +47,22 @@ const statusBorder: Record<ActionStatus, string> = {
   skipped: 'border-zinc-500/30 bg-zinc-500/5',
 };
 
-type PanelTab = 'runs' | 'secrets';
+type PanelTab = 'workflows' | 'runs' | 'secrets';
 
 export function ActionRunList({ appId }: ActionRunListProps) {
   const { t } = useTranslation();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const addNotification = useNotificationsStore((s) => s.add);
 
-  const [panel, setPanel] = useState<PanelTab>('runs');
+  const [panel, setPanel] = useState<PanelTab>('workflows');
   const [runs, setRuns] = useState<ActionRun[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [triggering, setTriggering] = useState(false);
+  const [triggering, setTriggering] = useState<string | null>(null); // stores workflow path being triggered
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+
+  const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
+  const [workflowsLoading, setWorkflowsLoading] = useState(false);
 
   const [secrets, setSecrets] = useState<ActionSecret[]>([]);
   const [secretsLoading, setSecretsLoading] = useState(false);
@@ -67,6 +71,18 @@ export function ActionRunList({ appId }: ActionRunListProps) {
   const [showValues, setShowValues] = useState(false);
   const [savingSecret, setSavingSecret] = useState(false);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+
+  const fetchWorkflows = useCallback(async () => {
+    setWorkflowsLoading(true);
+    try {
+      const result = await actionsApi.listWorkflows(appId);
+      setWorkflows(result);
+    } catch {
+      // silent
+    } finally {
+      setWorkflowsLoading(false);
+    }
+  }, [appId]);
 
   const fetchRuns = useCallback(async () => {
     try {
@@ -81,8 +97,9 @@ export function ActionRunList({ appId }: ActionRunListProps) {
   }, [appId]);
 
   useEffect(() => {
+    fetchWorkflows();
     fetchRuns();
-  }, [fetchRuns]);
+  }, [fetchWorkflows, fetchRuns]);
 
   // Poll while any run is active
   useEffect(() => {
@@ -108,18 +125,20 @@ export function ActionRunList({ appId }: ActionRunListProps) {
     if (panel === 'secrets') fetchSecrets();
   }, [panel, fetchSecrets]);
 
-  async function handleTrigger() {
-    setTriggering(true);
+  async function handleTrigger(workflowPath?: string) {
+    const key = workflowPath ?? '';
+    setTriggering(key);
     try {
-      const run = await actionsApi.triggerRun(appId);
+      const run = await actionsApi.triggerRun(appId, workflowPath);
       setRuns((prev) => [run, ...prev]);
-      setTotal((t) => t + 1);
+      setTotal((tVal) => tVal + 1);
+      setPanel('runs');
       addNotification({ type: 'success', title: t('actions.triggered') });
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error;
       addNotification({ type: 'error', title: msg ?? t('actions.triggerFailed') });
     } finally {
-      setTriggering(false);
+      setTriggering(null);
     }
   }
 
@@ -182,6 +201,18 @@ export function ActionRunList({ appId }: ActionRunListProps) {
       <div className="flex items-center justify-between">
         <div className="flex gap-2">
           <button
+            className={`${tabBase} ${panel === 'workflows' ? tabActive : tabInactive}`}
+            onClick={() => setPanel('workflows')}
+          >
+            <span className="flex items-center gap-2">
+              <FileCode2 size={14} />
+              {t('actions.workflows')}
+              {workflows.length > 0 && (
+                <span className="text-xs bg-white/10 px-1.5 py-0.5 rounded-full">{workflows.length}</span>
+              )}
+            </span>
+          </button>
+          <button
             className={`${tabBase} ${panel === 'runs' ? tabActive : tabInactive}`}
             onClick={() => setPanel('runs')}
           >
@@ -214,18 +245,44 @@ export function ActionRunList({ appId }: ActionRunListProps) {
             >
               {t('common.refresh')}
             </PillButton>
-            <PillButton
-              variant="primary"
-              size="sm"
-              icon={triggering ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-              onClick={handleTrigger}
-              disabled={triggering}
-            >
-              {t('actions.triggerRun')}
-            </PillButton>
           </div>
         )}
       </div>
+
+      {/* Workflows list */}
+      {panel === 'workflows' && (
+        <>
+          {workflowsLoading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="animate-spin text-zinc-400" size={24} />
+            </div>
+          ) : workflows.length === 0 ? (
+            <div className="text-center py-12 text-zinc-500 text-sm">{t('actions.noWorkflows')}</div>
+          ) : (
+            <div className="space-y-2">
+              {workflows.map((wf) => (
+                <GlassCard key={wf.path} padding="sm" className="flex items-center justify-between">
+                  <div>
+                    <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-zinc-900'}`}>
+                      {wf.name || wf.path}
+                    </p>
+                    <p className="text-xs text-zinc-500 font-mono mt-0.5">{wf.path}</p>
+                  </div>
+                  <PillButton
+                    variant="primary"
+                    size="sm"
+                    icon={triggering === wf.path ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+                    onClick={() => handleTrigger(wf.path)}
+                    disabled={triggering !== null}
+                  >
+                    {t('actions.triggerRun')}
+                  </PillButton>
+                </GlassCard>
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
       {/* Runs list */}
       {panel === 'runs' && (

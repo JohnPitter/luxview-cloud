@@ -100,6 +100,7 @@ func main() {
 
 	actionSvc := service.NewActionService(actionRepo, appRepo, sourceCheckout, buildQueue, cfg.ActionArtifactsDir)
 	webhookSvc := service.NewWebhookService(appRepo, buildQueue, actionSvc)
+	pushEventSvc := service.NewPushEventService(appRepo, repositorySvc, actionSvc, buildQueue)
 
 	// GitHub App service (optional — only when GITHUB_APP_ID is set)
 	var githubAppSvc *service.GitHubAppService
@@ -171,6 +172,7 @@ func main() {
 		Router:         routerSvc,
 		WebhookSvc:     webhookSvc,
 		ActionSvc:      actionSvc,
+		PushEventSvc:   pushEventSvc,
 		RepositorySvc:  repositorySvc,
 		GitHubAppSvc:   githubAppSvc,
 		BuildQueue:     buildQueue,

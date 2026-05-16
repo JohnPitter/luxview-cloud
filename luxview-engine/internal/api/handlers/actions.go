@@ -231,6 +231,21 @@ func (h *ActionHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "secret deleted"})
 }
 
+func (h *ActionHandler) ListWorkflows(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	app, ok := h.authorizeApp(w, r)
+	if !ok {
+		return
+	}
+
+	workflows, err := h.actionSvc.ListWorkflows(ctx, app.ID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"workflows": workflows})
+}
+
 func (h *ActionHandler) authorizeApp(w http.ResponseWriter, r *http.Request) (*model.App, bool) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)

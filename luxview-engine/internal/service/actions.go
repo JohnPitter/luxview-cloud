@@ -653,3 +653,48 @@ func pathSize(path string) (int64, error) {
 	})
 	return size, err
 }
+
+// WorkflowSummary is a lightweight description of a workflow file in the repository.
+type WorkflowSummary struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
+}
+
+// ListWorkflows checks out the app's repository and returns the available workflow files.
+func (s *ActionService) ListWorkflows(ctx context.Context, appID uuid.UUID) ([]WorkflowSummary, error) {
+	app, err := s.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		return nil, fmt.Errorf("app not found")
+	}
+
+	parseDir := filepath.Join(os.TempDir(), actionWorkspaceRoot, "workflows-"+uuid.NewString())
+	defer os.RemoveAll(parseDir)
+
+	if _, err := s.sourceCheckout.Checkout(ctx, app, app.RepoBranch, parseDir); err != nil {
+		return nil, err
+	}
+
+	var results []WorkflowSummary
+	for _, dir := range []string{".luxview/workflows", ".github/workflows"} {
+		pattern := filepath.Join(parseDir, filepath.FromSlash(dir), "*.y*ml")
+		matches, _ := filepath.Glob(pattern)
+		for _, match := range matches {
+			content, err := os.ReadFile(match)
+			if err != nil {
+				continue
+			}
+			wf, err := ParseGitHubWorkflow(string(content))
+			if err != nil {
+				continue
+			}
+			// Relative path inside the repo
+			relPath := strings.TrimPrefix(filepath.ToSlash(match), filepath.ToSlash(parseDir)+"/")
+
+			results = append(results, WorkflowSummary{
+				Path: relPath,
+				Name: wf.Name,
+			})
+		}
+	}
+	return results, nil
+}
