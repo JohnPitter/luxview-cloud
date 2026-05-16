@@ -370,6 +370,16 @@ export function NewApp() {
             </div>
           ) : (
             <div className="space-y-2">
+              <div className="flex justify-end">
+                <PillButton
+                  variant="ghost"
+                  size="sm"
+                  icon={<Plus size={13} />}
+                  onClick={() => navigate('/dashboard/repositories/new')}
+                >
+                  {t('newApp.createRepo')}
+                </PillButton>
+              </div>
               {luxRepos.map((repo) => (
                 <GlassCard
                   key={repo.id}
