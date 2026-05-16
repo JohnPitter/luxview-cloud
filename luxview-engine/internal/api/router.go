@@ -41,8 +41,10 @@ type Deps struct {
 	AuditSvc       *service.AuditService
 	PageviewRepo   *repository.PageviewRepo
 	MailboxRepo    *repository.MailboxRepo
-	BackupSvc      *service.BackupService
-	PushEventSvc   *service.PushEventService
+	BackupSvc       *service.BackupService
+	PushEventSvc    *service.PushEventService
+	PullRequestRepo *repository.PullRequestRepo
+	PullRequestSvc  *service.PullRequestService
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -90,6 +92,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	webhookHandler := handlers.NewWebhookHandler(deps.WebhookSvc, deps.Config.InternalToken, deps.Config.GitHubAppWebhookSecret, deps.GitHubAppSvc)
 	githubHandler := handlers.NewGitHubHandler(deps.GitHubAppSvc)
 	repositoryHandler := handlers.NewRepositoryHandler(deps.RepositoryRepo, deps.RepositorySvc, deps.AuditSvc)
+	prHandler := handlers.NewPullRequestHandler(deps.RepositoryRepo, deps.PullRequestSvc, deps.AuditSvc)
 	gitHandler := handlers.NewGitHandler(deps.RepositoryRepo, deps.RepositorySvc, deps.PushEventSvc)
 	planHandler := handlers.NewPlanHandler(deps.PlanRepo, deps.UserRepo, deps.AppRepo, deps.AuditSvc)
 	settingsHandler := handlers.NewSettingsHandler(deps.SettingsRepo, deps.AuditSvc)
@@ -170,6 +173,18 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Get("/repositories/{id}/remotes", repositoryHandler.ListRemotes)
 			r.Post("/repositories/{id}/remotes", repositoryHandler.AddRemote)
 			r.Post("/repositories/{id}/remotes/{remoteId}/sync", repositoryHandler.SyncRemote)
+
+			// Pull Requests
+			r.Get("/repositories/{id}/pulls", prHandler.List)
+			r.Post("/repositories/{id}/pulls", prHandler.Create)
+			r.Get("/repositories/{id}/pulls/{number}", prHandler.Get)
+			r.Get("/repositories/{id}/pulls/{number}/commits", prHandler.Commits)
+			r.Get("/repositories/{id}/pulls/{number}/diff", prHandler.Diff)
+			r.Post("/repositories/{id}/pulls/{number}/merge", prHandler.Merge)
+			r.Post("/repositories/{id}/pulls/{number}/close", prHandler.Close)
+			r.Get("/repositories/{id}/pulls/{number}/comments", prHandler.ListComments)
+			r.Post("/repositories/{id}/pulls/{number}/comments", prHandler.AddComment)
+			r.Delete("/repositories/{id}/pulls/{number}/comments/{commentId}", prHandler.DeleteComment)
 
 			// Apps
 			r.Get("/apps/check-subdomain/{subdomain}", appHandler.CheckSubdomain)

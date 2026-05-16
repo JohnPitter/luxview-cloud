@@ -388,6 +388,38 @@ func (db *DB) migrate(ctx context.Context) error {
 		// GitHub App integration
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS installation_id BIGINT NOT NULL DEFAULT 0`,
 		`CREATE INDEX IF NOT EXISTS idx_users_installation_id ON users(installation_id) WHERE installation_id != 0`,
+
+		// Pull Requests
+		`CREATE TABLE IF NOT EXISTS pull_requests (
+			id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			repository_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+			author_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			number        INT NOT NULL,
+			title         VARCHAR(255) NOT NULL,
+			description   TEXT NOT NULL DEFAULT '',
+			head_branch   VARCHAR(100) NOT NULL,
+			base_branch   VARCHAR(100) NOT NULL,
+			head_sha      VARCHAR(40) NOT NULL DEFAULT '',
+			status        VARCHAR(20) NOT NULL DEFAULT 'open',
+			merge_commit  VARCHAR(40),
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			merged_at     TIMESTAMPTZ,
+			closed_at     TIMESTAMPTZ,
+			UNIQUE(repository_id, number),
+			CONSTRAINT chk_pull_requests_status CHECK (status IN ('open','merged','closed'))
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_pull_requests_repo_status ON pull_requests(repository_id, status, created_at DESC)`,
+
+		`CREATE TABLE IF NOT EXISTS pull_request_comments (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			pull_request_id UUID NOT NULL REFERENCES pull_requests(id) ON DELETE CASCADE,
+			author_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			body            TEXT NOT NULL,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_pr_comments_pr ON pull_request_comments(pull_request_id, created_at ASC)`,
 	}
 
 	for i, m := range migrations {

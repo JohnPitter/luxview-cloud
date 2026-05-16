@@ -20,6 +20,9 @@ import { Backups } from './pages/Backups';
 import { RepositoryDetail } from './pages/RepositoryDetail';
 import { NewRepository } from './pages/NewRepository';
 import { Repositories } from './pages/Repositories';
+import { PullRequests } from './pages/PullRequests';
+import { NewPullRequest } from './pages/NewPullRequest';
+import { PullRequestDetail } from './pages/PullRequestDetail';
 import { Status } from './pages/Status';
 import { Docs } from './pages/Docs';
 import { MainLayout } from './components/layout/MainLayout';
@@ -61,6 +64,9 @@ export function App() {
         <Route path="repositories" element={<Repositories />} />
         <Route path="repositories/new" element={<NewRepository />} />
         <Route path="repositories/:repoId" element={<RepositoryDetail />} />
+        <Route path="repositories/:repoId/pulls" element={<PullRequests />} />
+        <Route path="repositories/:repoId/pulls/new" element={<NewPullRequest />} />
+        <Route path="repositories/:repoId/pulls/:number" element={<PullRequestDetail />} />
         <Route path="resources" element={<Resources />} />
         <Route path="resources/db/:serviceId" element={<DbExplorer />} />
         <Route path="resources/storage/:serviceId" element={<StorageExplorer />} />

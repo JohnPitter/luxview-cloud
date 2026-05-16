@@ -102,6 +102,8 @@ func main() {
 	actionSvc := service.NewActionService(actionRepo, appRepo, sourceCheckout, buildQueue, cfg.ActionArtifactsDir)
 	webhookSvc := service.NewWebhookService(appRepo, buildQueue, actionSvc)
 	pushEventSvc := service.NewPushEventService(appRepo, repositorySvc, actionSvc, buildQueue)
+	pullRequestRepo := repository.NewPullRequestRepo(db)
+	pullRequestSvc := service.NewPullRequestService(pullRequestRepo, repositorySvc)
 
 	// GitHub App service (optional — only when GITHUB_APP_ID is set)
 	var githubAppSvc *service.GitHubAppService
@@ -189,7 +191,9 @@ func main() {
 		AuditSvc:       auditSvc,
 		PageviewRepo:   pageviewRepo,
 		MailboxRepo:    mailboxRepo,
-		BackupSvc:      backupSvc,
+		BackupSvc:       backupSvc,
+		PullRequestRepo: pullRequestRepo,
+		PullRequestSvc:  pullRequestSvc,
 	})
 
 	// HTTP server

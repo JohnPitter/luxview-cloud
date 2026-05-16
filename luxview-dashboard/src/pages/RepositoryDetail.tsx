@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Rocket, Copy, Check, Trash2 } from 'lucide-react';
+import { ArrowLeft, Rocket, Copy, Check, Trash2, GitPullRequest } from 'lucide-react';
 import { PillButton } from '../components/common/PillButton';
 import { GlassCard } from '../components/common/GlassCard';
 import { RepositoryBackupPanel } from '../components/repositories/RepositoryBackupPanel';
@@ -73,6 +73,14 @@ export function RepositoryDetail() {
         </div>
 
         <div className="flex items-center gap-2">
+          <PillButton
+            variant="ghost"
+            size="sm"
+            icon={<GitPullRequest size={14} />}
+            onClick={() => navigate(`/dashboard/repositories/${repoId}/pulls`)}
+          >
+            {t('repo.detail.pullRequests')}
+          </PillButton>
           <PillButton
             variant="primary"
             size="sm"
