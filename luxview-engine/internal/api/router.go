@@ -168,6 +168,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			// LuxView repositories
 			r.Get("/repositories", repositoryHandler.List)
 			r.Post("/repositories", repositoryHandler.Create)
+			r.Post("/repositories/import", repositoryHandler.Import)
 			r.Delete("/repositories/{id}", repositoryHandler.Delete)
 			r.Get("/repositories/{id}/branches", repositoryHandler.ListBranches)
 			r.Get("/repositories/{id}/remotes", repositoryHandler.ListRemotes)

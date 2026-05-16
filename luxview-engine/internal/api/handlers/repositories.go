@@ -27,6 +27,14 @@ type createRepositoryRequest struct {
 	Visibility    model.RepositoryVisibility `json:"visibility"`
 }
 
+type importRepositoryRequest struct {
+	Owner         string                     `json:"owner"`
+	Repo          string                     `json:"repo"`
+	Name          string                     `json:"name"`
+	DefaultBranch string                     `json:"default_branch"`
+	Visibility    model.RepositoryVisibility `json:"visibility"`
+}
+
 func NewRepositoryHandler(repositoryRepo *repository.RepositoryRepo, repositorySvc *service.RepositoryService, auditSvc *service.AuditService) *RepositoryHandler {
 	return &RepositoryHandler{repositoryRepo: repositoryRepo, repositorySvc: repositorySvc, auditSvc: auditSvc}
 }
@@ -70,6 +78,46 @@ func (h *RepositoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 				"slug": repo.Slug,
 			},
 			IPAddress: clientIP(r),
+		})
+	}
+
+	writeJSON(w, http.StatusCreated, repo)
+}
+
+func (h *RepositoryHandler) Import(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user := middleware.GetUser(ctx)
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req importRepositoryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Owner == "" || req.Repo == "" {
+		writeError(w, http.StatusBadRequest, "owner and repo are required")
+		return
+	}
+
+	repo, err := h.repositorySvc.ImportFromGitHub(ctx, user.ID, req.Owner, req.Repo, req.DefaultBranch, req.Visibility)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if h.auditSvc != nil {
+		h.auditSvc.Log(ctx, service.AuditEntry{
+			ActorID:       user.ID,
+			ActorUsername: user.Username,
+			Action:        "import",
+			ResourceType:  "repository",
+			ResourceID:    repo.ID.String(),
+			ResourceName:  repo.Slug,
+			NewValues:     map[string]string{"owner": req.Owner, "repo": req.Repo},
+			IPAddress:     clientIP(r),
 		})
 	}
 

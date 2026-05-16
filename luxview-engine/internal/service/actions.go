@@ -235,8 +235,24 @@ func (s *ActionService) executeStep(ctx context.Context, runID uuid.UUID, worksp
 
 	args := []string{
 		"run", "--rm",
+		// Resource limits
 		"--memory=1g",
+		"--memory-swap=1g", // disable swap
 		"--cpus=1",
+		"--pids-limit=256",
+		// Network isolation — actions cannot make outbound calls unless explicitly needed
+		"--network=none",
+		// Drop all Linux capabilities; actions don't need any
+		"--cap-drop=ALL",
+		// Prevent privilege escalation via setuid binaries
+		"--security-opt=no-new-privileges",
+		// Run as unprivileged user
+		"--user=1000:1000",
+		// Read-only rootfs; writable paths mounted via tmpfs
+		"--read-only",
+		"--tmpfs=/tmp:rw,noexec,nosuid,size=256m",
+		"--tmpfs=/root:rw,noexec,nosuid,size=16m",
+		// Workspace bind-mount (rw so steps can write build artifacts)
 		"-v", fmt.Sprintf("%s:/workspace", workspace),
 		"-w", "/workspace",
 	}

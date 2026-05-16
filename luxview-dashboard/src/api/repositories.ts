@@ -71,6 +71,11 @@ export const repositoriesApi = {
   async delete(repositoryId: string): Promise<void> {
     await api.delete(`/repositories/${repositoryId}`);
   },
+
+  async importFromGitHub(payload: { owner: string; repo: string; name?: string; defaultBranch?: string; visibility?: RepositoryVisibility }): Promise<LuxViewRepository> {
+    const { data } = await api.post<LuxViewRepository>('/repositories/import', payload);
+    return data;
+  },
 };
 
 export type PullRequestStatus = 'open' | 'merged' | 'closed';

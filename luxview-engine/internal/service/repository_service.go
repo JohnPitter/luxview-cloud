@@ -124,6 +124,103 @@ func (s *RepositoryService) Create(ctx context.Context, req CreateRepositoryRequ
 	return repo, nil
 }
 
+type ImportRepositoryRequest struct {
+	UserID        uuid.UUID
+	Name          string
+	Slug          string
+	DefaultBranch string
+	Visibility    model.RepositoryVisibility
+	// RemoteURL is the authenticated clone URL (token already embedded or public)
+	RemoteURL string
+}
+
+// ImportFromGitHub clones an existing GitHub repository into LuxView-hosted storage.
+// The caller must embed the token into RemoteURL before calling (e.g. https://TOKEN@github.com/...).
+func (s *RepositoryService) ImportFromRemote(ctx context.Context, req ImportRepositoryRequest) (*model.Repository, error) {
+	if req.UserID == uuid.Nil {
+		return nil, fmt.Errorf("user_id is required")
+	}
+	if strings.TrimSpace(req.RemoteURL) == "" {
+		return nil, fmt.Errorf("remote_url is required")
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	slug := normalizeRepositorySlug(req.Slug)
+	if slug == "" {
+		slug = normalizeRepositorySlug(name)
+	}
+	if !repositorySlugRegex.MatchString(slug) {
+		return nil, fmt.Errorf("invalid repository slug")
+	}
+	defaultBranch := strings.TrimSpace(req.DefaultBranch)
+	if defaultBranch == "" {
+		defaultBranch = defaultRepositoryBranch
+	}
+	visibility := req.Visibility
+	if visibility == "" {
+		visibility = model.RepositoryVisibilityPrivate
+	}
+
+	repoID := uuid.New()
+	storagePath := s.repositoryPath(req.UserID, repoID)
+
+	if err := os.MkdirAll(filepath.Dir(storagePath), gitDirectoryMode); err != nil {
+		return nil, fmt.Errorf("create repository parent directory: %w", err)
+	}
+
+	// Clone as a bare mirror — fetches all refs (branches, tags)
+	if err := runGit(ctx, "", "clone", "--mirror", req.RemoteURL, storagePath); err != nil {
+		_ = os.RemoveAll(storagePath)
+		return nil, fmt.Errorf("clone remote repository: %w", err)
+	}
+
+	repo := &model.Repository{
+		ID:            repoID,
+		UserID:        req.UserID,
+		Name:          name,
+		Slug:          slug,
+		DefaultBranch: defaultBranch,
+		StoragePath:   storagePath,
+		Visibility:    visibility,
+	}
+
+	if s.store != nil {
+		if err := s.store.Create(ctx, repo); err != nil {
+			_ = os.RemoveAll(storagePath)
+			return nil, err
+		}
+	}
+	return repo, nil
+}
+
+// ImportFromGitHub resolves a GitHub token for the user and imports the repo.
+// owner/repoName must be the GitHub repository (e.g. "octocat/Hello-World").
+func (s *RepositoryService) ImportFromGitHub(ctx context.Context, userID uuid.UUID, owner, repoName, defaultBranch string, visibility model.RepositoryVisibility) (*model.Repository, error) {
+	if s.tokenProvider == nil || s.userLookup == nil {
+		return nil, fmt.Errorf("GitHub token provider not configured — connect GitHub App first")
+	}
+	user, err := s.userLookup.FindByID(ctx, userID)
+	if err != nil || user == nil {
+		return nil, fmt.Errorf("user not found")
+	}
+	token, err := s.tokenProvider.TokenForUser(ctx, user)
+	if err != nil {
+		return nil, fmt.Errorf("could not get GitHub token: %w", err)
+	}
+	remoteURL := fmt.Sprintf("https://%s@github.com/%s/%s.git", token, owner, repoName)
+	name := repoName
+	return s.ImportFromRemote(ctx, ImportRepositoryRequest{
+		UserID:        userID,
+		Name:          name,
+		Slug:          normalizeRepositorySlug(repoName),
+		DefaultBranch: defaultBranch,
+		Visibility:    visibility,
+		RemoteURL:     remoteURL,
+	})
+}
+
 func (s *RepositoryService) Delete(ctx context.Context, repositoryID uuid.UUID, userID uuid.UUID) error {
 	repo, err := s.findRepository(ctx, repositoryID)
 	if err != nil {
