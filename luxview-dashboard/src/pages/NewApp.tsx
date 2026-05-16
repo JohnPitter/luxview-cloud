@@ -290,7 +290,7 @@ export function NewApp() {
 
       {/* Source selector */}
       {!source && (
-        <div className="max-w-xl space-y-3">
+        <div className="max-w-xl mx-auto space-y-3">
           <p className={`text-sm mb-4 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
             {t('newApp.chooseSource')}
           </p>
@@ -335,7 +335,7 @@ export function NewApp() {
 
       {/* LuxView repo flow */}
       {source === 'luxview' && (
-        <div className="max-w-xl space-y-4">
+        <div className="max-w-xl mx-auto space-y-4">
           {loadingLuxRepos ? (
             <div className="flex justify-center py-12">
               <Loader2 className="animate-spin text-zinc-400" size={24} />
