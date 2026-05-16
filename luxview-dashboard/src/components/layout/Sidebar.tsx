@@ -7,6 +7,7 @@ import {
   Settings,
   Shield,
   HardDrive,
+  GitBranch,
 } from 'lucide-react';
 import { useThemeStore } from '../../stores/theme.store';
 import { useAuthStore } from '../../stores/auth.store';
@@ -16,11 +17,13 @@ interface SidebarItem {
   labelKey: string;
   path: string;
   adminOnly?: boolean;
+  exact?: boolean;
 }
 
 const items: SidebarItem[] = [
-  { icon: LayoutDashboard, labelKey: 'layout.sidebar.dashboard', path: '/dashboard' },
+  { icon: LayoutDashboard, labelKey: 'layout.sidebar.dashboard', path: '/dashboard', exact: true },
   { icon: Plus, labelKey: 'layout.sidebar.newApp', path: '/dashboard/new' },
+  { icon: GitBranch, labelKey: 'layout.sidebar.repositories', path: '/dashboard/repositories' },
   { icon: BarChart3, labelKey: 'layout.sidebar.analytics', path: '/dashboard/analytics' },
   { icon: Settings, labelKey: 'layout.sidebar.settings', path: '/dashboard/settings' },
   { icon: HardDrive, labelKey: 'layout.sidebar.backups', path: '/dashboard/backups', adminOnly: true },
@@ -47,7 +50,9 @@ export function Sidebar() {
       {items
         .filter((item) => !item.adminOnly || user?.role === 'admin')
         .map((item) => {
-          const isActive = location.pathname === item.path;
+          const isActive = item.exact
+            ? location.pathname === item.path
+            : location.pathname.startsWith(item.path);
           const Icon = item.icon;
           return (
             <button

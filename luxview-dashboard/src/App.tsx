@@ -19,6 +19,7 @@ import { Analytics } from './pages/Analytics';
 import { Backups } from './pages/Backups';
 import { RepositoryDetail } from './pages/RepositoryDetail';
 import { NewRepository } from './pages/NewRepository';
+import { Repositories } from './pages/Repositories';
 import { Status } from './pages/Status';
 import { Docs } from './pages/Docs';
 import { MainLayout } from './components/layout/MainLayout';
@@ -57,6 +58,7 @@ export function App() {
         <Route path="apps/:appId" element={<AppDetail />} />
         <Route path="admin" element={<Admin />} />
         <Route path="backups" element={<Backups />} />
+        <Route path="repositories" element={<Repositories />} />
         <Route path="repositories/new" element={<NewRepository />} />
         <Route path="repositories/:repoId" element={<RepositoryDetail />} />
         <Route path="resources" element={<Resources />} />
