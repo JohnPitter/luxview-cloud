@@ -8,6 +8,7 @@ export interface App {
   userId: string;
   name: string;
   subdomain: string;
+  repositoryId?: string;
   repoUrl: string;
   repoBranch: string;
   stack: Stack;
@@ -34,7 +35,8 @@ export interface App {
 export interface CreateAppPayload {
   name: string;
   subdomain: string;
-  repoUrl: string;
+  repositoryId?: string;
+  repoUrl?: string;
   repoBranch: string;
   envVars?: Record<string, string>;
   autoDeploy?: boolean;
