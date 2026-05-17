@@ -474,3 +474,260 @@ func splitGitLines(output string) []string {
 	}
 	return result
 }
+
+// ListTree returns directory entries at path for the given ref. path="" means root.
+func (s *RepositoryService) ListTree(ctx context.Context, repositoryID uuid.UUID, ref, path string) ([]model.TreeEntry, error) {
+	repo, err := s.findRepository(ctx, repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(ref) == "" {
+		ref = repo.DefaultBranch
+	}
+	treeRef := ref + ":" + path
+	output, err := gitOutput(ctx, repo.StoragePath, "ls-tree", "-l", treeRef)
+	if err != nil {
+		// empty tree or path not found
+		return []model.TreeEntry{}, nil
+	}
+	var entries []model.TreeEntry
+	for _, line := range splitGitLines(output) {
+		// format: <mode> SP <type> SP <sha> SP <size|-> TAB <name>
+		parts := strings.SplitN(line, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		meta := strings.Fields(parts[0])
+		if len(meta) < 4 {
+			continue
+		}
+		mode, typ, name := meta[0], meta[1], parts[1]
+		size := int64(0)
+		if meta[3] != "-" {
+			fmt.Sscanf(meta[3], "%d", &size)
+		}
+		entryPath := name
+		if path != "" {
+			entryPath = path + "/" + name
+		}
+		entries = append(entries, model.TreeEntry{
+			Type: typ,
+			Name: name,
+			Path: entryPath,
+			Size: size,
+			Mode: mode,
+		})
+	}
+	// Sort: trees first, then blobs, both alphabetically
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Type != entries[j].Type {
+			return entries[i].Type == "tree"
+		}
+		return entries[i].Name < entries[j].Name
+	})
+	return entries, nil
+}
+
+// GetBlob returns the raw content of a file at path for the given ref.
+func (s *RepositoryService) GetBlob(ctx context.Context, repositoryID uuid.UUID, ref, path string) ([]byte, error) {
+	repo, err := s.findRepository(ctx, repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(ref) == "" {
+		ref = repo.DefaultBranch
+	}
+	output, err := gitOutput(ctx, repo.StoragePath, "show", ref+":"+path)
+	if err != nil {
+		return nil, fmt.Errorf("file not found: %s", path)
+	}
+	return []byte(output), nil
+}
+
+// ListCommits returns commit history for the given ref, limit/offset pagination.
+func (s *RepositoryService) ListCommits(ctx context.Context, repositoryID uuid.UUID, ref string, limit, offset int) ([]model.CommitEntry, error) {
+	repo, err := s.findRepository(ctx, repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(ref) == "" {
+		ref = repo.DefaultBranch
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 30
+	}
+	skipArg := fmt.Sprintf("--skip=%d", offset)
+	nArg := fmt.Sprintf("-n%d", limit)
+	output, err := gitOutput(ctx, repo.StoragePath, "log", ref, "--format=%H|%s|%an|%ae|%aI", nArg, skipArg)
+	if err != nil {
+		return []model.CommitEntry{}, nil
+	}
+	var commits []model.CommitEntry
+	for _, line := range splitGitLines(output) {
+		parts := strings.SplitN(line, "|", 5)
+		if len(parts) < 5 {
+			continue
+		}
+		commits = append(commits, model.CommitEntry{
+			SHA:     parts[0],
+			Message: parts[1],
+			Author:  parts[2],
+			Email:   parts[3],
+			Date:    parts[4],
+		})
+	}
+	return commits, nil
+}
+
+// GetCommit returns detailed info + diff for a single commit.
+func (s *RepositoryService) GetCommit(ctx context.Context, repositoryID uuid.UUID, sha string) (*model.CommitEntry, []model.PRFileDiff, error) {
+	repo, err := s.findRepository(ctx, repositoryID)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Header
+	headerOut, err := gitOutput(ctx, repo.StoragePath, "show", "--no-patch", "--format=%H|%s|%an|%ae|%aI", sha)
+	if err != nil {
+		return nil, nil, fmt.Errorf("commit not found: %s", sha)
+	}
+	line := strings.TrimSpace(strings.SplitN(headerOut, "\n", 2)[0])
+	parts := strings.SplitN(line, "|", 5)
+	if len(parts) < 5 {
+		return nil, nil, fmt.Errorf("unexpected commit format")
+	}
+	entry := &model.CommitEntry{SHA: parts[0], Message: parts[1], Author: parts[2], Email: parts[3], Date: parts[4]}
+
+	// numstat for stats
+	numstatOut, _ := gitOutput(ctx, repo.StoragePath, "show", "--numstat", "--format=", sha)
+	fileStats := map[string][2]int{}
+	for _, l := range splitGitLines(numstatOut) {
+		f := strings.Fields(l)
+		if len(f) < 3 {
+			continue
+		}
+		var add, del int
+		fmt.Sscanf(f[0], "%d", &add)
+		fmt.Sscanf(f[1], "%d", &del)
+		fileStats[f[2]] = [2]int{add, del}
+	}
+
+	// unified diff
+	patchOut, _ := gitOutput(ctx, repo.StoragePath, "show", "--unified=3", "--format=", sha)
+	diffs := parsePatch(patchOut, fileStats)
+	return entry, diffs, nil
+}
+
+// ListTags returns all tags in the repository.
+func (s *RepositoryService) ListTags(ctx context.Context, repositoryID uuid.UUID) ([]model.TagEntry, error) {
+	repo, err := s.findRepository(ctx, repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	output, err := gitOutput(ctx, repo.StoragePath, "for-each-ref", "--format=%(refname:short)|%(objecttype)|%(objectname)|%(*objectname)|%(taggername)|%(taggerdate:iso-strict)|%(contents:subject)", "refs/tags")
+	if err != nil {
+		return []model.TagEntry{}, nil
+	}
+	var tags []model.TagEntry
+	for _, line := range splitGitLines(output) {
+		parts := strings.SplitN(line, "|", 7)
+		if len(parts) < 7 {
+			continue
+		}
+		name, typ, sha, deref, tagger, date, msg := parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], parts[6]
+		if deref != "" {
+			sha = deref // use the commit SHA for annotated tags
+		}
+		tagType := "lightweight"
+		if typ == "tag" {
+			tagType = "annotated"
+		}
+		tags = append(tags, model.TagEntry{
+			Name:    name,
+			SHA:     sha,
+			Type:    tagType,
+			Message: msg,
+			Tagger:  tagger,
+			Date:    date,
+		})
+	}
+	return tags, nil
+}
+
+// CreateTag creates a lightweight or annotated tag at the given ref.
+func (s *RepositoryService) CreateTag(ctx context.Context, repositoryID uuid.UUID, name, ref, message string) error {
+	repo, err := s.findRepository(ctx, repositoryID)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(ref) == "" {
+		ref = repo.DefaultBranch
+	}
+	if message != "" {
+		return runGit(ctx, repo.StoragePath, "tag", "-a", name, ref, "-m", message)
+	}
+	return runGit(ctx, repo.StoragePath, "tag", name, ref)
+}
+
+// DeleteTag deletes a tag.
+func (s *RepositoryService) DeleteTag(ctx context.Context, repositoryID uuid.UUID, name string) error {
+	repo, err := s.findRepository(ctx, repositoryID)
+	if err != nil {
+		return err
+	}
+	return runGit(ctx, repo.StoragePath, "tag", "-d", name)
+}
+
+// CreateBranch creates a new branch from the given base ref.
+func (s *RepositoryService) CreateBranch(ctx context.Context, repositoryID uuid.UUID, name, from string) error {
+	repo, err := s.findRepository(ctx, repositoryID)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(from) == "" {
+		from = repo.DefaultBranch
+	}
+	return runGit(ctx, repo.StoragePath, "branch", name, from)
+}
+
+// DeleteBranch deletes a branch (refuses to delete the default branch).
+func (s *RepositoryService) DeleteBranch(ctx context.Context, repositoryID uuid.UUID, name string) error {
+	repo, err := s.findRepository(ctx, repositoryID)
+	if err != nil {
+		return err
+	}
+	if name == repo.DefaultBranch {
+		return fmt.Errorf("cannot delete the default branch")
+	}
+	return runGit(ctx, repo.StoragePath, "branch", "-D", name)
+}
+
+func parsePatch(patchOut string, fileStats map[string][2]int) []model.PRFileDiff {
+	var diffs []model.PRFileDiff
+	var current *model.PRFileDiff
+	var patchLines []string
+
+	for _, line := range strings.Split(patchOut, "\n") {
+		if strings.HasPrefix(line, "diff --git ") {
+			if current != nil {
+				current.Patch = strings.Join(patchLines, "\n")
+				diffs = append(diffs, *current)
+			}
+			// extract b/path
+			parts := strings.Fields(line)
+			path := ""
+			if len(parts) >= 4 {
+				path = strings.TrimPrefix(parts[3], "b/")
+			}
+			stats := fileStats[path]
+			current = &model.PRFileDiff{Path: path, Additions: stats[0], Deletions: stats[1]}
+			patchLines = nil
+		} else if current != nil {
+			patchLines = append(patchLines, line)
+		}
+	}
+	if current != nil {
+		current.Patch = strings.Join(patchLines, "\n")
+		diffs = append(diffs, *current)
+	}
+	return diffs
+}

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Rocket, Copy, Check, Trash2, GitPullRequest } from 'lucide-react';
+import { ArrowLeft, Rocket, Copy, Check, Trash2, GitPullRequest, FileCode2, GitCommit, GitBranch, Tag } from 'lucide-react';
 import { PillButton } from '../components/common/PillButton';
 import { GlassCard } from '../components/common/GlassCard';
 import { RepositoryBackupPanel } from '../components/repositories/RepositoryBackupPanel';
@@ -72,29 +72,26 @@ export function RepositoryDetail() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <PillButton
-            variant="ghost"
-            size="sm"
-            icon={<GitPullRequest size={14} />}
-            onClick={() => navigate(`/dashboard/repositories/${repoId}/pulls`)}
-          >
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <PillButton variant="ghost" size="sm" icon={<FileCode2 size={14} />} onClick={() => navigate(`/dashboard/repositories/${repoId}/code`)}>
+            {t('repo.detail.code')}
+          </PillButton>
+          <PillButton variant="ghost" size="sm" icon={<GitCommit size={14} />} onClick={() => navigate(`/dashboard/repositories/${repoId}/commits`)}>
+            {t('repo.detail.commits')}
+          </PillButton>
+          <PillButton variant="ghost" size="sm" icon={<GitBranch size={14} />} onClick={() => navigate(`/dashboard/repositories/${repoId}/branches`)}>
+            {t('repo.detail.branches')}
+          </PillButton>
+          <PillButton variant="ghost" size="sm" icon={<Tag size={14} />} onClick={() => navigate(`/dashboard/repositories/${repoId}/tags`)}>
+            {t('repo.detail.tags')}
+          </PillButton>
+          <PillButton variant="ghost" size="sm" icon={<GitPullRequest size={14} />} onClick={() => navigate(`/dashboard/repositories/${repoId}/pulls`)}>
             {t('repo.detail.pullRequests')}
           </PillButton>
-          <PillButton
-            variant="primary"
-            size="sm"
-            icon={<Rocket size={14} />}
-            onClick={() => navigate(`/dashboard/new?source=luxview&repoId=${repoId}`)}
-          >
+          <PillButton variant="primary" size="sm" icon={<Rocket size={14} />} onClick={() => navigate(`/dashboard/new?source=luxview&repoId=${repoId}`)}>
             {t('repo.detail.createApp')}
           </PillButton>
-          <PillButton
-            variant="ghost"
-            size="sm"
-            icon={<Trash2 size={14} className="text-red-400" />}
-            onClick={() => setConfirmDelete(true)}
-          >
+          <PillButton variant="ghost" size="sm" icon={<Trash2 size={14} className="text-red-400" />} onClick={() => setConfirmDelete(true)}>
             <span className="text-red-400">{t('repo.detail.delete')}</span>
           </PillButton>
         </div>

@@ -92,6 +92,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	webhookHandler := handlers.NewWebhookHandler(deps.WebhookSvc, deps.Config.InternalToken, deps.Config.GitHubAppWebhookSecret, deps.GitHubAppSvc)
 	githubHandler := handlers.NewGitHubHandler(deps.GitHubAppSvc)
 	repositoryHandler := handlers.NewRepositoryHandler(deps.RepositoryRepo, deps.RepositorySvc, deps.AuditSvc)
+	gitExplorerHandler := handlers.NewGitExplorerHandler(deps.RepositoryRepo, deps.RepositorySvc)
 	prHandler := handlers.NewPullRequestHandler(deps.RepositoryRepo, deps.PullRequestSvc, deps.AuditSvc)
 	gitHandler := handlers.NewGitHandler(deps.RepositoryRepo, deps.RepositorySvc, deps.PushEventSvc)
 	planHandler := handlers.NewPlanHandler(deps.PlanRepo, deps.UserRepo, deps.AppRepo, deps.AuditSvc)
@@ -174,6 +175,17 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Get("/repositories/{id}/remotes", repositoryHandler.ListRemotes)
 			r.Post("/repositories/{id}/remotes", repositoryHandler.AddRemote)
 			r.Post("/repositories/{id}/remotes/{remoteId}/sync", repositoryHandler.SyncRemote)
+
+			// Git Explorer
+			r.Get("/repositories/{id}/tree", gitExplorerHandler.Tree)
+			r.Get("/repositories/{id}/blob", gitExplorerHandler.Blob)
+			r.Get("/repositories/{id}/commits", gitExplorerHandler.Commits)
+			r.Get("/repositories/{id}/commits/{sha}", gitExplorerHandler.Commit)
+			r.Get("/repositories/{id}/tags", gitExplorerHandler.ListTags)
+			r.Post("/repositories/{id}/tags", gitExplorerHandler.CreateTag)
+			r.Delete("/repositories/{id}/tags/{name}", gitExplorerHandler.DeleteTag)
+			r.Post("/repositories/{id}/branches", gitExplorerHandler.CreateBranch)
+			r.Delete("/repositories/{id}/branches/{name}", gitExplorerHandler.DeleteBranch)
 
 			// Pull Requests
 			r.Get("/repositories/{id}/pulls", prHandler.List)

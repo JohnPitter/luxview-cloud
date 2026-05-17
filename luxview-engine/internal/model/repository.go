@@ -58,3 +58,28 @@ type CheckoutResult struct {
 	CommitSHA    string    `json:"commit_sha"`
 	WorkDir      string    `json:"work_dir"`
 }
+
+type TreeEntry struct {
+	Type string `json:"type"` // "blob" or "tree"
+	Name string `json:"name"`
+	Path string `json:"path"`
+	Size int64  `json:"size,omitempty"`
+	Mode string `json:"mode"`
+}
+
+type CommitEntry struct {
+	SHA     string `json:"sha"`
+	Message string `json:"message"`
+	Author  string `json:"author"`
+	Email   string `json:"email"`
+	Date    string `json:"date"`
+}
+
+type TagEntry struct {
+	Name    string `json:"name"`
+	SHA     string `json:"sha"`
+	Type    string `json:"type"` // "lightweight" or "annotated"
+	Message string `json:"message,omitempty"`
+	Tagger  string `json:"tagger,omitempty"`
+	Date    string `json:"date,omitempty"`
+}

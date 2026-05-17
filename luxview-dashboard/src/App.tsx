@@ -23,6 +23,11 @@ import { Repositories } from './pages/Repositories';
 import { PullRequests } from './pages/PullRequests';
 import { NewPullRequest } from './pages/NewPullRequest';
 import { PullRequestDetail } from './pages/PullRequestDetail';
+import { RepositoryCode } from './pages/RepositoryCode';
+import { RepositoryCommits } from './pages/RepositoryCommits';
+import { CommitDetail } from './pages/CommitDetail';
+import { RepositoryBranches } from './pages/RepositoryBranches';
+import { RepositoryTags } from './pages/RepositoryTags';
 import { Status } from './pages/Status';
 import { Docs } from './pages/Docs';
 import { MainLayout } from './components/layout/MainLayout';
@@ -64,6 +69,11 @@ export function App() {
         <Route path="repositories" element={<Repositories />} />
         <Route path="repositories/new" element={<NewRepository />} />
         <Route path="repositories/:repoId" element={<RepositoryDetail />} />
+        <Route path="repositories/:repoId/code" element={<RepositoryCode />} />
+        <Route path="repositories/:repoId/commits" element={<RepositoryCommits />} />
+        <Route path="repositories/:repoId/commits/:sha" element={<CommitDetail />} />
+        <Route path="repositories/:repoId/branches" element={<RepositoryBranches />} />
+        <Route path="repositories/:repoId/tags" element={<RepositoryTags />} />
         <Route path="repositories/:repoId/pulls" element={<PullRequests />} />
         <Route path="repositories/:repoId/pulls/new" element={<NewPullRequest />} />
         <Route path="repositories/:repoId/pulls/:number" element={<PullRequestDetail />} />
