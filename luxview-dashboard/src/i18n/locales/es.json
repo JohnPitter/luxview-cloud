@@ -797,6 +797,7 @@
   "branches.from": "Desde",
   "branches.default": "predeterminada",
   "branches.create": "Crear",
+  "branches.loadFailed": "Error al cargar ramas",
   "branches.created": "Rama creada",
   "branches.createFailed": "Error al crear la rama",
   "branches.deleted": "Rama eliminada",

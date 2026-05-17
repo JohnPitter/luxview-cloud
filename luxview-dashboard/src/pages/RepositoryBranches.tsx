@@ -27,13 +27,22 @@ export function RepositoryBranches() {
 
   async function load() {
     if (!repoId) return;
-    const [db, b] = await Promise.all([
-      repositoriesApi.list(100).then((r) => r.find((x) => x.id === repoId)?.defaultBranch ?? 'main'),
-      repositoriesApi.listBranches(repoId),
-    ]);
-    setDefaultBranch(db);
-    setBranches(b);
-    setLoading(false);
+    try {
+      const [repos, b] = await Promise.all([
+        repositoriesApi.list(100),
+        repositoriesApi.listBranches(repoId),
+      ]);
+      const db = repos.find((x) => x.id === repoId)?.defaultBranch ?? 'main';
+      setDefaultBranch(db);
+      // If git returned no refs but the DB says a branch exists, show it
+      const effective = b.length > 0 ? b : [db];
+      setBranches(effective);
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      addNotification({ type: 'error', title: msg ?? t('branches.loadFailed') });
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { load(); }, [repoId]);

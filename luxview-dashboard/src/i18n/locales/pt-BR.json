@@ -797,6 +797,7 @@
   "branches.from": "A partir de",
   "branches.default": "padrão",
   "branches.create": "Criar",
+  "branches.loadFailed": "Falha ao carregar branches",
   "branches.created": "Branch criada",
   "branches.createFailed": "Falha ao criar branch",
   "branches.deleted": "Branch excluída",
