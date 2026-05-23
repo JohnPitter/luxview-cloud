@@ -275,6 +275,49 @@ func (h *RepositoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *RepositoryHandler) UpdateVisibility(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user := middleware.GetUser(ctx)
+	repo, ok := h.authorizeRepo(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Visibility model.RepositoryVisibility `json:"visibility"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Visibility != model.RepositoryVisibilityPublic && req.Visibility != model.RepositoryVisibilityPrivate {
+		writeError(w, http.StatusBadRequest, "visibility must be 'public' or 'private'")
+		return
+	}
+
+	if err := h.repositoryRepo.UpdateVisibility(ctx, repo.ID, req.Visibility); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update visibility")
+		return
+	}
+
+	if h.auditSvc != nil {
+		h.auditSvc.Log(ctx, service.AuditEntry{
+			ActorID:       user.ID,
+			ActorUsername: user.Username,
+			Action:        "update",
+			ResourceType:  "repository",
+			ResourceID:    repo.ID.String(),
+			ResourceName:  repo.Slug,
+			OldValues:     map[string]string{"visibility": string(repo.Visibility)},
+			NewValues:     map[string]string{"visibility": string(req.Visibility)},
+			IPAddress:     clientIP(r),
+		})
+	}
+
+	repo.Visibility = req.Visibility
+	writeJSON(w, http.StatusOK, repo)
+}
+
 func (h *RepositoryHandler) authorizeRepo(w http.ResponseWriter, r *http.Request) (*model.Repository, bool) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)

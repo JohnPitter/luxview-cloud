@@ -73,6 +73,11 @@ export const repositoriesApi = {
     await api.delete(`/repositories/${repositoryId}`);
   },
 
+  async updateVisibility(repositoryId: string, visibility: RepositoryVisibility): Promise<LuxViewRepository> {
+    const { data } = await api.patch<LuxViewRepository>(`/repositories/${repositoryId}/visibility`, { visibility });
+    return data;
+  },
+
   async importFromGitHub(payload: { owner: string; repo: string; name?: string; defaultBranch?: string; visibility?: RepositoryVisibility }): Promise<LuxViewRepository> {
     const { data } = await api.post<LuxViewRepository>('/repositories/import', payload);
     return data;

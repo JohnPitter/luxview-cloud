@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Rocket, Copy, Check, Trash2, GitPullRequest, FileCode2, GitCommit, GitBranch, Tag } from 'lucide-react';
+import { ArrowLeft, Rocket, Copy, Check, Trash2, GitPullRequest, FileCode2, GitCommit, GitBranch, Tag, Globe, Lock } from 'lucide-react';
 import { PillButton } from '../components/common/PillButton';
 import { GlassCard } from '../components/common/GlassCard';
 import { RepositoryBackupPanel } from '../components/repositories/RepositoryBackupPanel';
@@ -19,6 +19,22 @@ export function RepositoryDetail() {
   const [copied, setCopied] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [togglingVisibility, setTogglingVisibility] = useState(false);
+
+  async function handleToggleVisibility() {
+    if (!repo || !repoId) return;
+    setTogglingVisibility(true);
+    try {
+      const newVisibility = repo.visibility === 'public' ? 'private' : 'public';
+      const updated = await repositoriesApi.updateVisibility(repoId, newVisibility);
+      setRepo((prev) => prev ? { ...prev, visibility: updated.visibility } : prev);
+      addNotification({ type: 'success', title: t('repo.detail.visibilityUpdated') });
+    } catch {
+      addNotification({ type: 'error', title: t('repo.detail.visibilityFailed') });
+    } finally {
+      setTogglingVisibility(false);
+    }
+  }
 
   async function handleDelete() {
     if (!repoId) return;
@@ -154,6 +170,35 @@ export function RepositoryDetail() {
           </GlassCard>
         );
       })()}
+
+      {repo && (
+        <GlassCard padding="md">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {repo.visibility === 'public'
+                ? <Globe size={16} className="text-emerald-400" />
+                : <Lock size={16} className="text-zinc-500" />
+              }
+              <div>
+                <p className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                  {t(`repo.new.${repo.visibility}`)}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {repo.visibility === 'public' ? t('repo.detail.visibilityPublicDesc') : t('repo.detail.visibilityPrivateDesc')}
+                </p>
+              </div>
+            </div>
+            <PillButton
+              variant="ghost"
+              size="sm"
+              disabled={togglingVisibility}
+              onClick={handleToggleVisibility}
+            >
+              {togglingVisibility ? t('common.loading') : t('repo.detail.visibilityToggle')}
+            </PillButton>
+          </div>
+        </GlassCard>
+      )}
 
       <RepositoryBackupPanel repositoryId={repoId} />
     </div>

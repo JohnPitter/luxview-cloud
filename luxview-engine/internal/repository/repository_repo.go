@@ -86,6 +86,20 @@ func (r *RepositoryRepo) ListByUserID(ctx context.Context, userID uuid.UUID, lim
 	return repos, total, nil
 }
 
+func (r *RepositoryRepo) UpdateVisibility(ctx context.Context, id uuid.UUID, visibility model.RepositoryVisibility) error {
+	tag, err := r.db.Pool.Exec(ctx,
+		`UPDATE repositories SET visibility = $1, updated_at = NOW() WHERE id = $2`,
+		visibility, id,
+	)
+	if err != nil {
+		return fmt.Errorf("update repository visibility: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("repository not found")
+	}
+	return nil
+}
+
 func (r *RepositoryRepo) FindByUsernameAndSlug(ctx context.Context, username, slug string) (*model.Repository, error) {
 	var repo model.Repository
 	err := r.db.Pool.QueryRow(ctx,

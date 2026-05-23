@@ -173,6 +173,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Post("/repositories", repositoryHandler.Create)
 			r.Post("/repositories/import", repositoryHandler.Import)
 			r.Delete("/repositories/{id}", repositoryHandler.Delete)
+			r.Patch("/repositories/{id}/visibility", repositoryHandler.UpdateVisibility)
 			r.Get("/repositories/{id}/branches", repositoryHandler.ListBranches)
 			r.Get("/repositories/{id}/remotes", repositoryHandler.ListRemotes)
 			r.Post("/repositories/{id}/remotes", repositoryHandler.AddRemote)
