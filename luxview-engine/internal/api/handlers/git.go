@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/luxview/engine/internal/api/middleware"
+	"github.com/luxview/engine/internal/model"
 	"github.com/luxview/engine/internal/repository"
 	"github.com/luxview/engine/internal/service"
 	"github.com/luxview/engine/pkg/logger"
@@ -30,12 +32,12 @@ func NewGitHandler(repositoryRepo *repository.RepositoryRepo, repositorySvc *ser
 	return &GitHandler{repositoryRepo: repositoryRepo, repositorySvc: repositorySvc, pushHandler: pushHandler}
 }
 
-// InfoRefs handles GET /{user}/{repo}.git/info/refs?service=git-{upload,receive}-pack
+// InfoRefs handles GET /{username}/{repo}.git/info/refs?service=git-{upload,receive}-pack
 func (h *GitHandler) InfoRefs(w http.ResponseWriter, r *http.Request) {
 	log := logger.With("git.info-refs")
 	ctx := r.Context()
 
-	storagePath, ok := h.resolveRepo(w, r)
+	repo, storagePath, ok := h.resolveRepo(w, r)
 	if !ok {
 		return
 	}
@@ -48,8 +50,7 @@ func (h *GitHandler) InfoRefs(w http.ResponseWriter, r *http.Request) {
 
 	if svc == gitReceivePack {
 		userID := middleware.GetUserID(ctx)
-		repo, err := h.repositoryRepo.FindByUserAndSlug(ctx, userID, chi.URLParam(r, "repo"))
-		if err != nil || repo == nil || repo.UserID != userID {
+		if userID == uuid.Nil || repo.UserID != userID {
 			writeError(w, http.StatusForbidden, "forbidden")
 			return
 		}
@@ -70,12 +71,12 @@ func (h *GitHandler) InfoRefs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// UploadPack handles POST /{user}/{repo}.git/git-upload-pack (fetch/clone)
+// UploadPack handles POST /{username}/{repo}.git/git-upload-pack (fetch/clone)
 func (h *GitHandler) UploadPack(w http.ResponseWriter, r *http.Request) {
 	log := logger.With("git.upload-pack")
 	ctx := r.Context()
 
-	storagePath, ok := h.resolveRepo(w, r)
+	_, storagePath, ok := h.resolveRepo(w, r)
 	if !ok {
 		return
 	}
@@ -92,20 +93,20 @@ func (h *GitHandler) UploadPack(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ReceivePack handles POST /{user}/{repo}.git/git-receive-pack (push)
+// ReceivePack handles POST /{username}/{repo}.git/git-receive-pack (push)
 func (h *GitHandler) ReceivePack(w http.ResponseWriter, r *http.Request) {
 	log := logger.With("git.receive-pack")
 	ctx := r.Context()
 
 	userID := middleware.GetUserID(ctx)
-	repoSlug := chi.URLParam(r, "repo")
-	repo, err := h.repositoryRepo.FindByUserAndSlug(ctx, userID, repoSlug)
-	if err != nil || repo == nil || repo.UserID != userID {
+	repo, storagePath, ok := h.resolveRepo(w, r)
+	if !ok {
+		return
+	}
+	if userID == uuid.Nil || repo.UserID != userID {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
-
-	storagePath := repo.StoragePath
 
 	// Buffer the push output so we can parse refs after receive-pack succeeds.
 	var out strings.Builder
@@ -126,24 +127,33 @@ func (h *GitHandler) ReceivePack(w http.ResponseWriter, r *http.Request) {
 	if h.pushHandler != nil {
 		go func() {
 			if err := h.pushHandler.HandlePush(ctx, repo.ID); err != nil {
-				log.Error().Err(err).Str("repo", repoSlug).Msg("push event handling failed")
+				log.Error().Err(err).Str("repo", repo.Slug).Msg("push event handling failed")
 			}
 		}()
 	}
 }
 
-// resolveRepo finds the bare repository storage path from URL params.
-// Returns (storagePath, true) on success, writes error and returns ("", false) on failure.
-func (h *GitHandler) resolveRepo(w http.ResponseWriter, r *http.Request) (string, bool) {
+// resolveRepo finds the repository from URL params {username}/{repo}.
+// Public repos are accessible without authentication; private repos require the authenticated owner.
+// Returns (repo, storagePath, true) on success, writes error and returns (nil, "", false) on failure.
+func (h *GitHandler) resolveRepo(w http.ResponseWriter, r *http.Request) (*model.Repository, string, bool) {
 	ctx := r.Context()
-	userID := middleware.GetUserID(ctx)
-
+	username := chi.URLParam(r, "username")
 	repoSlug := chi.URLParam(r, "repo")
-	repo, err := h.repositoryRepo.FindByUserAndSlug(ctx, userID, repoSlug)
+
+	repo, err := h.repositoryRepo.FindByUsernameAndSlug(ctx, username, repoSlug)
 	if err != nil || repo == nil {
 		writeError(w, http.StatusNotFound, "repository not found")
-		return "", false
+		return nil, "", false
 	}
-	// Public repos: allow read without auth; private repos: enforced by auth middleware upstream.
-	return repo.StoragePath, true
+
+	if repo.Visibility == model.RepositoryVisibilityPrivate {
+		userID := middleware.GetUserID(ctx)
+		if userID == uuid.Nil || repo.UserID != userID {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return nil, "", false
+		}
+	}
+
+	return repo, repo.StoragePath, true
 }

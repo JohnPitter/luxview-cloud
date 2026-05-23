@@ -88,6 +88,48 @@ func Auth(jwtSecret string, userRepo *repository.UserRepo) func(http.Handler) ht
 	}
 }
 
+// OptionalAuth validates a JWT token if present but does not reject requests without one.
+// Useful for endpoints that serve both authenticated and anonymous users.
+func OptionalAuth(jwtSecret string, userRepo *repository.UserRepo) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tokenStr := extractToken(r)
+			if tokenStr == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			claims := &JWTClaims{}
+			token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, jwt.ErrSignatureInvalid
+				}
+				return []byte(jwtSecret), nil
+			})
+			if err != nil || !token.Valid {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			userID, err := uuid.Parse(claims.UserID)
+			if err != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			user, err := userRepo.FindByID(r.Context(), userID)
+			if err != nil || user == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), UserIDKey, userID)
+			ctx = context.WithValue(ctx, UserKey, user)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
 // AdminOnly restricts access to admin users.
 func AdminOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

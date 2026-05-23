@@ -124,7 +124,7 @@ export function RepositoryDetail() {
       )}
 
       {repo && (() => {
-        const cloneUrl = `${window.location.origin}/git/${repo.slug}.git`;
+        const cloneUrl = `${window.location.origin}/git/${repo.ownerUsername}/${repo.slug}.git`;
         const commands = [
           { key: 'clone', label: t('repo.detail.clone'), cmd: `git clone ${cloneUrl}` },
           { key: 'remote', label: t('repo.detail.addRemote'), cmd: `git remote add origin ${cloneUrl}` },

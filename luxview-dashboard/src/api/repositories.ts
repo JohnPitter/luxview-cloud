@@ -10,6 +10,7 @@ export interface LuxViewRepository {
   slug: string;
   defaultBranch: string;
   visibility: RepositoryVisibility;
+  ownerUsername: string;
   createdAt: string;
   updatedAt: string;
 }

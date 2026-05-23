@@ -86,6 +86,23 @@ func (r *RepositoryRepo) ListByUserID(ctx context.Context, userID uuid.UUID, lim
 	return repos, total, nil
 }
 
+func (r *RepositoryRepo) FindByUsernameAndSlug(ctx context.Context, username, slug string) (*model.Repository, error) {
+	var repo model.Repository
+	err := r.db.Pool.QueryRow(ctx,
+		`SELECT r.id, r.user_id, r.name, r.slug, r.default_branch, r.storage_path, r.visibility, r.created_at, r.updated_at
+		 FROM repositories r
+		 JOIN users u ON u.id = r.user_id
+		 WHERE u.username = $1 AND r.slug = $2`, username, slug,
+	).Scan(&repo.ID, &repo.UserID, &repo.Name, &repo.Slug, &repo.DefaultBranch, &repo.StoragePath, &repo.Visibility, &repo.CreatedAt, &repo.UpdatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find repository by username and slug: %w", err)
+	}
+	return &repo, nil
+}
+
 func (r *RepositoryRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := r.db.Pool.Exec(ctx, `DELETE FROM repositories WHERE id = $1`, id)
 	if err != nil {

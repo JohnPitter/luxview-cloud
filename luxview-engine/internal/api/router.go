@@ -107,12 +107,14 @@ func NewRouter(deps Deps) *chi.Mux {
 	domainCheckHandler := handlers.NewDomainCheckHandler(deps.AppRepo, domainChecker)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
+	optionalAuthMiddleware := middleware.OptionalAuth(deps.Config.JWTSecret, deps.UserRepo)
 
 	// Git HTTP smart protocol — mounted outside /api, no 1MB body limit (pushes can be large).
 	// Limit set to 512MB per request to prevent abuse while allowing large repos.
-	r.Route("/git/{repo}.git", func(r chi.Router) {
+	// OptionalAuth allows public repos to be cloned without credentials.
+	r.Route("/git/{username}/{repo}.git", func(r chi.Router) {
 		r.Use(middleware.BodySizeLimit(512 << 20))
-		r.Use(authMiddleware)
+		r.Use(optionalAuthMiddleware)
 		r.Get("/info/refs", gitHandler.InfoRefs)
 		r.Post("/git-upload-pack", gitHandler.UploadPack)
 		r.Post("/git-receive-pack", gitHandler.ReceivePack)

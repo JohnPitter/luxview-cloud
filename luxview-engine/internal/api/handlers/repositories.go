@@ -124,8 +124,14 @@ func (h *RepositoryHandler) Import(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, repo)
 }
 
+type repositoryResponse struct {
+	model.Repository
+	OwnerUsername string `json:"owner_username"`
+}
+
 func (h *RepositoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	user := middleware.GetUser(ctx)
 	userID := middleware.GetUserID(ctx)
 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -142,8 +148,18 @@ func (h *RepositoryHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list repositories")
 		return
 	}
+
+	ownerUsername := ""
+	if user != nil {
+		ownerUsername = user.Username
+	}
+	repoResponses := make([]repositoryResponse, len(repos))
+	for i, r := range repos {
+		repoResponses[i] = repositoryResponse{Repository: r, OwnerUsername: ownerUsername}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"repositories": repos,
+		"repositories": repoResponses,
 		"total":        total,
 	})
 }
