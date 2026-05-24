@@ -18,9 +18,12 @@ if [ -f "$CONFIG_FILE" ]; then
     set +a
 fi
 
-# Generate ServerGameSettings.json from VRGAME_* env vars
-# Only writes the file if any VRGAME_ var is set, so preset takes precedence otherwise
+# Generate ServerGameSettings.json from VRGAME_* env vars.
+# When custom settings are generated, -preset must NOT be passed to the server
+# because -preset overrides ServerGameSettings.json entirely.
+CUSTOM_SETTINGS=0
 if env | grep -q '^VRGAME_'; then
+    CUSTOM_SETTINGS=1
     python3 - <<PYEOF
 import json, os
 
@@ -128,6 +131,14 @@ if [ ! -f "$WINEPREFIX/system.reg" ]; then
 fi
 
 echo "[vrising] Starting V Rising Dedicated Server..."
+# When custom VRGAME_* settings are active, omit -preset so ServerGameSettings.json is used.
+# The -preset flag overrides ServerGameSettings.json entirely, so it must not be passed together.
+if [ "$CUSTOM_SETTINGS" = "0" ]; then
+    PRESET_FLAG="${VRISING_PRESET:+-preset $VRISING_PRESET}"
+else
+    PRESET_FLAG=""
+fi
+
 exec wine "$SERVER_DIR/VRisingServer.exe" \
     -persistentDataPath "$DATA_DIR" \
     -serverName "${VRISING_SERVER_NAME:-V Rising Server}" \
@@ -136,7 +147,7 @@ exec wine "$SERVER_DIR/VRisingServer.exe" \
     -gamePort "${VRISING_GAME_PORT:-27015}" \
     -queryPort "${VRISING_QUERY_PORT:-27016}" \
     ${VRISING_PASSWORD:+-password "$VRISING_PASSWORD"} \
-    ${VRISING_PRESET:+-preset "$VRISING_PRESET"} \
+    ${PRESET_FLAG} \
     ${VRISING_DIFFICULTY_PRESET:+-difficultyPreset "$VRISING_DIFFICULTY_PRESET"} \
     -maxUsers "${VRISING_MAX_USERS:-40}" \
     -maxAdmins "${VRISING_MAX_ADMINS:-4}" \

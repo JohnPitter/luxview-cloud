@@ -360,7 +360,13 @@ func loadConfig(gs *GameServer) map[string]string {
 func saveConfig(gs *GameServer, values map[string]string) error {
 	var sb strings.Builder
 	for _, f := range gs.ConfigFields {
-		fmt.Fprintf(&sb, "%s=%s\n", f.Key, values[f.Key])
+		v := values[f.Key]
+		// skip empty numeric/select fields so the entrypoint uses its own defaults;
+		// always write text/password fields (even empty, e.g. clearing a password)
+		if v == "" && (f.Type == "number" || f.Type == "select") {
+			continue
+		}
+		fmt.Fprintf(&sb, "%s=%s\n", f.Key, v)
 	}
 	return os.WriteFile(configFilePath(gs), []byte(sb.String()), 0644)
 }
