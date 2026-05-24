@@ -113,6 +113,22 @@ psql:
 psql-shared:
 	$(COMPOSE) exec pg-shared psql -U luxview_admin -d luxview_shared
 
+## Build the V Rising server image (slow — downloads Wine + SteamCMD)
+vrising-build:
+	$(COMPOSE) build vrising
+
+## Start V Rising server
+vrising-start:
+	$(COMPOSE) up -d vrising
+
+## Stop V Rising server
+vrising-stop:
+	$(COMPOSE) stop vrising
+
+## Follow V Rising logs
+vrising-logs:
+	$(COMPOSE) logs -f vrising
+
 ## Print help
 help:
 	@echo "LuxView Cloud Platform"

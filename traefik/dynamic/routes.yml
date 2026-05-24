@@ -62,6 +62,18 @@ http:
         - security-headers
       priority: 10
 
+    # Games Companion → game server management UI
+    games-companion:
+      rule: "Host(`games.luxview.cloud`)"
+      entryPoints:
+        - websecure
+      service: games-companion-svc
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+      priority: 10
+
     # Catch-all for deleted/unknown *.luxview.cloud subdomains
     # Priority must be lower than dynamic app routes (which default to rule length)
     app-not-found:
@@ -100,3 +112,8 @@ http:
       loadBalancer:
         servers:
           - url: "http://luxview-roundcube:80"
+
+    games-companion-svc:
+      loadBalancer:
+        servers:
+          - url: "http://luxview-games-companion:8080"
