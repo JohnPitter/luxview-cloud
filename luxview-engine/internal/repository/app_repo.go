@@ -40,15 +40,21 @@ func (r *AppRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.App, error
 	var rl json.RawMessage
 	var assignedPort *int
 	var repositoryID *uuid.UUID
+	var gc gameConfigNullable
 	err := r.db.Pool.QueryRow(ctx,
-		`SELECT id, user_id, name, subdomain, repository_id, repo_url, repo_branch, stack, status, app_type,
-		        container_id, internal_port, assigned_port, env_vars, resource_limits,
-		        auto_deploy, webhook_id, custom_dockerfile, custom_domain, created_at, updated_at
-		 FROM apps WHERE id = $1`, id,
+		`SELECT a.id, a.user_id, a.name, a.subdomain, a.repository_id, a.repo_url, a.repo_branch,
+		        a.stack, a.status, a.app_type, a.container_id, a.internal_port, a.assigned_port,
+		        a.env_vars, a.resource_limits, a.auto_deploy, a.webhook_id, a.custom_dockerfile,
+		        a.custom_domain, a.created_at, a.updated_at,
+		        g.id, g.template_id, g.image, g.game_port, g.query_port, g.data_dir, g.data_volume, g.protocol, g.config_fields
+		 FROM apps a
+		 LEFT JOIN game_server_configs g ON g.app_id = a.id
+		 WHERE a.id = $1`, id,
 	).Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain, &repositoryID, &app.RepoURL,
 		&app.RepoBranch, &app.Stack, &app.Status, &app.AppType, &app.ContainerID,
 		&app.InternalPort, &assignedPort, &app.EnvVars, &rl,
-		&app.AutoDeploy, &app.WebhookID, &app.CustomDockerfile, &app.CustomDomain, &app.CreatedAt, &app.UpdatedAt)
+		&app.AutoDeploy, &app.WebhookID, &app.CustomDockerfile, &app.CustomDomain, &app.CreatedAt, &app.UpdatedAt,
+		&gc.ID, &gc.TemplateID, &gc.Image, &gc.GamePort, &gc.QueryPort, &gc.DataDir, &gc.DataVolume, &gc.Protocol, &gc.ConfigFields)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -60,6 +66,7 @@ func (r *AppRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.App, error
 	}
 	app.RepositoryID = repositoryID
 	_ = json.Unmarshal(rl, &app.ResourceLimits)
+	app.GameConfig = gc.toModel()
 	return &app, nil
 }
 
@@ -126,11 +133,15 @@ func (r *AppRepo) ListByUserID(ctx context.Context, userID uuid.UUID, limit, off
 	}
 
 	rows, err := r.db.Pool.Query(ctx,
-		`SELECT id, user_id, name, subdomain, repository_id, repo_url, repo_branch, stack, status, app_type,
-		        container_id, internal_port, assigned_port, resource_limits,
-		        auto_deploy, webhook_id, custom_dockerfile, custom_domain, created_at, updated_at
-		 FROM apps WHERE user_id = $1
-		 ORDER BY created_at DESC LIMIT $2 OFFSET $3`, userID, limit, offset)
+		`SELECT a.id, a.user_id, a.name, a.subdomain, a.repository_id, a.repo_url, a.repo_branch,
+		        a.stack, a.status, a.app_type, a.container_id, a.internal_port, a.assigned_port,
+		        a.resource_limits, a.auto_deploy, a.webhook_id, a.custom_dockerfile, a.custom_domain,
+		        a.created_at, a.updated_at,
+		        g.id, g.template_id, g.image, g.game_port, g.query_port, g.data_dir, g.data_volume, g.protocol, g.config_fields
+		 FROM apps a
+		 LEFT JOIN game_server_configs g ON g.app_id = a.id
+		 WHERE a.user_id = $1
+		 ORDER BY a.created_at DESC LIMIT $2 OFFSET $3`, userID, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -142,10 +153,13 @@ func (r *AppRepo) ListByUserID(ctx context.Context, userID uuid.UUID, limit, off
 		var rl json.RawMessage
 		var assignedPort *int
 		var repositoryID *uuid.UUID
+		var gc gameConfigNullable
 		if err := rows.Scan(&app.ID, &app.UserID, &app.Name, &app.Subdomain,
 			&repositoryID, &app.RepoURL, &app.RepoBranch, &app.Stack, &app.Status, &app.AppType,
 			&app.ContainerID, &app.InternalPort, &assignedPort, &rl,
-			&app.AutoDeploy, &app.WebhookID, &app.CustomDockerfile, &app.CustomDomain, &app.CreatedAt, &app.UpdatedAt); err != nil {
+			&app.AutoDeploy, &app.WebhookID, &app.CustomDockerfile, &app.CustomDomain,
+			&app.CreatedAt, &app.UpdatedAt,
+			&gc.ID, &gc.TemplateID, &gc.Image, &gc.GamePort, &gc.QueryPort, &gc.DataDir, &gc.DataVolume, &gc.Protocol, &gc.ConfigFields); err != nil {
 			return nil, 0, err
 		}
 		if assignedPort != nil {
@@ -153,6 +167,7 @@ func (r *AppRepo) ListByUserID(ctx context.Context, userID uuid.UUID, limit, off
 		}
 		app.RepositoryID = repositoryID
 		_ = json.Unmarshal(rl, &app.ResourceLimits)
+		app.GameConfig = gc.toModel()
 		apps = append(apps, app)
 	}
 	return apps, total, nil
@@ -343,4 +358,51 @@ func mustJSON(v interface{}) json.RawMessage {
 		return json.RawMessage(`{}`)
 	}
 	return b
+}
+
+// gameConfigNullable holds nullable columns from a LEFT JOIN on game_server_configs.
+type gameConfigNullable struct {
+	ID           *uuid.UUID
+	TemplateID   *string
+	Image        *string
+	GamePort     *int
+	QueryPort    *int
+	DataDir      *string
+	DataVolume   *string
+	Protocol     *string
+	ConfigFields *json.RawMessage
+}
+
+func (g *gameConfigNullable) toModel() *model.GameServerConfig {
+	if g.ID == nil {
+		return nil
+	}
+	cfg := &model.GameServerConfig{
+		ID:         *g.ID,
+		TemplateID: strVal(g.TemplateID),
+		Image:      strVal(g.Image),
+		GamePort:   intVal(g.GamePort),
+		QueryPort:  intVal(g.QueryPort),
+		DataDir:    strVal(g.DataDir),
+		DataVolume: strVal(g.DataVolume),
+		Protocol:   strVal(g.Protocol),
+	}
+	if g.ConfigFields != nil {
+		_ = json.Unmarshal(*g.ConfigFields, &cfg.ConfigFields)
+	}
+	return cfg
+}
+
+func strVal(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func intVal(i *int) int {
+	if i == nil {
+		return 0
+	}
+	return *i
 }
