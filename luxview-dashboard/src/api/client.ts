@@ -11,7 +11,11 @@ function camelToSnake(str: string): string {
 }
 
 // Keys that should NOT have their nested keys transformed (e.g., user-defined env vars).
-const PRESERVE_NESTED_KEYS = new Set(['env_vars', 'envVars', 'resource_limits', 'resourceLimits']);
+const PRESERVE_NESTED_KEYS = new Set([
+  'env_vars', 'envVars',
+  'resource_limits', 'resourceLimits',
+  'config_fields', 'configFields',
+]);
 
 function transformKeys(obj: unknown, fn: (key: string) => string, preserveValues = false): unknown {
   if (Array.isArray(obj)) return obj.map((item) => transformKeys(item, fn, preserveValues));

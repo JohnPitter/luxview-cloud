@@ -110,13 +110,15 @@ func (h *GameServerHandler) UpdateConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var fields map[string]string
-	if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
+	var body struct {
+		ConfigFields map[string]string `json:"configFields"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	cfg.ConfigFields = fields
+	cfg.ConfigFields = body.ConfigFields
 	if err := h.gameConfigRepo.Update(ctx, cfg); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save config")
 		return

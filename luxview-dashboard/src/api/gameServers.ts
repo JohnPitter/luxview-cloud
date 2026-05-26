@@ -55,7 +55,9 @@ export const gameServersApi = {
   },
 
   async updateConfig(appId: string, fields: Record<string, string>): Promise<GameServerConfig> {
-    const { data } = await api.put<GameServerConfig>(`/apps/${appId}/game-config`, fields);
+    // Wrap in configFields so the request interceptor preserves the user-defined keys
+    // (configFields is in PRESERVE_NESTED_KEYS).
+    const { data } = await api.put<GameServerConfig>(`/apps/${appId}/game-config`, { configFields: fields });
     return data;
   },
 
