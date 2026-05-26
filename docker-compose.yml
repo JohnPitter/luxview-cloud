@@ -238,35 +238,6 @@ services:
       retries: 5
 
   # ---------------------------------------------------------------------------
-  # V Rising — Dedicated Game Server (Wine/Windows on Linux)
-  # ---------------------------------------------------------------------------
-  vrising:
-    build:
-      context: ./luxview-games/games/vrising
-      dockerfile: Dockerfile
-    container_name: luxview-vrising
-    restart: unless-stopped
-    cpus: "1.5"
-    mem_limit: 5g
-    memswap_limit: 5g
-    ports:
-      - "27015:27015/udp"   # Game traffic
-      - "27016:27016/udp"   # Steam query
-    volumes:
-      - vrising-server:/vrising-server
-      - vrising-data:/vrising-data
-    environment:
-      - VRISING_SERVER_NAME=${VRISING_SERVER_NAME:-V Rising Server}
-      - VRISING_SAVE_NAME=${VRISING_SAVE_NAME:-world1}
-      - VRISING_GAME_PORT=${VRISING_GAME_PORT:-27015}
-      - VRISING_QUERY_PORT=${VRISING_QUERY_PORT:-27016}
-      - VRISING_PASSWORD=${VRISING_PASSWORD:-}
-      - VRISING_PRESET=${VRISING_PRESET:-StandardPvP}
-    networks:
-      - game-net
-    stop_grace_period: 60s
-
-  # ---------------------------------------------------------------------------
   # Roundcube — Webmail UI
   # ---------------------------------------------------------------------------
   roundcube:
