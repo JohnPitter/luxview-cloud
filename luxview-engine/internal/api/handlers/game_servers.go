@@ -111,10 +111,14 @@ func (h *GameServerHandler) UpdateConfig(w http.ResponseWriter, r *http.Request)
 	}
 
 	var body struct {
-		ConfigFields map[string]string `json:"configFields"`
+		ConfigFields map[string]string `json:"config_fields"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.ConfigFields == nil {
+		writeError(w, http.StatusBadRequest, "config_fields is required")
 		return
 	}
 
@@ -124,9 +128,17 @@ func (h *GameServerHandler) UpdateConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Restart container with updated env vars
-	if app.ContainerID != "" && app.Status == model.AppStatusRunning {
-		go h.gameServerSvc.Start(ctx, app, cfg) //nolint:errcheck
+	// Restart container with updated env vars; keep DB container_id in sync with the new container.
+	if app.Status == model.AppStatusRunning {
+		go func() {
+			containerID, startErr := h.gameServerSvc.Start(ctx, app, cfg)
+			status := model.AppStatusRunning
+			if startErr != nil {
+				status = model.AppStatusError
+				containerID = app.ContainerID
+			}
+			_ = h.appRepo.UpdateStatus(ctx, app.ID, status, containerID)
+		}()
 	}
 
 	writeJSON(w, http.StatusOK, cfg)
