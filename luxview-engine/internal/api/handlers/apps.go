@@ -676,14 +676,17 @@ func (h *AppHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		go func() {
-			containerID, startErr := h.gameServerSvc.Start(ctx, app, gameCfg)
+			// Fresh background ctx — request ctx is canceled when writeJSON returns,
+			// which would abort the docker stop/remove/create chain mid-flight.
+			bgCtx := context.Background()
+			containerID, startErr := h.gameServerSvc.Start(bgCtx, app, gameCfg)
 			status := model.AppStatusRunning
 			if startErr != nil {
 				log.Error().Err(startErr).Str("app", app.Subdomain).Msg("game server start failed")
 				status = model.AppStatusError
 				containerID = app.ContainerID
 			}
-			_ = h.appRepo.UpdateStatus(ctx, app.ID, status, containerID)
+			_ = h.appRepo.UpdateStatus(bgCtx, app.ID, status, containerID)
 		}()
 		h.auditSvc.Log(ctx, service.AuditEntry{
 			ActorID: user.ID, ActorUsername: user.Username,

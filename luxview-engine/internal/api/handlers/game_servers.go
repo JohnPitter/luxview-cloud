@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/luxview/engine/internal/model"
 	"github.com/luxview/engine/internal/repository"
 	"github.com/luxview/engine/internal/service"
+	"github.com/luxview/engine/pkg/logger"
 )
 
 type GameServerHandler struct {
@@ -129,15 +131,22 @@ func (h *GameServerHandler) UpdateConfig(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Restart container with updated env vars; keep DB container_id in sync with the new container.
+	// Use a fresh background context — request context is canceled as soon as we writeJSON below,
+	// which would abort the docker stop/remove/create chain mid-flight.
 	if app.Status == model.AppStatusRunning {
+		log := logger.With("game-server")
 		go func() {
-			containerID, startErr := h.gameServerSvc.Start(ctx, app, cfg)
+			bgCtx := context.Background()
+			containerID, startErr := h.gameServerSvc.Start(bgCtx, app, cfg)
 			status := model.AppStatusRunning
 			if startErr != nil {
+				log.Error().Err(startErr).Str("app", app.Subdomain).Msg("game server restart failed")
 				status = model.AppStatusError
 				containerID = app.ContainerID
+			} else {
+				log.Info().Str("app", app.Subdomain).Str("container", containerID[:12]).Msg("game server restarted with new config")
 			}
-			_ = h.appRepo.UpdateStatus(ctx, app.ID, status, containerID)
+			_ = h.appRepo.UpdateStatus(bgCtx, app.ID, status, containerID)
 		}()
 	}
 
