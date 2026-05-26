@@ -296,6 +296,9 @@ func vrisingTemplate() model.GameTemplate {
 			{Key: "VRGAME_FREE_CASTLE_CLAIM", Label: "Reivindicação gratuita", Type: "select", Section: "Modo de Jogo", Options: yesNo},
 			{Key: "VRGAME_FREE_CASTLE_DESTROY", Label: "Destruição gratuita", Type: "select", Section: "Modo de Jogo", Options: yesNo},
 			{Key: "VRGAME_INACTIVITY_KILL_ENABLED", Label: "Kill por inatividade", Type: "select", Section: "Modo de Jogo", Options: yesNo},
+			{Key: "VRGAME_ANNOUNCE_VAMPIRE_KILLS", Label: "Anunciar mortes no chat", Type: "select", Section: "Modo de Jogo", Options: yesNo},
+			{Key: "VRGAME_PVP_VAMPIRE_RESPAWN", Label: "Cooldown de respawn PvP", Type: "number", Placeholder: "1.0", Section: "Modo de Jogo"},
+			{Key: "VRGAME_COOLDOWN_GLOBAL", Label: "Cooldown global de habilidades", Type: "number", Placeholder: "1.0", Section: "Modo de Jogo"},
 			// Taxas
 			{Key: "VRGAME_INVENTORY_STACKS", Label: "Pilhas de Inventário", Type: "number", Placeholder: "1.0", Section: "Taxas"},
 			{Key: "VRGAME_DROP_RATE", Label: "Taxa de Drop", Type: "number", Placeholder: "1.0", Section: "Taxas"},
@@ -312,6 +315,8 @@ func vrisingTemplate() model.GameTemplate {
 			{Key: "VRGAME_REPAIR_COST", Label: "Custo de Reparo", Type: "number", Placeholder: "1.0", Section: "Taxas"},
 			{Key: "VRGAME_BLOOD_DRAIN", Label: "Drenagem de Sangue", Type: "number", Placeholder: "1.0", Section: "Taxas"},
 			{Key: "VRGAME_DURABILITY_DRAIN", Label: "Drenagem de Durabilidade", Type: "number", Placeholder: "1.0", Section: "Taxas"},
+			{Key: "VRGAME_DROP_RATE_MISSIONS", Label: "Drop em Missões", Type: "number", Placeholder: "1.0", Section: "Taxas"},
+			{Key: "VRGAME_JOURNAL_QUEST_STACKS", Label: "Stacks de Quest do Journal", Type: "number", Placeholder: "1.0", Section: "Taxas"},
 			// Mundo
 			{Key: "VRGAME_DAY_DURATION", Label: "Duração do Dia (s)", Type: "number", Placeholder: "1080", Section: "Mundo"},
 			{Key: "VRGAME_DAY_START_HOUR", Label: "Hora de Início do Dia", Type: "number", Placeholder: "9", Section: "Mundo"},
@@ -326,6 +331,7 @@ func vrisingTemplate() model.GameTemplate {
 			{Key: "VRGAME_CASTLE_DECAY_RATE", Label: "Decaimento do Castelo", Type: "number", Placeholder: "1.0", Section: "Mundo"},
 			{Key: "VRGAME_CASTLE_BLOOD_DRAIN", Label: "Drenagem de Sangue do Castelo", Type: "number", Placeholder: "1.0", Section: "Mundo"},
 			{Key: "VRGAME_CASTLE_RELOCATION", Label: "Realocação de Castelo", Type: "select", Section: "Mundo", Options: yesNo},
+			{Key: "VRGAME_SPAWN_RATE", Label: "Taxa de Spawn de Inimigos", Type: "number", Placeholder: "1.0", Section: "Mundo"},
 			// Vampiros
 			{Key: "VRGAME_VAMPIRE_HEALTH", Label: "Vida do Vampiro", Type: "number", Placeholder: "1.0", Section: "Vampiros"},
 			{Key: "VRGAME_VAMPIRE_PHYSICAL_POWER", Label: "Poder Físico", Type: "number", Placeholder: "1.0", Section: "Vampiros"},
