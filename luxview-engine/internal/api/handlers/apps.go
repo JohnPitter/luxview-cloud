@@ -23,6 +23,17 @@ import (
 
 var subdomainRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
+// defaultVolumeName derives a Docker volume name from the subdomain and a mount path,
+// e.g. ("vrising", "/vrising-server") -> "luxview-game-vrising-vrising-server".
+func defaultVolumeName(subdomain, mountPath string) string {
+	slug := strings.Trim(mountPath, "/")
+	slug = strings.ReplaceAll(slug, "/", "-")
+	if slug == "" {
+		slug = "data"
+	}
+	return fmt.Sprintf("luxview-game-%s-%s", subdomain, slug)
+}
+
 type AppHandler struct {
 	appRepo        *repository.AppRepo
 	repositoryRepo *repository.RepositoryRepo
@@ -165,6 +176,19 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Populate per-template volumes (e.g. V Rising needs both binaries + saves).
+		// Engine-generated volume names follow luxview-game-{subdomain}-{slug-of-mount-path}.
+		var volumes []model.GameVolume
+		if tmpl := service.GetGameTemplate(gc.TemplateID); tmpl != nil && len(tmpl.DefaultVolumes) > 0 {
+			volumes = make([]model.GameVolume, 0, len(tmpl.DefaultVolumes))
+			for _, dv := range tmpl.DefaultVolumes {
+				volumes = append(volumes, model.GameVolume{
+					Name:      defaultVolumeName(subdomain, dv.MountPath),
+					MountPath: dv.MountPath,
+				})
+			}
+		}
+
 		gameCfg := &model.GameServerConfig{
 			AppID:        app.ID,
 			TemplateID:   gc.TemplateID,
@@ -173,6 +197,7 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 			QueryPort:    gc.QueryPort,
 			DataDir:      dataDir,
 			DataVolume:   gc.DataVolume,
+			Volumes:      volumes,
 			Protocol:     protocol,
 			ConfigFields: map[string]string{},
 		}

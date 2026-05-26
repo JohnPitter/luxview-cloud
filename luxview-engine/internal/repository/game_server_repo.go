@@ -21,12 +21,13 @@ func NewGameServerConfigRepo(db *DB) *GameServerConfigRepo {
 func (r *GameServerConfigRepo) GetByAppID(ctx context.Context, appID uuid.UUID) (*model.GameServerConfig, error) {
 	var cfg model.GameServerConfig
 	var fields json.RawMessage
+	var volumes json.RawMessage
 	var dataVolume *string
 	err := r.db.Pool.QueryRow(ctx,
-		`SELECT id, app_id, template_id, image, game_port, query_port, data_dir, data_volume, protocol, config_fields, created_at, updated_at
+		`SELECT id, app_id, template_id, image, game_port, query_port, data_dir, data_volume, volumes, protocol, config_fields, created_at, updated_at
 		 FROM game_server_configs WHERE app_id = $1`, appID,
 	).Scan(&cfg.ID, &cfg.AppID, &cfg.TemplateID, &cfg.Image, &cfg.GamePort, &cfg.QueryPort,
-		&cfg.DataDir, &dataVolume, &cfg.Protocol, &fields, &cfg.CreatedAt, &cfg.UpdatedAt)
+		&cfg.DataDir, &dataVolume, &volumes, &cfg.Protocol, &fields, &cfg.CreatedAt, &cfg.UpdatedAt)
 	if dataVolume != nil {
 		cfg.DataVolume = *dataVolume
 	}
@@ -37,20 +38,25 @@ func (r *GameServerConfigRepo) GetByAppID(ctx context.Context, appID uuid.UUID) 
 		return nil, fmt.Errorf("get game server config: %w", err)
 	}
 	_ = json.Unmarshal(fields, &cfg.ConfigFields)
+	_ = json.Unmarshal(volumes, &cfg.Volumes)
 	return &cfg, nil
 }
 
 func (r *GameServerConfigRepo) Create(ctx context.Context, cfg *model.GameServerConfig) error {
 	fields, _ := json.Marshal(cfg.ConfigFields)
+	if cfg.Volumes == nil {
+		cfg.Volumes = []model.GameVolume{}
+	}
+	volumes, _ := json.Marshal(cfg.Volumes)
 	var dataVolume *string
 	if cfg.DataVolume != "" {
 		dataVolume = &cfg.DataVolume
 	}
 	return r.db.Pool.QueryRow(ctx,
-		`INSERT INTO game_server_configs (app_id, template_id, image, game_port, query_port, data_dir, data_volume, protocol, config_fields)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		`INSERT INTO game_server_configs (app_id, template_id, image, game_port, query_port, data_dir, data_volume, volumes, protocol, config_fields)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		 RETURNING id, created_at, updated_at`,
-		cfg.AppID, cfg.TemplateID, cfg.Image, cfg.GamePort, cfg.QueryPort, cfg.DataDir, dataVolume, cfg.Protocol, fields,
+		cfg.AppID, cfg.TemplateID, cfg.Image, cfg.GamePort, cfg.QueryPort, cfg.DataDir, dataVolume, volumes, cfg.Protocol, fields,
 	).Scan(&cfg.ID, &cfg.CreatedAt, &cfg.UpdatedAt)
 }
 

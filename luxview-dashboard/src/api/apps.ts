@@ -35,6 +35,11 @@ export interface App {
   lastDeployAt?: string;
 }
 
+export interface GameVolume {
+  name: string;
+  mountPath: string;
+}
+
 export interface GameServerConfig {
   id: string;
   appId: string;
@@ -44,6 +49,7 @@ export interface GameServerConfig {
   queryPort?: number;
   dataDir: string;
   dataVolume?: string;
+  volumes: GameVolume[];
   protocol: string;
   configFields: Record<string, string>;
 }

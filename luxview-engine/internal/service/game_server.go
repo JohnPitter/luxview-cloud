@@ -32,6 +32,31 @@ func ContainerName(subdomain string) string {
 	return fmt.Sprintf("luxview-game-%s", subdomain)
 }
 
+// buildMounts returns the Docker mount list for a game server, preferring the
+// multi-volume Volumes field and falling back to the legacy DataVolume/DataDir.
+func buildMounts(subdomain string, cfg *model.GameServerConfig) []mount.Mount {
+	if len(cfg.Volumes) > 0 {
+		mounts := make([]mount.Mount, 0, len(cfg.Volumes))
+		for _, v := range cfg.Volumes {
+			mounts = append(mounts, mount.Mount{
+				Type:   mount.TypeVolume,
+				Source: v.Name,
+				Target: v.MountPath,
+			})
+		}
+		return mounts
+	}
+	dataVolume := cfg.DataVolume
+	if dataVolume == "" {
+		dataVolume = fmt.Sprintf("luxview-game-%s-data", subdomain)
+	}
+	dataDir := cfg.DataDir
+	if dataDir == "" {
+		dataDir = "/data"
+	}
+	return []mount.Mount{{Type: mount.TypeVolume, Source: dataVolume, Target: dataDir}}
+}
+
 // Start creates and starts a game server container.
 func (s *GameServerService) Start(ctx context.Context, app *model.App, cfg *model.GameServerConfig) (string, error) {
 	log := logger.With("game-server")
@@ -65,15 +90,9 @@ func (s *GameServerService) Start(ctx context.Context, app *model.App, cfg *mode
 		envList = append(envList, fmt.Sprintf("%s=%s", k, v))
 	}
 
-	// Use existing volume name if specified (for migrating running servers without data loss)
-	dataVolume := cfg.DataVolume
-	if dataVolume == "" {
-		dataVolume = fmt.Sprintf("luxview-game-%s-data", app.Subdomain)
-	}
-	dataDir := cfg.DataDir
-	if dataDir == "" {
-		dataDir = "/data"
-	}
+	// Build mount list. Prefer the multi-volume Volumes field; fall back to the legacy
+	// single DataVolume/DataDir pair when Volumes is empty (older game configs).
+	mounts := buildMounts(app.Subdomain, cfg)
 
 	nanoCPUs, memory := parseResourceLimits(app.ResourceLimits)
 
@@ -97,13 +116,7 @@ func (s *GameServerService) Start(ctx context.Context, app *model.App, cfg *mode
 			NanoCPUs: nanoCPUs,
 			Memory:   memory,
 		},
-		Mounts: []mount.Mount{
-			{
-				Type:   mount.TypeVolume,
-				Source: dataVolume,
-				Target: dataDir,
-			},
-		},
+		Mounts: mounts,
 	}
 
 	_ = s.docker.StopContainer(ctx, containerName, 30)
@@ -240,6 +253,10 @@ func vrisingTemplate() model.GameTemplate {
 		DefaultQueryPort: 27016,
 		DefaultImage:     "luxview-vrising:latest",
 		SupportsQuery:    true,
+		DefaultVolumes: []model.GameVolume{
+			{MountPath: "/vrising-server"}, // Steam-installed server binaries
+			{MountPath: "/vrising-data"},   // World saves + Wine prefix
+		},
 		ConfigFields: []model.ConfigFieldDef{
 			// Servidor
 			{Key: "VRISING_SERVER_NAME", Label: "Nome do Servidor", Type: "text", Placeholder: "V Rising Server", Section: "Servidor"},

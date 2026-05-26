@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { GameServerConfig, CreateGameServerPayload, App } from './apps';
+import type { GameServerConfig, GameVolume, CreateGameServerPayload, App } from './apps';
 
 export interface ConfigFieldOption {
   value: string;
@@ -25,6 +25,7 @@ export interface GameTemplate {
   defaultImage: string;
   configFields: ConfigFieldDef[];
   supportsQuery: boolean;
+  defaultVolumes: GameVolume[];
 }
 
 export interface GameConfigResponse extends GameServerConfig {
