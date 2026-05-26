@@ -10,7 +10,7 @@ export WINEDLLOVERRIDES="mscoree,mshtml="
 
 mkdir -p "$SERVER_DIR" "$DATA_DIR/Settings" "$DATA_DIR/Saves"
 
-# Load config overrides written by Games Companion (takes precedence over env vars)
+# Load config overrides written by Luxview Games (takes precedence over env vars)
 CONFIG_FILE="$DATA_DIR/server-config.env"
 if [ -f "$CONFIG_FILE" ]; then
     set -a

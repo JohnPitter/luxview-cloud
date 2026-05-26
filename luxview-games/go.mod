@@ -1,4 +1,4 @@
-module github.com/luxview/games-companion
+module github.com/luxview/luxview-games
 
 go 1.26.1
 

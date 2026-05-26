@@ -129,6 +129,25 @@ func TestParseEnvLines(t *testing.T) {
 	}
 }
 
+func TestLoadRegistryFromPathsFallsBackToLegacyPath(t *testing.T) {
+	dir := t.TempDir()
+	primary := filepath.Join(dir, "luxview-games-servers.json")
+	legacy := filepath.Join(dir, "games-companion-servers.json")
+	content := `{"servers":[{"id":"legacy","template_id":"vrising","display_name":"Legacy V Rising","container_name":"luxview-vrising","game_port":"27015","protocol":"udp","image":"luxview/vrising","created_at":"now"}]}`
+
+	if err := os.WriteFile(legacy, []byte(content), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	registry := loadRegistryFromPaths(primary, legacy)
+	if len(registry.Servers) != 1 {
+		t.Fatalf("loadRegistryFromPaths() loaded %d servers, want 1", len(registry.Servers))
+	}
+	if got := registry.Servers[0].ID; got != "legacy" {
+		t.Fatalf("loadRegistryFromPaths() ID = %q, want legacy", got)
+	}
+}
+
 func TestPortConfig(t *testing.T) {
 	exposed, bindings, err := portConfig([]publishedPort{{ContainerPort: "27015", HostPort: "27017", Protocol: "udp"}})
 	if err != nil {

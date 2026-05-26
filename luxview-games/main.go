@@ -37,8 +37,9 @@ const (
 	percentMultiplier      = 100
 	nanoCPUsPerCPU         = 1_000_000_000
 	unlimitedResourceLabel = "sem limite"
-	defaultCompanionName   = "luxview-games-companion"
-	defaultRegistryFile    = "/vrising-data/games-companion-servers.json"
+	defaultCompanionName   = "luxview-games"
+	defaultRegistryFile    = "/vrising-data/luxview-games-servers.json"
+	legacyRegistryFile     = "/vrising-data/games-companion-servers.json"
 	defaultDockerNetwork   = "game-net"
 	defaultCustomDataPath  = "/data"
 	platformReservedCPU    = 1.0
@@ -49,9 +50,9 @@ const (
 	defaultGameMemory      = 4 * 1024 * 1024 * 1024
 	defaultCustomCPU       = 0.5
 	defaultCustomMemory    = 512 * 1024 * 1024
-	serverLabelManaged     = "luxview.games-companion"
-	serverLabelID          = "luxview.games-companion.id"
-	serverLabelTemplate    = "luxview.games-companion.template"
+	serverLabelManaged     = "luxview.games"
+	serverLabelID          = "luxview.games.id"
+	serverLabelTemplate    = "luxview.games.template"
 	appLabelManaged        = "luxview.managed"
 	appLabelName           = "luxview.app"
 	vrisingTemplateID      = "vrising"
@@ -397,17 +398,35 @@ func managedConfigFields(tmpl *GameTemplate) []ConfigField {
 }
 
 func loadRegistry() ServerRegistry {
-	file, err := os.Open(registryFile)
+	return loadRegistryFromPaths(registryFile, legacyRegistryFile)
+}
+
+func loadRegistryFromPaths(primaryPath string, fallbackPath string) ServerRegistry {
+	registry, loaded := readRegistry(primaryPath)
+	if loaded {
+		return registry
+	}
+	if primaryPath != fallbackPath {
+		registry, loaded = readRegistry(fallbackPath)
+		if loaded {
+			return registry
+		}
+	}
+	return ServerRegistry{}
+}
+
+func readRegistry(path string) (ServerRegistry, bool) {
+	file, err := os.Open(path)
 	if err != nil {
-		return ServerRegistry{}
+		return ServerRegistry{}, false
 	}
 	defer file.Close()
 	var registry ServerRegistry
 	if err := json.NewDecoder(file).Decode(&registry); err != nil {
 		log.Println("registry decode error:", err)
-		return ServerRegistry{}
+		return ServerRegistry{}, true
 	}
-	return registry
+	return registry, true
 }
 
 func saveRegistry(registry ServerRegistry) error {
@@ -1382,7 +1401,7 @@ func main() {
 	mux.HandleFunc("POST /api/servers/{id}/config", auth(apiSetConfigHandler(cli)))
 	mux.HandleFunc("POST /api/servers/{id}/restart", auth(apiRestartHandler(cli)))
 
-	log.Println("games-companion listening on", listenAddr)
+	log.Println("luxview-games listening on", listenAddr)
 	log.Fatal(http.ListenAndServe(listenAddr, mux))
 }
 
@@ -1577,7 +1596,7 @@ const baseHTML = `{{define "base"}}<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Games Companion — Luxview</title>
+<title>Luxview Games</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#09090b;color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;font-size:14px;-webkit-font-smoothing:antialiased}
@@ -1633,7 +1652,7 @@ select option{background:#18181b}
 <nav class="nav">
   <a href="/" style="display:flex;align-items:center;gap:10px">
     <div class="nav-logo"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 8h10a5 5 0 0 1 4.8 3.6l.8 2.8a2.8 2.8 0 0 1-4.6 2.7L15.7 15H8.3L6 17.1a2.8 2.8 0 0 1-4.6-2.7l.8-2.8A5 5 0 0 1 7 8Zm1 3.2H6.6v1.4H5.2V14h1.4v1.4H8V14h1.4v-1.4H8v-1.4Zm8.8 1.1a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm2.2 3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" fill="currentColor"/></svg></div>
-    <span class="nav-title">Games Companion</span>
+    <span class="nav-title">Luxview Games</span>
   </a>
   <div class="nav-sep"></div>
   <span style="font-size:12px;color:#52525b">luxview.cloud</span>
@@ -1655,7 +1674,7 @@ const loginTmpl = `{{define "content"}}
   <div style="width:100%;max-width:380px">
     <div style="text-align:center;margin-bottom:32px">
       <div style="width:56px;height:56px;background:linear-gradient(135deg,#fbbf24,#f59e0b);border-radius:14px;display:flex;align-items:center;justify-content:center;color:#4c1d95;margin:0 auto 16px;box-shadow:0 0 30px rgba(251,191,36,.25)"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:30px;height:30px;display:block"><path d="M7 8h10a5 5 0 0 1 4.8 3.6l.8 2.8a2.8 2.8 0 0 1-4.6 2.7L15.7 15H8.3L6 17.1a2.8 2.8 0 0 1-4.6-2.7l.8-2.8A5 5 0 0 1 7 8Zm1 3.2H6.6v1.4H5.2V14h1.4v1.4H8V14h1.4v-1.4H8v-1.4Zm8.8 1.1a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm2.2 3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" fill="currentColor"/></svg></div>
-      <h1 style="font-size:22px;font-weight:700;margin-bottom:6px">Games Companion</h1>
+      <h1 style="font-size:22px;font-weight:700;margin-bottom:6px">Luxview Games</h1>
       <p style="font-size:13px;color:#71717a">Acesso restrito ao gerenciamento de servidores</p>
     </div>
     <div class="card">

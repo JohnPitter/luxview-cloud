@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Github, Server, GitBranch, Loader2, Plus, Rocket, Settings } from 'lucide-react';
+import { ArrowLeft, Github, Server, GitBranch, Loader2, Plus, Rocket, Settings, Gamepad2 } from 'lucide-react';
 import { DeployWizard, type DeployConfig } from '../components/deploy/DeployWizard';
 import { PillButton } from '../components/common/PillButton';
 import { PageTour } from '../components/common/PageTour';
@@ -13,9 +13,10 @@ import { githubApi, type GithubRepo } from '../api/github';
 import { analyzeApi, aiSettingsApi, type AnalysisResult } from '../api/analyze';
 import { appsApi } from '../api/apps';
 import { repositoriesApi, type LuxViewRepository } from '../api/repositories';
+import { gameServersApi, type GameTemplate } from '../api/gameServers';
 import { newAppTourSteps } from '../tours/newApp';
 
-type AppSource = 'github' | 'luxview';
+type AppSource = 'github' | 'luxview' | 'game';
 
 export function NewApp() {
   const navigate = useNavigate();
@@ -59,6 +60,15 @@ export function NewApp() {
   const deployedRef = useRef(false);
   const wizardEnvVarsRef = useRef<Record<string, string>>({});
 
+  // Game server flow
+  const [gameTemplates, setGameTemplates] = useState<GameTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<GameTemplate | null>(null);
+  const [gameName, setGameName] = useState('');
+  const [gameSubdomain, setGameSubdomain] = useState('');
+  const [gameDataVolume, setGameDataVolume] = useState('');
+  const [deployingGame, setDeployingGame] = useState(false);
+
   useEffect(() => {
     fetchApps();
   }, [fetchApps]);
@@ -101,6 +111,16 @@ export function NewApp() {
       .then((s) => setAiEnabled(s.aiEnabled))
       .catch(() => setAiEnabled(false));
   }, []);
+
+  useEffect(() => {
+    if (source !== 'game') return;
+    setLoadingTemplates(true);
+    gameServersApi
+      .getTemplates()
+      .then(setGameTemplates)
+      .catch(() => addNotification({ type: 'error', title: 'Falha ao carregar templates de jogos' }))
+      .finally(() => setLoadingTemplates(false));
+  }, [source, addNotification]);
 
   // Cleanup: delete app if user abandons the wizard without deploying
   const deleteApp = useAppsStore((s) => s.deleteApp);
@@ -278,6 +298,32 @@ export function NewApp() {
     }
   };
 
+  const handleDeployGame = async () => {
+    if (!selectedTemplate || !gameName || !gameSubdomain) return;
+    setDeployingGame(true);
+    try {
+      const app = await gameServersApi.createGameServer({
+        name: gameName,
+        subdomain: gameSubdomain,
+        appType: 'game',
+        gameConfig: {
+          templateId: selectedTemplate.id,
+          image: selectedTemplate.defaultImage,
+          gamePort: selectedTemplate.defaultGamePort,
+          queryPort: selectedTemplate.defaultQueryPort,
+          dataVolume: gameDataVolume || undefined,
+        },
+      });
+      await appsApi.deploy(app.id);
+      addNotification({ type: 'success', title: 'Servidor de jogo iniciado' });
+      navigate(`/dashboard/apps/${app.id}`);
+    } catch {
+      addNotification({ type: 'error', title: 'Falha ao criar servidor de jogo' });
+    } finally {
+      setDeployingGame(false);
+    }
+  };
+
   return (
     <div className="animate-fade-in">
       <PageTour tourId="newApp" steps={newAppTourSteps} autoStart />
@@ -342,6 +388,24 @@ export function NewApp() {
                   {t('newApp.sourceGitHub')}
                 </p>
                 <p className="text-xs text-zinc-500 mt-0.5">{t('newApp.sourceGitHubDesc')}</p>
+              </div>
+            </div>
+          </GlassCard>
+          <GlassCard
+            padding="md"
+            hover
+            className="cursor-pointer"
+            onClick={() => setSource('game')}
+          >
+            <div className="flex items-center gap-4">
+              <div className="p-2 rounded-lg bg-violet-500/10">
+                <Gamepad2 size={20} className="text-violet-400" />
+              </div>
+              <div>
+                <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-zinc-900'}`}>
+                  Servidor de Jogo
+                </p>
+                <p className="text-xs text-zinc-500 mt-0.5">Inicie um servidor dedicado (V Rising, etc.)</p>
               </div>
             </div>
           </GlassCard>
@@ -459,6 +523,113 @@ export function NewApp() {
                 </div>
               )}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Game server flow */}
+      {source === 'game' && (
+        <div className="max-w-xl mx-auto space-y-4">
+          {loadingTemplates ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="animate-spin text-zinc-400" size={24} />
+            </div>
+          ) : (
+            <>
+              {/* Template selector */}
+              <div>
+                <p className={`text-xs text-zinc-500 mb-2`}>Selecione o jogo</p>
+                <div className="space-y-2">
+                  {gameTemplates.map((tpl) => (
+                    <GlassCard
+                      key={tpl.id}
+                      padding="sm"
+                      hover
+                      className={`cursor-pointer border-l-2 transition-colors ${
+                        selectedTemplate?.id === tpl.id
+                          ? 'border-violet-500 bg-violet-500/5'
+                          : 'border-transparent'
+                      }`}
+                      onClick={() => {
+                        setSelectedTemplate(tpl);
+                        if (!gameName) setGameName(tpl.displayName);
+                        if (!gameSubdomain) setGameSubdomain(tpl.id.toLowerCase().replace(/[^a-z0-9-]/g, '-'));
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-1.5 rounded-lg bg-violet-500/10">
+                          <Gamepad2 size={14} className="text-violet-400" />
+                        </div>
+                        <div>
+                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-zinc-900'}`}>
+                            {tpl.displayName}
+                          </p>
+                          <p className="text-xs text-zinc-500">{tpl.description}</p>
+                        </div>
+                      </div>
+                    </GlassCard>
+                  ))}
+                </div>
+              </div>
+
+              {selectedTemplate && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-zinc-500 mb-1 block">Nome do servidor</label>
+                    <input
+                      type="text"
+                      value={gameName}
+                      onChange={(e) => setGameName(e.target.value)}
+                      placeholder={selectedTemplate.displayName}
+                      className={`w-full px-3 py-2 text-sm rounded-lg border ${
+                        isDark
+                          ? 'bg-white/5 border-white/10 text-white'
+                          : 'bg-black/5 border-black/10 text-zinc-900'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-500 mb-1 block">Subdomínio (identificador)</label>
+                    <input
+                      type="text"
+                      value={gameSubdomain}
+                      onChange={(e) => setGameSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                      placeholder={selectedTemplate.id}
+                      className={`w-full px-3 py-2 text-sm rounded-lg border font-mono ${
+                        isDark
+                          ? 'bg-white/5 border-white/10 text-white'
+                          : 'bg-black/5 border-black/10 text-zinc-900'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-500 mb-1 block">
+                      Volume de dados existente <span className="text-zinc-600">(opcional — para migrar servidor existente)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={gameDataVolume}
+                      onChange={(e) => setGameDataVolume(e.target.value)}
+                      placeholder="ex: vrising-data"
+                      className={`w-full px-3 py-2 text-sm rounded-lg border font-mono ${
+                        isDark
+                          ? 'bg-white/5 border-white/10 text-white'
+                          : 'bg-black/5 border-black/10 text-zinc-900'
+                      }`}
+                    />
+                  </div>
+                  <PillButton
+                    variant="primary"
+                    size="md"
+                    icon={deployingGame ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />}
+                    onClick={handleDeployGame}
+                    disabled={deployingGame || !gameName || !gameSubdomain}
+                  >
+                    {deployingGame ? 'Iniciando...' : 'Criar e Iniciar Servidor'}
+                  </PillButton>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

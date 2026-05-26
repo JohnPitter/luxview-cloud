@@ -32,6 +32,7 @@ import { AlertConfig } from '../components/monitoring/AlertConfig';
 import { RuntimeLogs } from '../components/monitoring/RuntimeLogs';
 import { ServiceCard } from '../components/services/ServiceCard';
 import { AddServiceDialog } from '../components/services/AddServiceDialog';
+import { GameConfigPanel } from '../components/games/GameConfigPanel';
 import { appDetailTourSteps } from '../tours/appDetail';
 import { useAppsStore } from '../stores/apps.store';
 import { useThemeStore } from '../stores/theme.store';
@@ -47,7 +48,7 @@ import { DeployAnalysis } from '../components/deploy/DeployAnalysis';
 import { CustomDomainSettings } from '../components/apps/CustomDomainSettings';
 import { ActionRunList } from '../components/actions/ActionRunList';
 
-type Tab = 'overview' | 'deployments' | 'logs' | 'env' | 'services' | 'metrics' | 'alerts' | 'actions' | 'settings';
+type Tab = 'overview' | 'deployments' | 'logs' | 'env' | 'services' | 'metrics' | 'alerts' | 'actions' | 'settings' | 'game';
 
 export function AppDetail() {
   const { t } = useTranslation();
@@ -57,7 +58,9 @@ export function AppDetail() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const addNotification = useNotificationsStore((s) => s.add);
 
-  const tabs: Array<{ id: Tab; label: string }> = [
+  const isGame = app?.appType === 'game';
+
+  const webTabs: Array<{ id: Tab; label: string }> = [
     { id: 'overview', label: t('app.tabs.overview') },
     { id: 'deployments', label: t('app.tabs.deployments') },
     { id: 'logs', label: t('app.tabs.logs') },
@@ -68,6 +71,16 @@ export function AppDetail() {
     { id: 'actions', label: t('app.tabs.actions') },
     { id: 'settings', label: t('app.tabs.settings') },
   ];
+
+  const gameTabs: Array<{ id: Tab; label: string }> = [
+    { id: 'overview', label: t('app.tabs.overview') },
+    { id: 'game', label: 'Configurações' },
+    { id: 'logs', label: t('app.tabs.logs') },
+    { id: 'metrics', label: t('app.tabs.metrics') },
+    { id: 'settings', label: t('app.tabs.settings') },
+  ];
+
+  const tabs = isGame ? gameTabs : webTabs;
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [deployments, setDeployments] = useState<Deployment[]>([]);
@@ -476,15 +489,22 @@ export function AppDetail() {
               >
                 {app.name}
               </h1>
-              <a
-                href={`https://${app.subdomain}.luxview.cloud`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs text-zinc-500 hover:text-amber-400 transition-colors"
-              >
-                {app.subdomain}.luxview.cloud
-                <ExternalLink size={10} />
-              </a>
+              {isGame ? (
+                <span className="text-xs text-zinc-500">
+                  UDP :{app.gameConfig?.gamePort ?? '?'}
+                  {app.gameConfig?.queryPort ? ` · Query :${app.gameConfig.queryPort}` : ''}
+                </span>
+              ) : (
+                <a
+                  href={`https://${app.subdomain}.luxview.cloud`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs text-zinc-500 hover:text-amber-400 transition-colors"
+                >
+                  {app.subdomain}.luxview.cloud
+                  <ExternalLink size={10} />
+                </a>
+              )}
             </div>
           </div>
         </div>
@@ -523,7 +543,7 @@ export function AppDetail() {
               </PillButton>
             </>
           )}
-          {app.status === 'error' && (
+          {!isGame && app.status === 'error' && (
             <PillButton
               variant="ghost"
               size="sm"
@@ -534,28 +554,32 @@ export function AppDetail() {
               {t('app.actions.analyzeFailure')}
             </PillButton>
           )}
-          <PillButton
-            variant="ghost"
-            size="sm"
-            disabled={analyzing || actionPending || ['building', 'deploying'].includes(app.status)}
-            onClick={() => handleAnalyze('first-deploy')}
-            icon={analyzing && analysisMode === 'first-deploy'
-              ? <Loader2 size={14} className="animate-spin" />
-              : <Sparkles size={14} />}
-          >
-            {t('app.actions.reanalyze')}
-          </PillButton>
-          <PillButton
-            variant="primary"
-            size="sm"
-            disabled={actionPending || ['building', 'deploying'].includes(app.status)}
-            onClick={() => { sawTransitionalRef.current = false; setActionPending(true); deployApp(appId!).catch(() => setActionPending(false)); }}
-            icon={['building', 'deploying'].includes(app.status) || actionPending
-              ? <Loader2 size={14} className="animate-spin" />
-              : <Rocket size={14} />}
-          >
-            {['building', 'deploying'].includes(app.status) ? t('app.actions.deploying') : t('app.actions.deploy')}
-          </PillButton>
+          {!isGame && (
+            <PillButton
+              variant="ghost"
+              size="sm"
+              disabled={analyzing || actionPending || ['building', 'deploying'].includes(app.status)}
+              onClick={() => handleAnalyze('first-deploy')}
+              icon={analyzing && analysisMode === 'first-deploy'
+                ? <Loader2 size={14} className="animate-spin" />
+                : <Sparkles size={14} />}
+            >
+              {t('app.actions.reanalyze')}
+            </PillButton>
+          )}
+          {!isGame && (
+            <PillButton
+              variant="primary"
+              size="sm"
+              disabled={actionPending || ['building', 'deploying'].includes(app.status)}
+              onClick={() => { sawTransitionalRef.current = false; setActionPending(true); deployApp(appId!).catch(() => setActionPending(false)); }}
+              icon={['building', 'deploying'].includes(app.status) || actionPending
+                ? <Loader2 size={14} className="animate-spin" />
+                : <Rocket size={14} />}
+            >
+              {['building', 'deploying'].includes(app.status) ? t('app.actions.deploying') : t('app.actions.deploy')}
+            </PillButton>
+          )}
         </div>
       </div>
 
@@ -593,14 +617,21 @@ export function AppDetail() {
                 {t('app.info.title')}
               </h3>
               <div className="grid grid-cols-2 gap-4">
-                {[
+                {(isGame ? [
+                  { label: t('app.info.status'), value: <AppStatusBadge status={app.status} size="md" /> },
+                  { label: 'Template', value: app.gameConfig?.templateId ?? '—' },
+                  { label: 'Porta UDP', value: app.gameConfig?.gamePort ? `:${app.gameConfig.gamePort}` : '—' },
+                  { label: 'Porta Query', value: app.gameConfig?.queryPort ? `:${app.gameConfig.queryPort}` : '—' },
+                  { label: t('app.info.created'), value: formatRelativeTime(app.createdAt) },
+                  { label: t('app.info.lastUpdated'), value: formatRelativeTime(app.updatedAt) },
+                ] : [
                   { label: t('app.info.status'), value: <AppStatusBadge status={app.status} size="md" /> },
                   { label: t('app.info.stack'), value: app.stack },
                   { label: t('app.info.branch'), value: app.repoBranch },
                   { label: t('app.info.autoDeploy'), value: app.autoDeploy ? t('app.info.autoDeployEnabled') : t('app.info.autoDeployDisabled') },
                   { label: t('app.info.created'), value: formatRelativeTime(app.createdAt) },
                   { label: t('app.info.lastUpdated'), value: formatRelativeTime(app.updatedAt) },
-                ].map(({ label, value }) => (
+                ]).map(({ label, value }) => (
                   <div key={label}>
                     <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">
                       {label}
@@ -1011,6 +1042,11 @@ export function AppDetail() {
         {/* ==================== ACTIONS ==================== */}
         {activeTab === 'actions' && appId && (
           <ActionRunList appId={appId} />
+        )}
+
+        {/* ==================== GAME CONFIG ==================== */}
+        {activeTab === 'game' && appId && (
+          <GameConfigPanel appId={appId} />
         )}
 
         {/* ==================== SETTINGS ==================== */}

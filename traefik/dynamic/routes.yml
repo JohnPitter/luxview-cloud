@@ -62,12 +62,12 @@ http:
         - security-headers
       priority: 10
 
-    # Games Companion → game server management UI
-    games-companion:
+    # Luxview Games → game server management UI
+    luxview-games:
       rule: "Host(`games.luxview.cloud`)"
       entryPoints:
         - websecure
-      service: games-companion-svc
+      service: luxview-games-svc
       tls:
         certResolver: letsencrypt
       middlewares:
@@ -113,7 +113,7 @@ http:
         servers:
           - url: "http://luxview-roundcube:80"
 
-    games-companion-svc:
+    luxview-games-svc:
       loadBalancer:
         servers:
-          - url: "http://luxview-games-companion:8080"
+          - url: "http://luxview-games:8080"
