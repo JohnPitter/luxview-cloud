@@ -63,8 +63,8 @@ func (hc *HealthChecker) CheckAll(ctx context.Context) {
 	}
 
 	for _, app := range apps {
-		// Skip health checks for maintenance/building/deploying apps
-		if app.Status == model.AppStatusMaintenance || app.Status == model.AppStatusBuilding || app.Status == "deploying" {
+		// Skip health checks for maintenance/building/deploying apps and game servers (UDP only)
+		if app.Status == model.AppStatusMaintenance || app.Status == model.AppStatusBuilding || app.Status == "deploying" || app.AppType == model.AppTypeGame {
 			continue
 		}
 		outcome := hc.checkApp(ctx, &app)
