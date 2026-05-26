@@ -29,6 +29,7 @@ export interface GameTemplate {
 
 export interface GameConfigResponse extends GameServerConfig {
   template?: GameTemplate;
+  serverIp?: string;
 }
 
 export interface GameServerStatus {

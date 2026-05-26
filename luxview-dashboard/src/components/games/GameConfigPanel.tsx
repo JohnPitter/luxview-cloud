@@ -121,7 +121,7 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
             <div className="flex items-center gap-2">
               <span className="text-xs text-zinc-500">Conexão:</span>
               <code className={`text-xs font-mono px-2 py-0.5 rounded-md ${isDark ? 'bg-zinc-800 text-amber-400' : 'bg-zinc-100 text-amber-600'}`}>
-                IP_DA_VPS:{config.gamePort}
+                {config.serverIp ?? '...'}:{config.gamePort}
               </code>
             </div>
 

@@ -74,8 +74,9 @@ func (h *GameServerHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	type response struct {
 		*model.GameServerConfig
 		Template *model.GameTemplate `json:"template,omitempty"`
+		ServerIP string              `json:"serverIp"`
 	}
-	writeJSON(w, http.StatusOK, response{cfg, tmpl})
+	writeJSON(w, http.StatusOK, response{cfg, tmpl, h.serverIP})
 }
 
 // UpdateConfig saves new game settings and restarts the container.

@@ -40,8 +40,8 @@ import { useNotificationsStore } from '../stores/notifications.store';
 import { useMetricsLive } from '../hooks/useMetricsLive';
 import { formatBytes, formatPercent, formatRelativeTime } from '../lib/format';
 import { deploymentsApi, type Deployment } from '../api/deployments';
-import { servicesApi, type AppService, type ServiceType } from '../api/services';
-import { alertsApi, type Alert, type CreateAlertPayload } from '../api/alerts';
+import { servicesApi, type AppService } from '../api/services';
+import { alertsApi, type Alert } from '../api/alerts';
 import { appsApi } from '../api/apps';
 import { analyzeApi, type AnalysisResult } from '../api/analyze';
 import { DeployAnalysis } from '../components/deploy/DeployAnalysis';
@@ -74,7 +74,7 @@ export function AppDetail() {
 
   const gameTabs: Array<{ id: Tab; label: string }> = [
     { id: 'overview', label: t('app.tabs.overview') },
-    { id: 'game', label: 'Configurações' },
+    { id: 'game', label: 'Configurações do Jogo' },
     { id: 'logs', label: t('app.tabs.logs') },
     { id: 'metrics', label: t('app.tabs.metrics') },
     { id: 'settings', label: t('app.tabs.settings') },
