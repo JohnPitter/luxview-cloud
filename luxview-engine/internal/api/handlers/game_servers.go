@@ -157,6 +157,9 @@ func (h *GameServerHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status, _ := h.gameServerSvc.QueryStatus(ctx, cfg, h.serverIP)
+	// Query via internal Docker network (container name) so the engine
+	// can reach the game server without hairpinning through the public IP.
+	containerAddr := service.ContainerName(app.Subdomain)
+	status, _ := h.gameServerSvc.QueryStatus(ctx, cfg, containerAddr)
 	writeJSON(w, http.StatusOK, status)
 }
