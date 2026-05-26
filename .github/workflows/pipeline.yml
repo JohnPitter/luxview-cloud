@@ -113,5 +113,6 @@ jobs:
             cd /opt/luxview-cloud
             git fetch origin main
             git reset --hard origin/main
-            docker compose up -d --build dashboard engine
+            docker compose rm -sf engine dashboard || true
+            docker compose up -d --build engine dashboard
             docker image prune -f
