@@ -245,6 +245,9 @@ services:
       dockerfile: Dockerfile
     container_name: luxview-vrising
     restart: unless-stopped
+    cpus: "1.5"
+    mem_limit: 5g
+    memswap_limit: 5g
     ports:
       - "27015:27015/udp"   # Game traffic
       - "27016:27016/udp"   # Steam query
@@ -289,6 +292,7 @@ services:
       - VRISING_MAX_USERS=${VRISING_MAX_USERS:-40}
     networks:
       - traefik-public
+      - game-net
     depends_on:
       - traefik
 
