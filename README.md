@@ -38,7 +38,13 @@ Think of it as your own **Heroku / Railway / Render** — but you own the infras
 | **Managed Services** | Provision PostgreSQL, Redis, MongoDB, or RabbitMQ per app |
 | **DB Explorer** | Browse tables, view schemas, and execute SQL queries directly in the dashboard |
 | **Storage Explorer** | Upload, download, and manage files in your app's local storage volumes |
+| **Git Hosting** | Self-hosted Git repositories with HTTP push/pull, branches, tags, commits, and code browser |
+| **Pull Requests** | Open, review, and merge pull requests within the platform's own Git hosting |
 | **Email Hosting** | Managed email service with mailbox provisioning and Roundcube webmail |
+| **Analytics** | Page view tracking, geographic data (GeoIP), and usage dashboards |
+| **Audit Logs** | Full audit trail of every user action on the platform |
+| **Backups** | Scheduled and on-demand database backups with restore support |
+| **GitHub Actions** | Trigger and monitor GitHub Actions workflows directly from the dashboard |
 | **Environment Variables** | Encrypted at rest (AES-256-GCM), injected at deploy time |
 | **Real-time Metrics** | CPU, RAM, and network usage per container — live in the dashboard |
 | **Real-time Logs** | SSE-streamed runtime logs (newest first, paginated) + full build logs |
@@ -46,6 +52,7 @@ Think of it as your own **Heroku / Railway / Render** — but you own the infras
 | **Rollback** | One-click rollback to any previous successful deployment |
 | **Alerts & Notifications** | Configure CPU/memory thresholds and get notified via persistent notifications |
 | **Resource Limits** | CPU and memory limits per app (cgroups-enforced) |
+| **Game Servers** | Manage dedicated game servers (e.g. V Rising) alongside regular apps |
 | **Internationalization** | Full i18n — English, Português (BR), Español. Auto-detects browser language |
 | **Guided Tours** | Interactive tutorials on every page via react-joyride. First-time onboarding included |
 | **GitHub OAuth** | Secure login via GitHub — no passwords to manage |
@@ -87,17 +94,25 @@ graph TB
             MAIL["Mailserver<br/>(docker-mailserver)"]
             ROUNDCUBE["Roundcube<br/>Webmail"]
         end
+
+        subgraph Games["Game Servers"]
+            GAMES["LuxView Games<br/>(Go API)"]
+            VRISING["V Rising<br/>Dedicated Server"]
+        end
     end
 
     USER -->|HTTPS| TRAEFIK
     TRAEFIK -->|"/api/*"| ENGINE
     TRAEFIK -->|"/"| DASHBOARD
+    TRAEFIK -->|"/git"| ENGINE
     TRAEFIK -->|"*.luxview.cloud"| Apps
     TRAEFIK -->|"mail.*"| ROUNDCUBE
+    TRAEFIK -->|"games.*"| GAMES
     ENGINE --> PG_PLATFORM
     ENGINE -->|"Docker API"| Apps
     ENGINE --> Shared
     ENGINE --> MAIL
+    GAMES -->|"Manage"| VRISING
     A1 -.-> PG_SHARED
     A2 -.-> REDIS
 
@@ -109,9 +124,10 @@ graph TB
     style REDIS fill:#DC382D,color:#fff,stroke:none
     style MONGO fill:#47A248,color:#fff,stroke:none
     style RABBIT fill:#FF6600,color:#fff,stroke:none
-
     style MAIL fill:#4A90D9,color:#fff,stroke:none
     style ROUNDCUBE fill:#37A3D9,color:#fff,stroke:none
+    style GAMES fill:#7C3AED,color:#fff,stroke:none
+    style VRISING fill:#5B21B6,color:#fff,stroke:none
 ```
 
 ### How the pieces fit together
@@ -119,15 +135,17 @@ graph TB
 | Component | Role | Tech |
 |---|---|---|
 | **Traefik** | Reverse proxy, SSL termination, wildcard routing | Traefik v3 |
-| **LuxView Engine** | REST API — builds, deploys, manages containers, provisions services | Go 1.26 + Chi |
-| **Dashboard** | Web UI — deploy wizard, app management, metrics, logs, DB explorer, file browser | React 19 + Vite + Tailwind |
+| **LuxView Engine** | REST API — builds, deploys, manages containers, provisions services, hosts Git | Go 1.26 + Chi |
+| **Dashboard** | Web UI — deploy wizard, app management, metrics, logs, DB explorer, file browser, Git hosting | React 19 + Vite + Tailwind |
 | **Docker Engine** | Runs isolated user app containers | Docker API |
-| **PostgreSQL (platform)** | Stores users, apps, deployments, services, metrics, alerts | PostgreSQL 16 |
+| **PostgreSQL (platform)** | Stores users, apps, deployments, services, metrics, alerts, repositories, analytics | PostgreSQL 16 |
 | **PostgreSQL (shared)** | User app databases — one isolated DB + user per app | PostgreSQL 16 |
 | **Redis / MongoDB / RabbitMQ** | Optional services provisioned per app | Managed containers |
 | **Local Storage** | File storage volumes per app | Docker volumes |
 | **Mailserver** | Email hosting with SMTP/IMAP | docker-mailserver |
 | **Roundcube** | Webmail client | Roundcube |
+| **LuxView Games** | Dedicated game server management API | Go 1.26 |
+| **V Rising** | Dedicated game server managed by LuxView Games | Containerized |
 
 ---
 
@@ -293,6 +311,50 @@ Every provisioned service enforces strict per-app isolation:
 
 ---
 
+## Git Hosting
+
+LuxView includes a built-in **self-hosted Git server** — no Gitea or GitLab required. Repositories are stored on the VPS and accessible over HTTP (same domain, `/git` route via Traefik).
+
+- **Repository browser** — navigate the file tree, view file contents, commit history, branches, and tags from the dashboard
+- **Pull Requests** — open, review, diff, and merge PRs entirely within the platform
+- **Push/pull via HTTP** — standard `git clone https://luxview.cloud/git/<repo>.git`
+- **Visibility control** — toggle repositories between public and private
+
+---
+
+## Game Servers
+
+LuxView Games is a standalone Go service that manages dedicated game server containers alongside the main platform. Servers are controlled through the same dashboard.
+
+**Supported servers:**
+
+| Game | Notes |
+|---|---|
+| **V Rising** | Fully managed dedicated server with configurable settings, auto-start, and log streaming |
+
+Game server containers are managed via the Docker API and exposed through Traefik routing, following the same pattern as regular apps.
+
+---
+
+## Analytics & Observability
+
+- **Page Views** — automatic tracking of dashboard page visits with GeoIP enrichment
+- **Usage Dashboard** — per-app and platform-wide statistics
+- **Audit Log** — every action (deploy, rollback, service creation, config change) is logged with timestamp, user, and IP
+- **Real-time Metrics** — per-container CPU, RAM, and network via Docker stats API
+- **Structured Logging** — zerolog-based JSON logs for all engine operations
+
+---
+
+## Backups
+
+- **On-demand backups** — trigger a backup for any app's database from the dashboard
+- **Scheduled backups** — background worker runs periodic snapshots
+- **Restore** — restore any backup directly from the UI
+- **Storage** — backups are stored in `/backups` on the VPS
+
+---
+
 ## Getting Started
 
 ### Prerequisites
@@ -359,7 +421,8 @@ make prod && make migrate
 | **Auth** | GitHub OAuth + JWT |
 | **Encryption** | AES-256-GCM (credentials at rest) |
 | **CI/CD** | GitHub Actions (build → security → deploy) |
-| **Observability** | Structured logging (zerolog), real-time metrics |
+| **Observability** | Structured logging (zerolog), real-time metrics, audit logs, analytics |
+| **Game Servers** | Go service + Docker (V Rising) |
 
 </div>
 
@@ -379,20 +442,32 @@ luxview-cloud/
     internal/
       api/                        # HTTP handlers + middleware + router
         handlers/
+          apps.go                 # App CRUD + deploy/rollback
+          deployments.go          # Deployment history + logs
+          services.go             # Service provisioning
           db_explorer.go          # DB Explorer + Storage explorer endpoints
+          git.go                  # Git HTTP backend (push/pull)
+          git_explorer.go         # Repository browser (tree, file, log, branches, tags)
+          pull_requests.go        # Pull request lifecycle
+          actions.go              # GitHub Actions integration
+          analytics.go            # Page view + GeoIP analytics
+          audit_handler.go        # Audit log endpoints
+          backup_handler.go       # Backup + restore endpoints
+          repositories.go         # Hosted repository management
           settings_handler.go     # Platform settings (maintenance mode, etc.)
+          metrics.go              # Container metrics (SSE)
       buildpack/                  # Stack detection (node, python, go, rust, java, docker, static)
       config/                     # Environment config loader
-      model/                      # Domain models (App, Deployment, Service, Alert, Metric)
+      model/                      # Domain models (App, Deployment, Service, Alert, Metric, Repository, PullRequest...)
       repository/                 # PostgreSQL data access layer
-      service/                    # Business logic (deployer, container, provisioner, health, metrics)
-      worker/                     # Background workers (build, metrics, health, alerts, cleanup, stale deploys)
+      service/                    # Business logic (deployer, container, provisioner, health, metrics, git, backup...)
+      worker/                     # Background workers (build, metrics, health, alerts, cleanup, stale deploys, backups, analytics)
     pkg/                          # Shared packages (crypto, docker client, logger)
     migrations/                   # SQL migration files
 
   luxview-dashboard/              # React SPA frontend
     src/
-      api/                        # API client layer (apps, services, deployments, metrics)
+      api/                        # API client layer (apps, services, deployments, metrics, git, analytics...)
       components/                 # UI components (apps, deploy, monitoring, services, layout, common)
       hooks/                      # Custom React hooks
       i18n/                       # Internationalization setup + locale files (en, pt-BR, es)
@@ -400,15 +475,33 @@ luxview-cloud/
       pages/
         Landing.tsx               # Public landing page with feature toggles
         Dashboard.tsx             # Main dashboard overview
+        AppDetail.tsx             # Per-app management (deploy, metrics, logs, services)
         DbExplorer.tsx            # SQL editor + table browser + schema viewer
         StorageExplorer.tsx       # Storage explorer (upload, download, delete)
         EmailManager.tsx          # Email service management
+        Repositories.tsx          # Hosted repository list
+        RepositoryDetail.tsx      # Repository overview (visibility toggle)
+        RepositoryCode.tsx        # File tree + code viewer
+        RepositoryCommits.tsx     # Commit history
+        RepositoryBranches.tsx    # Branch management
+        RepositoryTags.tsx        # Tag list
+        PullRequests.tsx          # Pull request list
+        PullRequestDetail.tsx     # PR diff + review + merge
+        Analytics.tsx             # Platform analytics dashboard
+        Backups.tsx               # Backup management
         Resources.tsx             # Resource overview (all services across apps)
+        Admin.tsx                 # Admin panel
+        Status.tsx                # Platform status page
       stores/                     # Zustand state management
       tours/                      # Interactive guided tour step definitions per page
 
+  luxview-games/                  # Game server management API (Go)
+    main.go                       # Games API + Docker management
+    games/vrising/                # V Rising server config + entrypoint
+
   traefik/                        # Traefik configuration
   scripts/                        # VPS setup, deploy, backup scripts
+  docs/                           # Runbooks and internal documentation
 ```
 
 ---
