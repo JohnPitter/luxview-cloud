@@ -37,6 +37,8 @@ type AppHandler struct {
 	auditSvc       *service.AuditService
 	webhookURL     string
 	webhookSecret  string
+	gameConfigRepo *repository.GameServerConfigRepo
+	gameServerSvc  *service.GameServerService
 }
 
 func NewAppHandler(
@@ -52,6 +54,8 @@ func NewAppHandler(
 	auditSvc *service.AuditService,
 	webhookURL string,
 	webhookSecret string,
+	gameConfigRepo *repository.GameServerConfigRepo,
+	gameServerSvc *service.GameServerService,
 ) *AppHandler {
 	return &AppHandler{
 		appRepo:        appRepo,
@@ -67,6 +71,8 @@ func NewAppHandler(
 		auditSvc:       auditSvc,
 		webhookURL:     webhookURL,
 		webhookSecret:  webhookSecret,
+		gameConfigRepo: gameConfigRepo,
+		gameServerSvc:  gameServerSvc,
 	}
 }
 
@@ -82,10 +88,23 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	isGame := req.AppType == model.AppTypeGame
+
 	// Validate
-	if req.Name == "" || req.Subdomain == "" || (req.RepoURL == "" && req.RepositoryID == nil) {
-		writeError(w, http.StatusBadRequest, "name, subdomain, and repo_url or repository_id are required")
-		return
+	if isGame {
+		if req.Name == "" || req.Subdomain == "" {
+			writeError(w, http.StatusBadRequest, "name and subdomain are required")
+			return
+		}
+		if req.GameConfig == nil || req.GameConfig.TemplateID == "" || req.GameConfig.Image == "" || req.GameConfig.GamePort == 0 {
+			writeError(w, http.StatusBadRequest, "game_config with template_id, image and game_port are required")
+			return
+		}
+	} else {
+		if req.Name == "" || req.Subdomain == "" || (req.RepoURL == "" && req.RepositoryID == nil) {
+			writeError(w, http.StatusBadRequest, "name, subdomain, and repo_url or repository_id are required")
+			return
+		}
 	}
 
 	subdomain := strings.ToLower(req.Subdomain)
@@ -114,6 +133,66 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusForbidden, fmt.Sprintf("Plan limit reached: your %s plan allows max %d apps", user.Plan.Name, user.Plan.MaxApps))
 			return
 		}
+	}
+
+	envVarsEncrypted := json.RawMessage(`"{}"`)
+
+	if isGame {
+		gc := req.GameConfig
+		dataDir := gc.DataDir
+		if dataDir == "" {
+			dataDir = "/data"
+		}
+		protocol := "udp"
+
+		resourceLimits := model.ResourceLimits{CPU: "1.0", Memory: "4g", Disk: "1g"}
+
+		app := &model.App{
+			UserID:    userID,
+			Name:      req.Name,
+			Subdomain: subdomain,
+			Stack:     "game",
+			Status:    model.AppStatusStopped,
+			AppType:   model.AppTypeGame,
+			EnvVars:   envVarsEncrypted,
+			ResourceLimits: resourceLimits,
+			AutoDeploy: false,
+		}
+
+		if err := h.appRepo.Create(ctx, app); err != nil {
+			log.Error().Err(err).Msg("failed to create game server app")
+			writeError(w, http.StatusInternalServerError, "failed to create app")
+			return
+		}
+
+		gameCfg := &model.GameServerConfig{
+			AppID:        app.ID,
+			TemplateID:   gc.TemplateID,
+			Image:        gc.Image,
+			GamePort:     gc.GamePort,
+			QueryPort:    gc.QueryPort,
+			DataDir:      dataDir,
+			DataVolume:   gc.DataVolume,
+			Protocol:     protocol,
+			ConfigFields: map[string]string{},
+		}
+		if err := h.gameConfigRepo.Create(ctx, gameCfg); err != nil {
+			log.Error().Err(err).Msg("failed to create game server config")
+			_ = h.appRepo.Delete(ctx, app.ID)
+			writeError(w, http.StatusInternalServerError, "failed to create game config")
+			return
+		}
+
+		app.GameConfig = gameCfg
+		log.Info().Str("app", app.Subdomain).Str("template", gc.TemplateID).Msg("game server created")
+		h.auditSvc.Log(ctx, service.AuditEntry{
+			ActorID:      user.ID, ActorUsername: user.Username,
+			Action: "create", ResourceType: "app", ResourceID: app.ID.String(), ResourceName: app.Subdomain,
+			NewValues: map[string]string{"name": app.Name, "subdomain": app.Subdomain, "type": "game", "template": gc.TemplateID},
+			IPAddress: clientIP(r),
+		})
+		writeJSON(w, http.StatusCreated, app)
+		return
 	}
 
 	branch := req.RepoBranch
@@ -145,8 +224,6 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 		autoDeploy = *req.AutoDeploy
 	}
 
-	// Encrypt env vars
-	var envVarsEncrypted json.RawMessage
 	if len(req.EnvVars) > 0 {
 		envJSON, _ := json.Marshal(req.EnvVars)
 		encrypted, err := crypto.Encrypt(string(envJSON), h.encryptionKey)
@@ -155,8 +232,6 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		envVarsEncrypted = json.RawMessage(`"` + encrypted + `"`)
-	} else {
-		envVarsEncrypted = json.RawMessage(`"{}"`)
 	}
 
 	app := &model.App{
@@ -167,6 +242,7 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RepoURL:      repoURL,
 		RepoBranch:   branch,
 		Status:       model.AppStatusStopped,
+		AppType:      model.AppTypeWeb,
 		EnvVars:      envVarsEncrypted,
 		ResourceLimits: model.ResourceLimits{
 			CPU:    "0.5",
@@ -564,6 +640,32 @@ func (h *AppHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 	}
 	if app.UserID != userID {
 		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	// Game servers bypass the git/build pipeline and start directly.
+	if app.AppType == model.AppTypeGame {
+		gameCfg, err := h.gameConfigRepo.GetByAppID(ctx, appID)
+		if err != nil || gameCfg == nil {
+			writeError(w, http.StatusInternalServerError, "game config not found")
+			return
+		}
+		go func() {
+			containerID, startErr := h.gameServerSvc.Start(ctx, app, gameCfg)
+			status := model.AppStatusRunning
+			if startErr != nil {
+				log.Error().Err(startErr).Str("app", app.Subdomain).Msg("game server start failed")
+				status = model.AppStatusError
+				containerID = app.ContainerID
+			}
+			_ = h.appRepo.UpdateStatus(ctx, app.ID, status, containerID)
+		}()
+		h.auditSvc.Log(ctx, service.AuditEntry{
+			ActorID: user.ID, ActorUsername: user.Username,
+			Action: "deploy", ResourceType: "app", ResourceID: app.ID.String(), ResourceName: app.Subdomain,
+			IPAddress: clientIP(r),
+		})
+		writeJSON(w, http.StatusAccepted, map[string]string{"message": "game server starting"})
 		return
 	}
 

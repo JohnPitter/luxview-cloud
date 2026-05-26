@@ -1,7 +1,8 @@
 import { api } from './client';
 
 export type AppStatus = 'building' | 'running' | 'stopped' | 'error' | 'sleeping' | 'deploying' | 'maintenance';
-export type Stack = 'node' | 'python' | 'go' | 'rust' | 'static' | 'docker';
+export type Stack = 'node' | 'python' | 'go' | 'rust' | 'static' | 'docker' | 'game';
+export type AppType = 'web' | 'game';
 
 export interface App {
   id: string;
@@ -23,13 +24,42 @@ export interface App {
     disk: string;
   };
   autoDeploy: boolean;
+  appType: AppType;
   customDomain?: string | null;
+  gameConfig?: GameServerConfig | null;
   createdAt: string;
   updatedAt: string;
   // Computed fields from API
   cpuPercent?: number;
   memoryBytes?: number;
   lastDeployAt?: string;
+}
+
+export interface GameServerConfig {
+  id: string;
+  appId: string;
+  templateId: string;
+  image: string;
+  gamePort: number;
+  queryPort?: number;
+  dataDir: string;
+  dataVolume?: string;
+  protocol: string;
+  configFields: Record<string, string>;
+}
+
+export interface CreateGameServerPayload {
+  name: string;
+  subdomain: string;
+  appType: 'game';
+  gameConfig: {
+    templateId: string;
+    image: string;
+    gamePort: number;
+    queryPort?: number;
+    dataDir?: string;
+    dataVolume?: string;
+  };
 }
 
 export interface CreateAppPayload {

@@ -45,6 +45,8 @@ type Deps struct {
 	PushEventSvc    *service.PushEventService
 	PullRequestRepo *repository.PullRequestRepo
 	PullRequestSvc  *service.PullRequestService
+	GameConfigRepo  *repository.GameServerConfigRepo
+	GameServerSvc   *service.GameServerService
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -80,7 +82,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(deps.Config, deps.UserRepo, deps.SettingsRepo, deps.EncryptKey, deps.AuditSvc, deps.GitHubAppSvc)
 	webhookURL := deps.Config.BaseURL + "/api/webhooks/github"
-	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.RepositoryRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.RepositorySvc, deps.BuildQueue, deps.EncryptKey, deps.AuditSvc, webhookURL, deps.Config.InternalToken)
+	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.RepositoryRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.RepositorySvc, deps.BuildQueue, deps.EncryptKey, deps.AuditSvc, webhookURL, deps.Config.InternalToken, deps.GameConfigRepo, deps.GameServerSvc)
 	deployHandler := handlers.NewDeploymentHandler(deps.DeployRepo, deps.AppRepo, deps.BuildQueue, deps.AuditSvc)
 	actionHandler := handlers.NewActionHandler(deps.ActionRepo, deps.AppRepo, deps.ActionSvc, deps.AuditSvc)
 	serviceHandler := handlers.NewServiceHandler(deps.ServiceRepo, deps.AppRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)
@@ -105,6 +107,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	backupHandler := handlers.NewBackupHandler(deps.BackupSvc, deps.AuditSvc)
 	domainChecker := service.NewDomainChecker(deps.Config.VPSPublicIP, deps.Config.AcmeStorePath)
 	domainCheckHandler := handlers.NewDomainCheckHandler(deps.AppRepo, domainChecker)
+	gameServerHandler := handlers.NewGameServerHandler(deps.AppRepo, deps.GameConfigRepo, deps.GameServerSvc, deps.Config.VPSPublicIP)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 	optionalAuthMiddleware := middleware.OptionalAuth(deps.Config.JWTSecret, deps.UserRepo)
@@ -216,6 +219,13 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Get("/apps/{id}/logs", appHandler.ContainerLogs)
 			r.Get("/apps/{id}/logs/stream", appHandler.ContainerLogsStream)
 			r.Get("/apps/{id}/domain-check", domainCheckHandler.Check)
+
+			// AI Analyze
+			// Game servers
+			r.Get("/game-templates", gameServerHandler.ListTemplates)
+			r.Get("/apps/{id}/game-config", gameServerHandler.GetConfig)
+			r.Put("/apps/{id}/game-config", gameServerHandler.UpdateConfig)
+			r.Get("/apps/{id}/game-status", gameServerHandler.GetStatus)
 
 			// AI Analyze
 			r.Post("/apps/{id}/analyze", analyzeHandler.Analyze)

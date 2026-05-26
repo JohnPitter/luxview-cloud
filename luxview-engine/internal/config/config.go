@@ -65,6 +65,7 @@ type Config struct {
 	BuildTimeout int // seconds
 
 	AppNetwork    string // Docker network for user app containers
+	GameNetwork   string // Docker network for game server containers
 	InternalToken string
 
 	VPSPublicIP   string // Public IP A-record users must point custom domains to
@@ -133,6 +134,7 @@ func Load() (*Config, error) {
 		BuildTimeout: envInt("BUILD_TIMEOUT", 300),
 
 		AppNetwork:    envStr("APP_NETWORK", "luxview-net"),
+		GameNetwork:   envStr("GAME_NETWORK", "game-net"),
 		InternalToken: envStr("INTERNAL_TOKEN", ""),
 
 		VPSPublicIP:   envStr("VPS_PUBLIC_IP", ""),

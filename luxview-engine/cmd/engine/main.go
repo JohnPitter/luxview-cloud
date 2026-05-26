@@ -67,10 +67,12 @@ func main() {
 	auditSvc := service.NewAuditService(auditRepo)
 	mailboxRepo := repository.NewMailboxRepo(db)
 	backupRepo := repository.NewBackupRepo(db)
+	gameConfigRepo := repository.NewGameServerConfigRepo(db)
 
 	// Services
 	portManager := service.NewPortManager(appRepo, cfg.PortRangeStart, cfg.PortRangeEnd)
 	containerMgr := service.NewContainerManager(docker, cfg.AppNetwork)
+	gameServerSvc := service.NewGameServerService(docker, cfg.GameNetwork)
 	provisioner := service.NewProvisioner(serviceRepo, mailboxRepo, cfg, encryptionKey)
 	routerSvc := service.NewRouterService(appRepo, cfg.Domain)
 	repositorySvc := service.NewRepositoryService(repositoryRepo, cfg.RepositoryBasePath)
@@ -194,6 +196,8 @@ func main() {
 		BackupSvc:       backupSvc,
 		PullRequestRepo: pullRequestRepo,
 		PullRequestSvc:  pullRequestSvc,
+		GameConfigRepo:  gameConfigRepo,
+		GameServerSvc:   gameServerSvc,
 	})
 
 	// HTTP server

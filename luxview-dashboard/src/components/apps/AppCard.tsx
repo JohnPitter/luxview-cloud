@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ExternalLink, GitBranch, Clock } from 'lucide-react';
+import { ExternalLink, GitBranch, Clock, Gamepad2 } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { StatusDot } from '../common/StatusDot';
 import { AppStatusBadge } from './AppStatusBadge';
@@ -59,28 +59,41 @@ export function AppCard({ app, metrics }: AppCardProps) {
             >
               {app.name}
             </h3>
-            <a
-              href={`https://${app.subdomain}.luxview.cloud`}
-              onClick={(e) => e.stopPropagation()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-zinc-500 hover:text-amber-400 transition-colors"
-            >
-              {app.subdomain}.luxview.cloud
-              <ExternalLink size={10} />
-            </a>
+            {app.appType === 'game' ? (
+              <span className="text-xs text-zinc-500">
+                UDP :{app.gameConfig?.gamePort ?? '?'}
+              </span>
+            ) : (
+              <a
+                href={`https://${app.subdomain}.luxview.cloud`}
+                onClick={(e) => e.stopPropagation()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-zinc-500 hover:text-amber-400 transition-colors"
+              >
+                {app.subdomain}.luxview.cloud
+                <ExternalLink size={10} />
+              </a>
+            )}
           </div>
         </div>
 
-        {/* Stack badge */}
-        <span
-          className={`
-            text-[10px] font-bold px-2 py-0.5 rounded-md border
-            ${stackColors[app.stack] || 'bg-zinc-800 text-zinc-400 border-zinc-700'}
-          `}
-        >
-          {stackIcons[app.stack] || (app.stack || 'docker').toUpperCase()}
-        </span>
+        {/* Stack / type badge */}
+        {app.appType === 'game' ? (
+          <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border bg-violet-500/10 text-violet-400 border-violet-500/20">
+            <Gamepad2 size={10} />
+            GAME
+          </span>
+        ) : (
+          <span
+            className={`
+              text-[10px] font-bold px-2 py-0.5 rounded-md border
+              ${stackColors[app.stack] || 'bg-zinc-800 text-zinc-400 border-zinc-700'}
+            `}
+          >
+            {stackIcons[app.stack] || (app.stack || 'docker').toUpperCase()}
+          </span>
+        )}
       </div>
 
       {/* Status badge */}
@@ -127,8 +140,17 @@ export function AppCard({ app, metrics }: AppCardProps) {
       {/* Footer */}
       <div className="flex items-center justify-between text-[11px] text-zinc-500">
         <div className="flex items-center gap-1">
-          <GitBranch size={12} />
-          <span>{app.repoBranch}</span>
+          {app.appType === 'game' ? (
+            <>
+              <Gamepad2 size={12} />
+              <span>{app.gameConfig?.templateId ?? 'game'}</span>
+            </>
+          ) : (
+            <>
+              <GitBranch size={12} />
+              <span>{app.repoBranch}</span>
+            </>
+          )}
         </div>
         {app.lastDeployAt && (
           <div className="flex items-center gap-1">
