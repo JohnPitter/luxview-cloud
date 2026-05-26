@@ -280,6 +280,7 @@ func vrisingTemplate() model.GameTemplate {
 			)},
 			{Key: "VRGAME_GAME_MODE_TYPE", Label: "Modo de Jogo", Type: "select", Section: "Modo de Jogo", Options: sel("PvP", "PvP", "PvE", "PvE")},
 			{Key: "VRGAME_GAME_DIFFICULTY", Label: "Dificuldade", Type: "select", Section: "Modo de Jogo", Options: sel("Normal", "Normal", "Brutal", "Brutal")},
+			{Key: "VRISING_DIFFICULTY_PRESET", Label: "Preset de Dificuldade", Type: "text", Placeholder: "Opcional (sobrescreve preset)", Section: "Modo de Jogo"},
 			{Key: "VRGAME_CASTLE_DAMAGE_MODE", Label: "Dano em Castelos", Type: "select", Section: "Modo de Jogo", Options: sel("Never", "Nunca", "Always", "Sempre", "TimeRestricted", "Horário restrito")},
 			{Key: "VRGAME_PLAYER_DAMAGE_MODE", Label: "Dano entre Jogadores", Type: "select", Section: "Modo de Jogo", Options: sel("Always", "Sempre", "TimeRestricted", "Horário restrito")},
 			{Key: "VRGAME_CASTLE_HEART_DAMAGE_MODE", Label: "Dano ao Coração do Castelo", Type: "select", Section: "Modo de Jogo", Options: sel("CanBeDestroyedByPlayers", "Pode ser destruído", "CanBeSeizedOrDestroyedByPlayers", "Pode ser tomado ou destruído", "CannotBeDestroyed", "Indestrutível")},
@@ -334,8 +335,10 @@ func vrisingTemplate() model.GameTemplate {
 			{Key: "VRGAME_VAMPIRE_DAMAGE_RECEIVED", Label: "Dano Recebido", Type: "number", Placeholder: "1.0", Section: "Vampiros"},
 			{Key: "VRGAME_UNIT_HEALTH", Label: "Vida das Unidades", Type: "number", Placeholder: "1.0", Section: "Vampiros"},
 			{Key: "VRGAME_UNIT_POWER", Label: "Poder das Unidades", Type: "number", Placeholder: "1.0", Section: "Vampiros"},
+			{Key: "VRGAME_UNIT_LEVEL_INCREASE", Label: "Aumento de Nível das Unidades", Type: "number", Placeholder: "0", Section: "Vampiros"},
 			{Key: "VRGAME_VBLOOD_HEALTH", Label: "Vida dos V-Blood", Type: "number", Placeholder: "1.0", Section: "Vampiros"},
 			{Key: "VRGAME_VBLOOD_POWER", Label: "Poder dos V-Blood", Type: "number", Placeholder: "1.0", Section: "Vampiros"},
+			{Key: "VRGAME_VBLOOD_LEVEL_INCREASE", Label: "Aumento de Nível dos V-Blood", Type: "number", Placeholder: "0", Section: "Vampiros"},
 			// Avançado
 			{Key: "VRISING_FPS", Label: "FPS Máximo", Type: "number", Placeholder: "30", Section: "Avançado"},
 			{Key: "VRISING_LOWER_FPS_WHEN_EMPTY", Label: "Reduzir FPS quando vazio", Type: "select", Section: "Avançado", Options: yesNo},

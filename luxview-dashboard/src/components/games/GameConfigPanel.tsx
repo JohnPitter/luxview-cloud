@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Save, Loader2, Users, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Save, Loader2, Users, Wifi, WifiOff, RefreshCw, RotateCw } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { PillButton } from '../common/PillButton';
 import { useThemeStore } from '../../stores/theme.store';
@@ -10,7 +10,9 @@ interface GameConfigPanelProps {
   appId: string;
 }
 
-const POLL_INTERVAL = 30_000;
+const POLL_INTERVAL_IDLE = 30_000;
+const POLL_INTERVAL_RESTART = 5_000;
+const RESTART_TIMEOUT_MS = 5 * 60_000; // give up the "Reiniciando" label after 5 min
 
 export function GameConfigPanel({ appId }: GameConfigPanelProps) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -22,6 +24,9 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [restarting, setRestarting] = useState(false);
+  const restartingSinceRef = useRef<number>(0);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -40,25 +45,44 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
     try {
       const s = await gameServersApi.getStatus(appId);
       setStatus(s);
+      if (s.running && restartingSinceRef.current > 0) {
+        setRestarting(false);
+        restartingSinceRef.current = 0;
+        addNotification({ type: 'success', title: 'Servidor online novamente' });
+      }
     } catch {
       setStatus(null);
     } finally {
       setStatusLoading(false);
     }
-  }, [appId]);
+  }, [appId, addNotification]);
 
   useEffect(() => {
     loadConfig();
     loadStatus();
-    const interval = setInterval(loadStatus, POLL_INTERVAL);
-    return () => clearInterval(interval);
   }, [loadConfig, loadStatus]);
+
+  useEffect(() => {
+    const intervalMs = restarting ? POLL_INTERVAL_RESTART : POLL_INTERVAL_IDLE;
+    const interval = setInterval(() => {
+      loadStatus();
+      if (restarting && Date.now() - restartingSinceRef.current > RESTART_TIMEOUT_MS) {
+        setRestarting(false);
+        restartingSinceRef.current = 0;
+      }
+    }, intervalMs);
+    return () => clearInterval(interval);
+  }, [loadStatus, restarting]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
       await gameServersApi.updateConfig(appId, fields);
-      addNotification({ type: 'success', title: 'Configuração salva e servidor reiniciado' });
+      addNotification({ type: 'success', title: 'Configuração salva — servidor reiniciando' });
+      setRestarting(true);
+      restartingSinceRef.current = Date.now();
+      // Force an immediate status check (which will likely show offline) so the UI updates fast
+      setTimeout(loadStatus, 500);
     } catch {
       addNotification({ type: 'error', title: 'Falha ao salvar configuração' });
     } finally {
@@ -82,12 +106,37 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
 
   if (!config) return null;
 
-  // Group fields by section
   const templateFields = config.template?.configFields ?? [];
   const sections = Array.from(new Set(templateFields.map((f) => f.section ?? 'Geral')));
   const fieldsBySection = Object.fromEntries(
     sections.map((sec) => [sec, templateFields.filter((f) => (f.section ?? 'Geral') === sec)]),
   );
+  const currentSection = activeSection && sections.includes(activeSection) ? activeSection : sections[0];
+
+  const statusBadge = () => {
+    if (restarting) {
+      return (
+        <div className="flex items-center gap-2">
+          <RotateCw size={15} className="text-amber-400 animate-spin" />
+          <span className="text-sm font-medium text-amber-400">Reiniciando…</span>
+        </div>
+      );
+    }
+    if (status?.running) {
+      return (
+        <div className="flex items-center gap-2">
+          <Wifi size={15} className="text-emerald-400" />
+          <span className="text-sm font-medium text-emerald-400">Online</span>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center gap-2">
+        <WifiOff size={15} className="text-zinc-500" />
+        <span className="text-sm font-medium text-zinc-500">Offline</span>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -95,20 +144,9 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
       <GlassCard padding="sm">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-4">
-            {/* Online status */}
-            <div className="flex items-center gap-2">
-              {status?.running ? (
-                <Wifi size={15} className="text-emerald-400" />
-              ) : (
-                <WifiOff size={15} className="text-zinc-500" />
-              )}
-              <span className={`text-sm font-medium ${status?.running ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                {status?.running ? 'Online' : 'Offline'}
-              </span>
-            </div>
+            {statusBadge()}
 
-            {/* Player count */}
-            {status?.running && (
+            {status?.running && !restarting && (
               <div className="flex items-center gap-2">
                 <Users size={14} className="text-zinc-400" />
                 <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
@@ -117,7 +155,6 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
               </div>
             )}
 
-            {/* Connection info */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-zinc-500">Conexão:</span>
               <code className={`text-xs font-mono px-2 py-0.5 rounded-md ${isDark ? 'bg-zinc-800 text-amber-400' : 'bg-zinc-100 text-amber-600'}`}>
@@ -145,42 +182,65 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
             Atualizar
           </PillButton>
         </div>
+        {restarting && (
+          <div className={`mt-3 text-xs ${isDark ? 'text-amber-300/70' : 'text-amber-700/80'}`}>
+            O servidor está reiniciando com as novas configurações. Pode levar 2–3 minutos até voltar online.
+          </div>
+        )}
       </GlassCard>
 
-      {/* Config fields */}
-      {sections.map((section) => (
-        <GlassCard key={section}>
-          <h3 className={`text-sm font-semibold mb-4 ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-            {section}
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {fieldsBySection[section].map((fieldDef) => (
-              <div key={fieldDef.key}>
-                <label className="block text-xs text-zinc-500 mb-1.5">{fieldDef.label}</label>
-                {fieldDef.type === 'select' && fieldDef.options ? (
-                  <select
-                    value={fields[fieldDef.key] ?? ''}
-                    onChange={(e) => setFields({ ...fields, [fieldDef.key]: e.target.value })}
-                    className={inputClass}
-                  >
-                    {fieldDef.options.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type={fieldDef.type === 'password' ? 'password' : fieldDef.type === 'number' ? 'number' : 'text'}
-                    value={fields[fieldDef.key] ?? ''}
-                    onChange={(e) => setFields({ ...fields, [fieldDef.key]: e.target.value })}
-                    placeholder={fieldDef.placeholder ?? ''}
-                    className={inputClass}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-        </GlassCard>
-      ))}
+      {/* Section tabs */}
+      <div className="flex flex-wrap gap-2">
+        {sections.map((section) => {
+          const isActive = section === currentSection;
+          return (
+            <button
+              key={section}
+              type="button"
+              onClick={() => setActiveSection(section)}
+              className={`
+                px-3.5 py-1.5 rounded-full text-sm font-medium transition-all duration-200 border
+                ${isActive
+                  ? (isDark ? 'bg-amber-400/15 text-amber-300 border-amber-400/40' : 'bg-amber-100 text-amber-700 border-amber-300')
+                  : (isDark ? 'bg-zinc-900/40 text-zinc-400 border-zinc-800 hover:text-zinc-200 hover:border-zinc-700' : 'bg-white text-zinc-600 border-zinc-200 hover:text-zinc-900 hover:border-zinc-300')
+                }
+              `}
+            >
+              {section}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Active section fields */}
+      <GlassCard>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {fieldsBySection[currentSection]?.map((fieldDef) => (
+            <div key={fieldDef.key}>
+              <label className="block text-xs text-zinc-500 mb-1.5">{fieldDef.label}</label>
+              {fieldDef.type === 'select' && fieldDef.options ? (
+                <select
+                  value={fields[fieldDef.key] ?? ''}
+                  onChange={(e) => setFields({ ...fields, [fieldDef.key]: e.target.value })}
+                  className={inputClass}
+                >
+                  {fieldDef.options.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type={fieldDef.type === 'password' ? 'password' : fieldDef.type === 'number' ? 'number' : 'text'}
+                  value={fields[fieldDef.key] ?? ''}
+                  onChange={(e) => setFields({ ...fields, [fieldDef.key]: e.target.value })}
+                  placeholder={fieldDef.placeholder ?? ''}
+                  className={inputClass}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      </GlassCard>
 
       {/* Save button */}
       <div className="flex justify-end">
@@ -188,10 +248,10 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
           variant="primary"
           size="sm"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || restarting}
           icon={saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
         >
-          {saving ? 'Salvando...' : 'Salvar e Reiniciar'}
+          {saving ? 'Salvando...' : restarting ? 'Reiniciando…' : 'Salvar e Reiniciar'}
         </PillButton>
       </div>
     </div>
