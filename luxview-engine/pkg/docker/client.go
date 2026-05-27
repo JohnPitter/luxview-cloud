@@ -13,6 +13,7 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/luxview/engine/pkg/logger"
 )
@@ -185,20 +186,22 @@ func (c *Client) ContainerExec(ctx context.Context, containerID string, cmd []st
 	}
 	defer attachResp.Close()
 
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, attachResp.Reader)
+	// Docker's exec attach stream is multiplexed (stdout+stderr framed with an
+	// 8-byte header per chunk). Without demuxing, the header bytes corrupt the
+	// first line of output. Use stdcopy.StdCopy to split the streams.
+	var stdout, stderr bytes.Buffer
+	_, _ = stdcopy.StdCopy(&stdout, &stderr, attachResp.Reader)
 
-	// Check exit code
 	inspectResp, err := c.cli.ContainerExecInspect(ctx, execResp.ID)
 	if err != nil {
-		return buf.String(), err
+		return stdout.String(), err
 	}
 
 	if inspectResp.ExitCode != 0 {
-		return buf.String(), fmt.Errorf("exec exited with code %d", inspectResp.ExitCode)
+		return stdout.String(), fmt.Errorf("exec exited with code %d: %s", inspectResp.ExitCode, stderr.String())
 	}
 
-	return buf.String(), nil
+	return stdout.String(), nil
 }
 
 // PruneResult holds the result of a system-wide prune operation.
