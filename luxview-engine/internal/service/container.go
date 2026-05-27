@@ -193,7 +193,7 @@ func parseResourceLimits(rl model.ResourceLimits) (nanoCPUs int64, memory int64)
 		}
 	}
 	if nanoCPUs == 0 {
-		nanoCPUs = 500_000_000 // default 0.5 CPU
+		nanoCPUs = 250_000_000 // default 0.25 CPU
 	}
 
 	// Parse memory (e.g., "512m" -> 512 * 1024 * 1024)
@@ -201,7 +201,7 @@ func parseResourceLimits(rl model.ResourceLimits) (nanoCPUs int64, memory int64)
 		memory = parseMemory(rl.Memory)
 	}
 	if memory == 0 {
-		memory = 512 * 1024 * 1024 // default 512MB
+		memory = 256 * 1024 * 1024 // default 256MB
 	}
 
 	return nanoCPUs, memory
@@ -257,18 +257,18 @@ func parseMemory(s string) int64 {
 	suffix := s[len(s)-1:]
 	numStr := s[:len(s)-1]
 
-	num, err := strconv.ParseInt(numStr, 10, 64)
+	num, err := strconv.ParseFloat(numStr, 64)
 	if err != nil {
 		return 0
 	}
 
 	switch suffix {
 	case "g", "G":
-		return num * 1024 * 1024 * 1024
+		return int64(num * 1024 * 1024 * 1024)
 	case "m", "M":
-		return num * 1024 * 1024
+		return int64(num * 1024 * 1024)
 	case "k", "K":
-		return num * 1024
+		return int64(num * 1024)
 	default:
 		// Try parsing the whole string as bytes
 		if v, err := strconv.ParseInt(s, 10, 64); err == nil {

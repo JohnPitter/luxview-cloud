@@ -56,8 +56,8 @@ function getDefaultPlanForm(): CreatePlanPayload {
     currency: 'USD',
     billingCycle: 'monthly',
     maxApps: 3,
-    maxCpuPerApp: 0.5,
-    maxMemoryPerApp: '512m',
+    maxCpuPerApp: 0.25,
+    maxMemoryPerApp: '256m',
     maxDiskPerApp: '1g',
     maxServicesPerApp: 2,
     autoDeployEnabled: true,
@@ -90,9 +90,9 @@ function planToForm(plan: Plan): CreatePlanPayload {
   };
 }
 
-const CPU_OPTIONS = ['0.25', '0.5', '1.0', '2.0', '4.0'];
-const MEMORY_OPTIONS = ['256m', '512m', '1g', '2g', '4g', '8g'];
-const DISK_OPTIONS = ['1g', '5g', '10g', '20g', '50g'];
+const CPU_OPTIONS = ['0.25', '0.5', '1.0', '1.5', '2.0', '3.0', '4.0'];
+const MEMORY_OPTIONS = ['256m', '512m', '1g', '1.5g', '2g', '3g', '4g', '6g', '8g'];
+const DISK_OPTIONS = ['1g', '2g', '5g', '10g', '20g', '50g'];
 
 export function Admin() {
   const { t } = useTranslation();
@@ -131,7 +131,7 @@ export function Admin() {
   const [roleChangeUser, setRoleChangeUser] = useState<AdminUser | null>(null);
   const [limitsApp, setLimitsApp] = useState<AdminApp | null>(null);
   const [deleteApp, setDeleteApp] = useState<AdminApp | null>(null);
-  const [editLimits, setEditLimits] = useState({ cpu: '1.0', memory: '512m', disk: '5g' });
+  const [editLimits, setEditLimits] = useState({ cpu: '0.25', memory: '256m', disk: '1g' });
 
   // Plans state
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -1074,7 +1074,7 @@ export function Admin() {
                                 <button
                                   onClick={() => {
                                     setLimitsApp(app);
-                                    setEditLimits(app.resourceLimits || { cpu: '1.0', memory: '512m', disk: '5g' });
+                                    setEditLimits(app.resourceLimits || { cpu: '0.25', memory: '256m', disk: '1g' });
                                   }}
                                   className="p-1.5 text-zinc-500 hover:text-amber-400 transition-colors rounded-lg hover:bg-amber-400/10"
                                   title={t('admin.apps.editLimits')}
@@ -1924,15 +1924,17 @@ function LimitsModal({ app, allApps, vpsInfo, editLimits, setEditLimits, onSave,
   let otherMem = 0;
   for (const a of allApps) {
     if (a.id === app.id) continue;
-    otherCpu += a.resourceLimits?.cpu ? parseFloat(a.resourceLimits.cpu) : 0.5;
-    otherMem += a.resourceLimits?.memory ? parseMemStr(a.resourceLimits.memory) : 512 * 1024 * 1024;
+    otherCpu += a.resourceLimits?.cpu ? parseFloat(a.resourceLimits.cpu) : 0.25;
+    otherMem += a.resourceLimits?.memory ? parseMemStr(a.resourceLimits.memory) : 256 * 1024 * 1024;
   }
 
-  const maxCpuForApp = vpsInfo ? vpsInfo.availableCpu - otherCpu : Infinity;
-  const maxMemForApp = vpsInfo ? vpsInfo.availableMemory - otherMem : Infinity;
+  const availCpu = vpsInfo ? vpsInfo.availableCpu - otherCpu : Infinity;
+  const availMem = vpsInfo ? vpsInfo.availableMemory - otherMem : Infinity;
+  const maxCpuForApp = Math.min(availCpu, parseFloat(editLimits.cpu));
+  const maxMemForApp = Math.min(availMem, parseMemStr(editLimits.memory));
 
-  const isCpuExceeded = (opt: string) => parseFloat(opt) > maxCpuForApp;
-  const isMemExceeded = (opt: string) => parseMemStr(opt) > maxMemForApp;
+  const isCpuExceeded = (opt: string) => parseFloat(opt) > availCpu;
+  const isMemExceeded = (opt: string) => parseMemStr(opt) > availMem;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">

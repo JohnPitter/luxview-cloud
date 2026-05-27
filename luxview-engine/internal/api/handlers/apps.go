@@ -270,8 +270,8 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 		AppType:      model.AppTypeWeb,
 		EnvVars:      envVarsEncrypted,
 		ResourceLimits: model.ResourceLimits{
-			CPU:    "0.5",
-			Memory: "512m",
+			CPU:    "0.25",
+			Memory: "256m",
 			Disk:   "1g",
 		},
 		AutoDeploy: autoDeploy,

@@ -381,12 +381,12 @@ func (h *AdminHandler) VPSInfo(w http.ResponseWriter, r *http.Request) {
 					totalCPU += cpu
 				}
 			} else {
-				totalCPU += 0.5 // default
+				totalCPU += 0.25
 			}
 			if app.ResourceLimits.Memory != "" {
 				totalMemory += parseMemoryString(app.ResourceLimits.Memory)
 			} else {
-				totalMemory += 512 * 1024 * 1024 // default 512MB
+				totalMemory += 256 * 1024 * 1024
 			}
 		}
 		info["allocated_cpu"] = fmt.Sprintf("%.1f", totalCPU)
