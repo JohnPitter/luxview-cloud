@@ -33,6 +33,12 @@ type GameServerStatus struct {
 	MaxPlayers int  `json:"max_players"`
 }
 
+type PlayerInfo struct {
+	Name     string  `json:"name"`
+	Score    int     `json:"score"`
+	Duration float64 `json:"duration"` // seconds connected
+}
+
 type SelectOptionDef struct {
 	Value string `json:"value"`
 	Label string `json:"label"`

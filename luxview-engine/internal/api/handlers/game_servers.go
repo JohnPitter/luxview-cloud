@@ -186,3 +186,39 @@ func (h *GameServerHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	status, _ := h.gameServerSvc.QueryStatus(ctx, cfg, containerAddr)
 	writeJSON(w, http.StatusOK, status)
 }
+
+// GetPlayers returns the list of connected players via A2S_PLAYER.
+func (h *GameServerHandler) GetPlayers(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app id")
+		return
+	}
+
+	app, err := h.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	if app.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	cfg, err := h.gameConfigRepo.GetByAppID(ctx, appID)
+	if err != nil || cfg == nil {
+		writeError(w, http.StatusNotFound, "game config not found")
+		return
+	}
+
+	containerAddr := service.ContainerName(app.Subdomain)
+	players, err := h.gameServerSvc.QueryPlayers(ctx, cfg, containerAddr)
+	if err != nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	writeJSON(w, http.StatusOK, players)
+}

@@ -227,6 +227,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Get("/apps/{id}/game-config", gameServerHandler.GetConfig)
 			r.Put("/apps/{id}/game-config", gameServerHandler.UpdateConfig)
 			r.Get("/apps/{id}/game-status", gameServerHandler.GetStatus)
+			r.Get("/apps/{id}/game-players", gameServerHandler.GetPlayers)
 
 			// AI Analyze
 			r.Post("/apps/{id}/analyze", analyzeHandler.Analyze)

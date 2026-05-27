@@ -3,7 +3,9 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
+	"math"
 	"net"
 	"strconv"
 	"time"
@@ -159,6 +161,15 @@ func (s *GameServerService) QueryStatus(ctx context.Context, cfg *model.GameServ
 	}, nil
 }
 
+// QueryPlayers returns the list of connected players via the A2S_PLAYER protocol.
+func (s *GameServerService) QueryPlayers(ctx context.Context, cfg *model.GameServerConfig, serverIP string) ([]model.PlayerInfo, error) {
+	if cfg.QueryPort == 0 {
+		return nil, fmt.Errorf("query port not configured")
+	}
+	addr := fmt.Sprintf("%s:%d", serverIP, cfg.QueryPort)
+	return queryA2SPlayers(addr)
+}
+
 // GetTemplates returns all available game server templates.
 func GetGameTemplates() []model.GameTemplate {
 	return []model.GameTemplate{vrisingTemplate()}
@@ -230,6 +241,90 @@ func queryA2S(addr string) (*a2sInfo, error) {
 	players, _ := r.ReadByte()
 	maxPlayers, _ := r.ReadByte()
 	return &a2sInfo{players: int(players), maxPlayers: int(maxPlayers)}, nil
+}
+
+// --- A2S_PLAYER query ---
+
+func queryA2SPlayers(addr string) ([]model.PlayerInfo, error) {
+	conn, err := net.DialTimeout("udp", addr, 3*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
+
+	// Step 1: Send A2S_PLAYER challenge request (0x55 + 0xFFFFFFFF)
+	challengeReq := []byte{0xFF, 0xFF, 0xFF, 0xFF, 0x55, 0xFF, 0xFF, 0xFF, 0xFF}
+	if _, err := conn.Write(challengeReq); err != nil {
+		return nil, err
+	}
+
+	buf := make([]byte, 4096)
+	n, err := conn.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	buf = buf[:n]
+
+	// Expect challenge response: header(4) + 0x41 + challenge(4)
+	if len(buf) < 9 || buf[4] != 0x41 {
+		return nil, fmt.Errorf("unexpected A2S_PLAYER challenge response")
+	}
+
+	// Step 2: Send A2S_PLAYER with the challenge token
+	playerReq := append([]byte{0xFF, 0xFF, 0xFF, 0xFF, 0x55}, buf[5:9]...)
+	if _, err := conn.Write(playerReq); err != nil {
+		return nil, err
+	}
+
+	buf = buf[:cap(buf)]
+	n, err = conn.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	buf = buf[:n]
+
+	// Response: header(4) + 0x44 + numPlayers(1) + player data
+	if len(buf) < 6 || buf[4] != 0x44 {
+		return nil, fmt.Errorf("unexpected A2S_PLAYER response type: %x", buf[4])
+	}
+
+	numPlayers := int(buf[5])
+	r := bytes.NewReader(buf[6:])
+
+	players := make([]model.PlayerInfo, 0, numPlayers)
+	for i := 0; i < numPlayers; i++ {
+		r.ReadByte() // index
+
+		// Read null-terminated name
+		var nameBytes []byte
+		for {
+			b, err := r.ReadByte()
+			if err != nil || b == 0 {
+				break
+			}
+			nameBytes = append(nameBytes, b)
+		}
+
+		var score int32
+		binary.Read(r, binary.LittleEndian, &score)
+
+		var duration float32
+		binary.Read(r, binary.LittleEndian, &duration)
+
+		name := string(nameBytes)
+		if name == "" {
+			name = fmt.Sprintf("Jogador %d", i+1)
+		}
+
+		players = append(players, model.PlayerInfo{
+			Name:     name,
+			Score:    int(score),
+			Duration: math.Round(float64(duration)*100) / 100,
+		})
+	}
+
+	return players, nil
 }
 
 // --- V Rising template definition ---

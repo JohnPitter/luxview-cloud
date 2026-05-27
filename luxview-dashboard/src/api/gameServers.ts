@@ -39,6 +39,12 @@ export interface GameServerStatus {
   maxPlayers: number;
 }
 
+export interface PlayerInfo {
+  name: string;
+  score: number;
+  duration: number; // seconds
+}
+
 export const gameServersApi = {
   async getTemplates(): Promise<GameTemplate[]> {
     const { data } = await api.get<GameTemplate[]>('/game-templates');
@@ -64,6 +70,11 @@ export const gameServersApi = {
 
   async getStatus(appId: string): Promise<GameServerStatus> {
     const { data } = await api.get<GameServerStatus>(`/apps/${appId}/game-status`);
+    return data;
+  },
+
+  async getPlayers(appId: string): Promise<PlayerInfo[]> {
+    const { data } = await api.get<PlayerInfo[]>(`/apps/${appId}/game-players`);
     return data;
   },
 };

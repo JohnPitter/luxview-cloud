@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Save, Loader2, Users, Wifi, WifiOff, RefreshCw, RotateCw } from 'lucide-react';
+import { Save, Loader2, Users, Wifi, WifiOff, RefreshCw, RotateCw, X, Clock, Trophy } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { PillButton } from '../common/PillButton';
 import { useThemeStore } from '../../stores/theme.store';
 import { useNotificationsStore } from '../../stores/notifications.store';
-import { gameServersApi, type GameConfigResponse, type GameServerStatus } from '../../api/gameServers';
+import { gameServersApi, type GameConfigResponse, type GameServerStatus, type PlayerInfo } from '../../api/gameServers';
 
 interface GameConfigPanelProps {
   appId: string;
@@ -26,6 +26,9 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
   const [statusLoading, setStatusLoading] = useState(false);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [restarting, setRestarting] = useState(false);
+  const [playersModal, setPlayersModal] = useState(false);
+  const [players, setPlayers] = useState<PlayerInfo[]>([]);
+  const [playersLoading, setPlayersLoading] = useState(false);
   const restartingSinceRef = useRef<number>(0);
 
   const loadConfig = useCallback(async () => {
@@ -73,6 +76,19 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
     }, intervalMs);
     return () => clearInterval(interval);
   }, [loadStatus, restarting]);
+
+  const openPlayersModal = async () => {
+    setPlayersModal(true);
+    setPlayersLoading(true);
+    try {
+      const list = await gameServersApi.getPlayers(appId);
+      setPlayers(list);
+    } catch {
+      setPlayers([]);
+    } finally {
+      setPlayersLoading(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -147,12 +163,19 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
             {statusBadge()}
 
             {status?.running && !restarting && (
-              <div className="flex items-center gap-2">
+              <button
+                onClick={openPlayersModal}
+                className={`flex items-center gap-2 px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                  isDark
+                    ? 'hover:bg-zinc-800 text-zinc-300 hover:text-amber-400'
+                    : 'hover:bg-zinc-100 text-zinc-700 hover:text-amber-600'
+                }`}
+              >
                 <Users size={14} className="text-zinc-400" />
-                <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                <span className="text-sm">
                   {status.players}/{status.maxPlayers} jogadores
                 </span>
-              </div>
+              </button>
             )}
 
             <div className="flex items-center gap-2">
@@ -254,6 +277,82 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
           {saving ? 'Salvando...' : restarting ? 'Reiniciando…' : 'Salvar e Reiniciar'}
         </PillButton>
       </div>
+
+      {/* Players Modal */}
+      {playersModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className={`w-full max-w-md rounded-2xl p-6 shadow-xl ${
+            isDark ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-zinc-200'
+          }`}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Users size={16} className="text-amber-400" />
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+                  Jogadores Online ({status?.players ?? 0}/{status?.maxPlayers ?? 0})
+                </h3>
+              </div>
+              <button onClick={() => setPlayersModal(false)} className="text-zinc-500 hover:text-zinc-300">
+                <X size={16} />
+              </button>
+            </div>
+
+            {playersLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 size={20} className="animate-spin text-amber-400" />
+              </div>
+            ) : players.length === 0 ? (
+              <div className={`text-center py-8 text-sm ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                Nenhum jogador conectado
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-80 overflow-y-auto">
+                {players.map((player, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-lg ${
+                      isDark ? 'bg-zinc-800/50' : 'bg-zinc-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                        isDark ? 'bg-amber-400/15 text-amber-400' : 'bg-amber-100 text-amber-700'
+                      }`}>
+                        {player.name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                        {player.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {player.score > 0 && (
+                        <div className="flex items-center gap-1">
+                          <Trophy size={12} className="text-amber-400" />
+                          <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                            {player.score}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1">
+                        <Clock size={12} className="text-zinc-500" />
+                        <span className={`text-xs font-mono ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                          {formatDuration(player.duration)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h${m.toString().padStart(2, '0')}m`;
+  return `${m}min`;
 }
