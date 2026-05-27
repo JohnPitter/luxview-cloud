@@ -117,7 +117,7 @@ jobs:
             docker compose up -d --build engine dashboard
             # Build game-template images consumed by the engine (not in compose).
             # The engine references these by tag when creating game-server containers.
-            for game in games/*/; do
+            for game in luxview-games/games/*/; do
               tag="luxview-cloud-$(basename "$game")"
               echo "Building $tag from $game"
               docker build -t "$tag" "$game"
