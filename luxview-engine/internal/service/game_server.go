@@ -251,7 +251,7 @@ func vrisingTemplate() model.GameTemplate {
 		Protocol:         "udp",
 		DefaultGamePort:  27015,
 		DefaultQueryPort: 27016,
-		DefaultImage:     "luxview-vrising:latest",
+		DefaultImage:     "luxview-cloud-vrising:latest",
 		SupportsQuery:    true,
 		DefaultVolumes: []model.GameVolume{
 			{MountPath: "/vrising-server"}, // Steam-installed server binaries

@@ -115,4 +115,11 @@ jobs:
             git reset --hard origin/main
             docker compose rm -sf engine dashboard || true
             docker compose up -d --build engine dashboard
+            # Build game-template images consumed by the engine (not in compose).
+            # The engine references these by tag when creating game-server containers.
+            for game in games/*/; do
+              tag="luxview-cloud-$(basename "$game")"
+              echo "Building $tag from $game"
+              docker build -t "$tag" "$game"
+            done
             docker image prune -f
