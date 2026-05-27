@@ -1,11 +1,22 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV WINEARCH=win64
+ENV WINEDEBUG=-all
 ENV HOME=/root
 
-RUN apt-get update && \
+# 32-bit support + dependencies
+RUN dpkg --add-architecture i386 && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
-        ca-certificates curl lib32gcc-s1 python3 && \
+        software-properties-common wget ca-certificates gnupg2 curl \
+        xvfb lib32gcc-s1 python3 && \
+    # WineHQ stable (jammy)
+    mkdir -pm755 /etc/apt/keyrings && \
+    wget -qO /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key && \
+    wget -qNP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources && \
+    apt-get update && \
+    apt-get install -y --install-recommends winehq-stable && \
     rm -rf /var/lib/apt/lists/*
 
 # SteamCMD

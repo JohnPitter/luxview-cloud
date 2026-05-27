@@ -5,6 +5,9 @@ SERVER_DIR="/vrising-server"
 DATA_DIR="/vrising-data"
 STEAMCMD="/opt/steamcmd/steamcmd.sh"
 
+export WINEPREFIX="$DATA_DIR/.wine"
+export WINEDLLOVERRIDES="mscoree,mshtml="
+
 mkdir -p "$SERVER_DIR" "$DATA_DIR/Settings" "$DATA_DIR/Saves"
 
 # Load config overrides written by Luxview Games (takes precedence over env vars)
@@ -107,22 +110,34 @@ PYEOF
 fi
 
 # Download or update V Rising Dedicated Server (App ID: 1829350).
-# Native Linux build — no Wine needed. SteamCMD can return state 0x6
-# (installed but update failed) when Steam CDN is flaky; we tolerate
-# that as long as the binary already exists in the volume.
-echo "[vrising] Updating server files (native Linux)..."
+# SteamCMD can return state 0x6 (installed but update failed) when Steam CDN is
+# flaky; we tolerate that as long as the binary already exists in the volume.
+echo "[vrising] Updating server files..."
 "$STEAMCMD" \
+    +@sSteamCmdForcePlatformType windows \
     +force_install_dir "$SERVER_DIR" \
     +login anonymous \
-    +app_update 1829350 \
+    +app_update 1829350 validate \
     +quit || true
 
-if [ ! -f "$SERVER_DIR/VRisingServer" ]; then
-    echo "[vrising] ERROR: VRisingServer binary not found after update attempt, aborting"
+if [ ! -f "$SERVER_DIR/VRisingServer.exe" ]; then
+    echo "[vrising] ERROR: VRisingServer.exe not found after update attempt, aborting"
     exit 1
 fi
 
-echo "[vrising] Starting V Rising Dedicated Server (native Linux)..."
+# Virtual display required by Wine/Unity
+Xvfb :1 -screen 0 1024x768x16 &
+export DISPLAY=:1.0
+sleep 3
+
+# Init Wine prefix only on first run
+if [ ! -f "$WINEPREFIX/system.reg" ]; then
+    echo "[vrising] Initializing Wine prefix (first run)..."
+    wineboot --init || true
+    wineserver -w
+fi
+
+echo "[vrising] Starting V Rising Dedicated Server..."
 # When custom VRGAME_* settings are active, omit -preset so ServerGameSettings.json is used.
 # The -preset flag overrides ServerGameSettings.json entirely, so it must not be passed together.
 if [ "$CUSTOM_SETTINGS" = "0" ]; then
@@ -131,7 +146,7 @@ else
     PRESET_FLAG=""
 fi
 
-exec "$SERVER_DIR/VRisingServer" \
+exec wine "$SERVER_DIR/VRisingServer.exe" \
     -persistentDataPath "$DATA_DIR" \
     -serverName "${VRISING_SERVER_NAME:-V Rising Server}" \
     ${VRISING_DESCRIPTION:+-description "$VRISING_DESCRIPTION"} \
