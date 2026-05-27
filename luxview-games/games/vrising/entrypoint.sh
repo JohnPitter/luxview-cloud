@@ -109,14 +109,21 @@ print(f"[vrising] ServerGameSettings.json written to {out}")
 PYEOF
 fi
 
-# Download or update V Rising Dedicated Server (App ID: 1829350)
+# Download or update V Rising Dedicated Server (App ID: 1829350).
+# SteamCMD can return state 0x6 (installed but update failed) when Steam CDN is
+# flaky; we tolerate that as long as the binary already exists in the volume.
 echo "[vrising] Updating server files..."
 "$STEAMCMD" \
     +@sSteamCmdForcePlatformType windows \
     +force_install_dir "$SERVER_DIR" \
     +login anonymous \
     +app_update 1829350 \
-    +quit
+    +quit || true
+
+if [ ! -f "$SERVER_DIR/VRisingServer.exe" ]; then
+    echo "[vrising] ERROR: VRisingServer.exe not found after update attempt, aborting"
+    exit 1
+fi
 
 # Virtual display required by Wine/Unity
 Xvfb :1 -screen 0 1024x768x16 &
