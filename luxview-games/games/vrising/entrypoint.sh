@@ -27,10 +27,10 @@ if env | grep -q '^VRGAME_'; then
     python3 - <<PYEOF
 import json, os
 
-def flt(k, d): return float(os.environ.get(k, d))
-def bol(k, d): return os.environ.get(k, str(d)).lower() in ('1','true','yes')
-def itg(k, d): return int(os.environ.get(k, d))
-def s(k, d):   return os.environ.get(k, d)
+def flt(k, d): v = os.environ.get(k, ""); return float(v) if v else float(d)
+def bol(k, d): v = os.environ.get(k, ""); return v.lower() in ('1','true','yes') if v else d
+def itg(k, d): v = os.environ.get(k, ""); return int(v) if v else int(d)
+def s(k, d):   return os.environ.get(k, "") or d
 
 settings = {
     "GameDifficulty":                s("VRGAME_GAME_DIFFICULTY", "Normal"),
