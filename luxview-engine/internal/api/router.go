@@ -218,6 +218,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Put("/apps/{id}/maintenance", appHandler.SetMaintenance)
 			r.Get("/apps/{id}/logs", appHandler.ContainerLogs)
 			r.Get("/apps/{id}/logs/stream", appHandler.ContainerLogsStream)
+			r.Get("/apps/{id}/disk-usage", appHandler.DiskUsage)
 			r.Get("/apps/{id}/domain-check", domainCheckHandler.Check)
 
 			// AI Analyze

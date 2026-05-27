@@ -94,6 +94,7 @@ export function AppDetail() {
   const [actionPending, setActionPending] = useState(false);
   const [logType, setLogType] = useState<'runtime' | 'build'>('runtime');
   const [notFound, setNotFound] = useState(false);
+  const [diskUsage, setDiskUsage] = useState<{ usedBytes: number; limitBytes: number } | null>(null);
 
   // Env vars state
   const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>([]);
@@ -119,6 +120,20 @@ export function AppDetail() {
       fetchApp(appId).catch(() => setNotFound(true));
     }
   }, [appId, fetchApp]);
+
+  // Disk usage: fetch on mount and every 30s (du can be slow, so polled less often than CPU/RAM).
+  useEffect(() => {
+    if (!appId) return;
+    let cancelled = false;
+    const load = () => {
+      appsApi.getDiskUsage(appId)
+        .then((d) => { if (!cancelled) setDiskUsage(d); })
+        .catch(() => { /* leave previous value */ });
+    };
+    load();
+    const id = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [appId]);
 
   // Track whether the deploy has entered a transitional state (building/deploying)
   const sawTransitionalRef = useRef(false);
@@ -685,6 +700,26 @@ export function AppDetail() {
                     />
                   </div>
                 </div>
+                {/* Disk Gauge */}
+                {diskUsage && (
+                  <div>
+                    <div className="flex justify-between text-xs mb-2">
+                      <span className="text-zinc-500">Disco</span>
+                      <span className={isDark ? 'text-zinc-300' : 'text-zinc-700'}>
+                        {formatBytes(diskUsage.usedBytes)}
+                        {diskUsage.limitBytes > 0 && ` / ${formatBytes(diskUsage.limitBytes)}`}
+                      </span>
+                    </div>
+                    <div className={`h-2 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                      <div
+                        className="h-full rounded-full bg-violet-400 transition-all duration-500"
+                        style={{
+                          width: `${diskUsage.limitBytes > 0 ? Math.min((diskUsage.usedBytes / diskUsage.limitBytes) * 100, 100) : 0}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
                 {/* Limits */}
                 <div className="pt-2 border-t border-zinc-800/50 space-y-1">
                   <div className="flex justify-between text-[11px]">

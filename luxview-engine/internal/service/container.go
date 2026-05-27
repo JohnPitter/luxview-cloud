@@ -207,6 +207,47 @@ func parseResourceLimits(rl model.ResourceLimits) (nanoCPUs int64, memory int64)
 	return nanoCPUs, memory
 }
 
+// DiskUsage returns the disk bytes used by an app's container.
+// For game servers with declared Volumes, sums `du -sb` over each mount path
+// (container layer is negligible — real data is in the volumes). For other apps,
+// returns the container's SizeRootFs from docker inspect.
+func (cm *ContainerManager) DiskUsage(ctx context.Context, app *model.App) (int64, error) {
+	if app.ContainerID == "" {
+		return 0, nil
+	}
+	if app.AppType == model.AppTypeGame && app.GameConfig != nil && len(app.GameConfig.Volumes) > 0 {
+		cmd := []string{"du", "-sb"}
+		for _, v := range app.GameConfig.Volumes {
+			cmd = append(cmd, v.MountPath)
+		}
+		out, err := cm.docker.ContainerExec(ctx, app.ContainerID, cmd)
+		if err != nil {
+			return 0, err
+		}
+		var total int64
+		for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) >= 1 {
+				if n, err := strconv.ParseInt(fields[0], 10, 64); err == nil {
+					total += n
+				}
+			}
+		}
+		return total, nil
+	}
+	info, err := cm.docker.InspectContainerWithSize(ctx, app.ContainerID)
+	if err != nil {
+		return 0, err
+	}
+	if info.SizeRootFs == nil {
+		return 0, nil
+	}
+	return *info.SizeRootFs, nil
+}
+
+// ParseSize parses a Docker-style size string (e.g. "10g", "512m", "1024k") into bytes.
+func ParseSize(s string) int64 { return parseMemory(s) }
+
 func parseMemory(s string) int64 {
 	s = strings.TrimSpace(s)
 	if len(s) == 0 {

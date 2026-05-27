@@ -91,6 +91,11 @@ export const appsApi = {
     return data;
   },
 
+  async getDiskUsage(id: string): Promise<{ usedBytes: number; limitBytes: number }> {
+    const { data } = await api.get<{ usedBytes: number; limitBytes: number }>(`/apps/${id}/disk-usage`);
+    return data;
+  },
+
   async create(payload: CreateAppPayload): Promise<App> {
     const { data } = await api.post<App>('/apps', payload);
     return data;

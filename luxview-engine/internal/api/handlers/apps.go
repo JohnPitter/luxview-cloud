@@ -364,6 +364,36 @@ func (h *AppHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 // Get returns a single app by ID.
+// DiskUsage returns the bytes used on disk by an app's container/volumes plus the configured limit.
+func (h *AppHandler) DiskUsage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app ID")
+		return
+	}
+
+	app, err := h.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	if app.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	used, _ := h.container.DiskUsage(ctx, app)
+	limit := service.ParseSize(app.ResourceLimits.Disk)
+
+	writeJSON(w, http.StatusOK, map[string]int64{
+		"used_bytes":  used,
+		"limit_bytes": limit,
+	})
+}
+
 func (h *AppHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)

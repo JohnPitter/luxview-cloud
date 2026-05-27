@@ -105,6 +105,14 @@ func (c *Client) InspectContainer(ctx context.Context, containerID string) (type
 	return c.cli.ContainerInspect(ctx, containerID)
 }
 
+// InspectContainerWithSize returns container details including SizeRw (writable layer)
+// and SizeRootFs. The size computation is expensive, so prefer InspectContainer when
+// disk usage is not needed.
+func (c *Client) InspectContainerWithSize(ctx context.Context, containerID string) (types.ContainerJSON, error) {
+	resp, _, err := c.cli.ContainerInspectWithRaw(ctx, containerID, true)
+	return resp, err
+}
+
 // ContainerLogs returns container logs as a reader.
 func (c *Client) ContainerLogs(ctx context.Context, containerID string, tail string) (io.ReadCloser, error) {
 	return c.cli.ContainerLogs(ctx, containerID, container.LogsOptions{
