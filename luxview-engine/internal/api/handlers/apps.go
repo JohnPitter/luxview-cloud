@@ -814,7 +814,24 @@ func (h *AppHandler) Restart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.container.Restart(ctx, app.ContainerID); err != nil {
+	restartErr := h.container.Restart(ctx, app.ContainerID)
+
+	// If the container no longer exists and this is a game server, recreate it.
+	if restartErr != nil && app.AppType == model.AppTypeGame {
+		cfg, cfgErr := h.gameConfigRepo.GetByAppID(ctx, appID)
+		if cfgErr == nil && cfg != nil {
+			newContainerID, startErr := h.gameServerSvc.Start(ctx, app, cfg)
+			if startErr != nil {
+				_ = h.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusError, app.ContainerID)
+				writeError(w, http.StatusInternalServerError, "failed to recreate game server")
+				return
+			}
+			_ = h.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusRunning, newContainerID)
+			restartErr = nil
+		}
+	}
+
+	if restartErr != nil {
 		_ = h.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusError, app.ContainerID)
 		writeError(w, http.StatusInternalServerError, "failed to restart container")
 		return
