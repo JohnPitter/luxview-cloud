@@ -13,14 +13,20 @@ interface AlertConfigProps {
   onToggleAlert: (alertId: string, enabled: boolean) => void;
 }
 
-const metricOptions = ['cpu_percent', 'memory_percent', 'response_time', 'error_rate'];
+const metricOptions = ['cpu_percent', 'memory_bytes', 'network_rx', 'network_tx'];
 const metricLabelKeys: Record<string, string> = {
   cpu_percent: 'monitoring.alerts.metrics.cpuPercent',
-  memory_percent: 'monitoring.alerts.metrics.memoryPercent',
-  response_time: 'monitoring.alerts.metrics.responseTime',
-  error_rate: 'monitoring.alerts.metrics.errorRate',
+  memory_bytes: 'monitoring.alerts.metrics.memoryBytes',
+  network_rx: 'monitoring.alerts.metrics.networkRx',
+  network_tx: 'monitoring.alerts.metrics.networkTx',
 };
-const conditions = ['>', '<', '>=', '<=', '=='];
+const conditionOptions = [
+  { value: 'gt', label: '>' },
+  { value: 'gte', label: '>=' },
+  { value: 'lt', label: '<' },
+  { value: 'lte', label: '<=' },
+  { value: 'eq', label: '=' },
+];
 const channelOptions: AlertChannel[] = ['email', 'webhook', 'discord'];
 const channelLabelKeys: Record<string, string> = {
   email: 'monitoring.alerts.channels.email',
@@ -38,7 +44,7 @@ export function AlertConfig({ alerts, onCreateAlert, onDeleteAlert, onToggleAler
   const { t } = useTranslation();
   const [showForm, setShowForm] = useState(false);
   const [metric, setMetric] = useState('cpu_percent');
-  const [condition, setCondition] = useState('>');
+  const [condition, setCondition] = useState('gt');
   const [threshold, setThreshold] = useState(80);
   const [channel, setChannel] = useState<AlertChannel>('email');
   const [channelValue, setChannelValue] = useState('');
@@ -97,8 +103,8 @@ export function AlertConfig({ alerts, onCreateAlert, onDeleteAlert, onToggleAler
             </select>
             <div className="flex items-center gap-2">
               <select value={condition} onChange={(e) => setCondition(e.target.value)} className={`${inputClass} w-20`}>
-                {conditions.map((c) => (
-                  <option key={c} value={c}>{c}</option>
+                {conditionOptions.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
               </select>
               <input
@@ -151,7 +157,7 @@ export function AlertConfig({ alerts, onCreateAlert, onDeleteAlert, onToggleAler
                   <Bell size={16} className={alert.enabled ? 'text-amber-400' : 'text-zinc-600'} />
                   <div>
                     <p className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-                      {t(metricLabelKeys[alert.metric] || alert.metric)} {alert.condition} {alert.threshold}
+                      {t(metricLabelKeys[alert.metric] || alert.metric)} {conditionOptions.find((c) => c.value === alert.condition)?.label ?? alert.condition} {alert.threshold}
                     </p>
                     <p className="text-[11px] text-zinc-500">
                       {t('monitoring.alerts.via', { channel: t(channelLabelKeys[alert.channel] || alert.channel) })}
