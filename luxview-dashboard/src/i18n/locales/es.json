@@ -302,6 +302,8 @@
   "app.env.noVariables": "No hay variables de entorno configuradas",
   "app.env.keyPlaceholder": "CLAVE",
   "app.env.valuePlaceholder": "valor",
+  "app.env.bulkEdit": "Edición en bloque",
+  "app.env.listView": "Ver uno por uno",
   "app.env.saveChanges": "Guardar cambios",
   "app.env.saving": "Guardando...",
   "app.services.title": "Servicios administrados",

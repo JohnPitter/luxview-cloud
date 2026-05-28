@@ -302,6 +302,8 @@
   "app.env.noVariables": "No environment variables configured",
   "app.env.keyPlaceholder": "KEY",
   "app.env.valuePlaceholder": "value",
+  "app.env.bulkEdit": "Bulk Edit",
+  "app.env.listView": "List View",
   "app.env.saveChanges": "Save Changes",
   "app.env.saving": "Saving...",
   "app.services.title": "Managed Services",

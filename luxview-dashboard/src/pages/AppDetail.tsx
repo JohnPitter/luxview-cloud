@@ -17,6 +17,7 @@ import {
   Stethoscope,
   Sparkles,
   X,
+  AlignLeft,
 } from 'lucide-react';
 import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
@@ -104,6 +105,8 @@ export function AppDetail() {
   const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>([]);
   const [showValues, setShowValues] = useState(false);
   const [savingEnv, setSavingEnv] = useState(false);
+  const [bulkEditMode, setBulkEditMode] = useState(false);
+  const [bulkText, setBulkText] = useState('');
 
   // Settings state
   const [settingsName, setSettingsName] = useState('');
@@ -290,6 +293,24 @@ export function AppDetail() {
       setDeleting(false);
       setShowDeleteDialog(false);
     }
+  };
+
+  const enterBulkMode = () => {
+    setBulkText(envVars.map(({ key, value }) => `${key}=${value}`).join('\n'));
+    setBulkEditMode(true);
+  };
+
+  const exitBulkMode = () => {
+    const parsed = bulkText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.includes('='))
+      .map((line) => {
+        const idx = line.indexOf('=');
+        return { key: line.slice(0, idx).trim(), value: line.slice(idx + 1) };
+      });
+    setEnvVars(parsed);
+    setBulkEditMode(false);
   };
 
   const handleSaveEnv = async () => {
@@ -877,26 +898,47 @@ export function AppDetail() {
                 {t('app.env.title')}
               </h3>
               <div className="flex items-center gap-2">
+                {!bulkEditMode && (
+                  <>
+                    <PillButton
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowValues(!showValues)}
+                      icon={showValues ? <EyeOff size={14} /> : <Eye size={14} />}
+                    >
+                      {showValues ? t('app.env.hideValues') : t('app.env.showValues')}
+                    </PillButton>
+                    <PillButton
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEnvVars([...envVars, { key: '', value: '' }])}
+                      icon={<Plus size={14} />}
+                    >
+                      {t('app.env.addVariable')}
+                    </PillButton>
+                  </>
+                )}
                 <PillButton
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowValues(!showValues)}
-                  icon={showValues ? <EyeOff size={14} /> : <Eye size={14} />}
+                  onClick={bulkEditMode ? exitBulkMode : enterBulkMode}
+                  icon={<AlignLeft size={14} />}
                 >
-                  {showValues ? t('app.env.hideValues') : t('app.env.showValues')}
-                </PillButton>
-                <PillButton
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setEnvVars([...envVars, { key: '', value: '' }])}
-                  icon={<Plus size={14} />}
-                >
-                  {t('app.env.addVariable')}
+                  {bulkEditMode ? t('app.env.listView') : t('app.env.bulkEdit')}
                 </PillButton>
               </div>
             </div>
 
-            {envVars.length === 0 ? (
+            {bulkEditMode ? (
+              <textarea
+                value={bulkText}
+                onChange={(e) => setBulkText(e.target.value)}
+                spellCheck={false}
+                rows={Math.max(6, bulkText.split('\n').length + 1)}
+                placeholder={'KEY=value\nANOTHER_KEY=another_value'}
+                className={`${inputClass} w-full font-mono text-xs resize-y mb-4`}
+              />
+            ) : envVars.length === 0 ? (
               <p className="text-sm text-zinc-500 text-center py-8">
                 {t('app.env.noVariables')}
               </p>
