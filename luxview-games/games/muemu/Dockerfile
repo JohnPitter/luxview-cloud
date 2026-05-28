@@ -4,7 +4,7 @@ FROM ubuntu:22.04 AS build
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates curl git && \
+    apt-get install -y --no-install-recommends ca-certificates curl git libicu70 && \
     # Install .NET 6 SDK (can build netcoreapp3.1 targets with roll-forward)
     curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
     chmod +x /tmp/dotnet-install.sh && \
