@@ -28,6 +28,12 @@ const channelLabelKeys: Record<string, string> = {
   discord: 'monitoring.alerts.channels.discord',
 };
 
+const placeholderKeys: Record<AlertChannel, string> = {
+  email: 'monitoring.alerts.placeholders.email',
+  webhook: 'monitoring.alerts.placeholders.webhook',
+  discord: 'monitoring.alerts.placeholders.discord',
+};
+
 export function AlertConfig({ alerts, onCreateAlert, onDeleteAlert, onToggleAlert }: AlertConfigProps) {
   const { t } = useTranslation();
   const [showForm, setShowForm] = useState(false);
@@ -44,7 +50,11 @@ export function AlertConfig({ alerts, onCreateAlert, onDeleteAlert, onToggleAler
     ${isDark ? 'bg-zinc-900/50 border-zinc-800 text-zinc-100' : 'bg-white border-zinc-200 text-zinc-900'}
   `;
 
+  const needsTarget = channel === 'webhook' || channel === 'discord';
+  const canCreate = !needsTarget || channelValue.trim() !== '';
+
   const handleCreate = () => {
+    if (!canCreate) return;
     onCreateAlert({
       metric,
       condition,
@@ -103,16 +113,26 @@ export function AlertConfig({ alerts, onCreateAlert, onDeleteAlert, onToggleAler
                 <option key={c} value={c}>{t(channelLabelKeys[c])}</option>
               ))}
             </select>
-            <input
-              type="text"
-              value={channelValue}
-              onChange={(e) => setChannelValue(e.target.value)}
-              placeholder={channel === 'email' ? t('monitoring.alerts.placeholders.email') : t('monitoring.alerts.placeholders.webhook')}
-              className={inputClass}
-            />
+            <div>
+              <input
+                type="text"
+                value={channelValue}
+                onChange={(e) => setChannelValue(e.target.value)}
+                placeholder={t(placeholderKeys[channel])}
+                className={`${inputClass} w-full`}
+              />
+              <p className={`text-[11px] mt-1 ${needsTarget && !channelValue.trim() ? 'text-red-400' : 'text-zinc-500'}`}>
+                {channel === 'email'
+                  ? t('monitoring.alerts.hints.email')
+                  : channel === 'webhook'
+                    ? t('monitoring.alerts.hints.webhookRequired')
+                    : t('monitoring.alerts.hints.discordRequired')
+                }
+              </p>
+            </div>
           </div>
           <div className="flex justify-end mt-3">
-            <PillButton variant="primary" size="sm" onClick={handleCreate}>
+            <PillButton variant="primary" size="sm" onClick={handleCreate} disabled={!canCreate}>
               {t('monitoring.alerts.createAlert')}
             </PillButton>
           </div>
