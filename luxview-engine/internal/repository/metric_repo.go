@@ -51,8 +51,8 @@ func (r *MetricRepo) GetAggregated(ctx context.Context, appID uuid.UUID, from, t
 			MAX(cpu_percent) AS max_cpu,
 			AVG(memory_bytes) AS avg_memory,
 			MAX(memory_bytes) AS max_memory,
-			AVG(network_rx) AS avg_network_rx,
-			AVG(network_tx) AS avg_network_tx
+			MAX(network_rx) AS avg_network_rx,
+			MAX(network_tx) AS avg_network_tx
 		FROM metrics
 		WHERE app_id = $1 AND timestamp >= $2 AND timestamp <= $3
 		GROUP BY bucket

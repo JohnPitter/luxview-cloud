@@ -97,6 +97,10 @@ func (mc *MetricsCollector) collectOne(ctx context.Context, app *model.App) (*mo
 }
 
 func calculateCPUPercent(stats *dockerStats) float64 {
+	if stats.PreCPUStats.CPUUsage.TotalUsage == 0 || stats.PreCPUStats.SystemCPUUsage == 0 {
+		return 0
+	}
+
 	cpuDelta := float64(stats.CPUStats.CPUUsage.TotalUsage - stats.PreCPUStats.CPUUsage.TotalUsage)
 	sysDelta := float64(stats.CPUStats.SystemCPUUsage - stats.PreCPUStats.SystemCPUUsage)
 
@@ -105,7 +109,12 @@ func calculateCPUPercent(stats *dockerStats) float64 {
 		if numCPUs == 0 {
 			numCPUs = 1
 		}
-		return (cpuDelta / sysDelta) * numCPUs * 100.0
+		pct := (cpuDelta / sysDelta) * numCPUs * 100.0
+		maxPct := numCPUs * 100.0
+		if pct > maxPct {
+			return 0
+		}
+		return pct
 	}
 	return 0
 }
