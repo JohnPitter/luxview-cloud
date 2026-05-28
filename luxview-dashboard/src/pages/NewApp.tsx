@@ -405,7 +405,7 @@ export function NewApp() {
                 <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-zinc-900'}`}>
                   Servidor de Jogo
                 </p>
-                <p className="text-xs text-zinc-500 mt-0.5">Inicie um servidor dedicado (V Rising, etc.)</p>
+                <p className="text-xs text-zinc-500 mt-0.5">Inicie um servidor dedicado (V Rising, MU Online, etc.)</p>
               </div>
             </div>
           </GlassCard>

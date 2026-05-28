@@ -87,6 +87,19 @@ func (s *GameServerService) Start(ctx context.Context, app *model.App, cfg *mode
 		}
 	}
 
+	for _, ep := range cfg.ExtraPorts {
+		epProto := ep.Protocol
+		if epProto == "" {
+			epProto = protocol
+		}
+		epStr := fmt.Sprintf("%d/%s", ep.Port, epProto)
+		epNat := nat.Port(epStr)
+		portSet[epNat] = struct{}{}
+		portMap[epNat] = []nat.PortBinding{
+			{HostIP: "0.0.0.0", HostPort: strconv.Itoa(ep.Port)},
+		}
+	}
+
 	var envList []string
 	for k, v := range cfg.ConfigFields {
 		envList = append(envList, fmt.Sprintf("%s=%s", k, v))
@@ -172,7 +185,7 @@ func (s *GameServerService) QueryPlayers(ctx context.Context, cfg *model.GameSer
 
 // GetTemplates returns all available game server templates.
 func GetGameTemplates() []model.GameTemplate {
-	return []model.GameTemplate{vrisingTemplate()}
+	return []model.GameTemplate{vrisingTemplate(), openmuTemplate()}
 }
 
 func GetGameTemplate(id string) *model.GameTemplate {

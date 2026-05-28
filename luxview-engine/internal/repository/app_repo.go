@@ -46,7 +46,7 @@ func (r *AppRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.App, error
 		        a.stack, a.status, a.app_type, a.container_id, a.internal_port, a.assigned_port,
 		        a.env_vars, a.resource_limits, a.auto_deploy, a.webhook_id, a.custom_dockerfile,
 		        a.custom_domain, a.created_at, a.updated_at,
-		        g.id, g.template_id, g.image, g.game_port, g.query_port, g.data_dir, g.data_volume, g.volumes, g.protocol, g.config_fields
+		        g.id, g.template_id, g.image, g.game_port, g.query_port, g.data_dir, g.data_volume, g.volumes, g.extra_ports, g.protocol, g.config_fields
 		 FROM apps a
 		 LEFT JOIN game_server_configs g ON g.app_id = a.id
 		 WHERE a.id = $1`, id,
@@ -54,7 +54,7 @@ func (r *AppRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.App, error
 		&app.RepoBranch, &app.Stack, &app.Status, &app.AppType, &app.ContainerID,
 		&app.InternalPort, &assignedPort, &app.EnvVars, &rl,
 		&app.AutoDeploy, &app.WebhookID, &app.CustomDockerfile, &app.CustomDomain, &app.CreatedAt, &app.UpdatedAt,
-		&gc.ID, &gc.TemplateID, &gc.Image, &gc.GamePort, &gc.QueryPort, &gc.DataDir, &gc.DataVolume, &gc.Volumes, &gc.Protocol, &gc.ConfigFields)
+		&gc.ID, &gc.TemplateID, &gc.Image, &gc.GamePort, &gc.QueryPort, &gc.DataDir, &gc.DataVolume, &gc.Volumes, &gc.ExtraPorts, &gc.Protocol, &gc.ConfigFields)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -137,7 +137,7 @@ func (r *AppRepo) ListByUserID(ctx context.Context, userID uuid.UUID, limit, off
 		        a.stack, a.status, a.app_type, a.container_id, a.internal_port, a.assigned_port,
 		        a.resource_limits, a.auto_deploy, a.webhook_id, a.custom_dockerfile, a.custom_domain,
 		        a.created_at, a.updated_at,
-		        g.id, g.template_id, g.image, g.game_port, g.query_port, g.data_dir, g.data_volume, g.volumes, g.protocol, g.config_fields
+		        g.id, g.template_id, g.image, g.game_port, g.query_port, g.data_dir, g.data_volume, g.volumes, g.extra_ports, g.protocol, g.config_fields
 		 FROM apps a
 		 LEFT JOIN game_server_configs g ON g.app_id = a.id
 		 WHERE a.user_id = $1
@@ -159,7 +159,7 @@ func (r *AppRepo) ListByUserID(ctx context.Context, userID uuid.UUID, limit, off
 			&app.ContainerID, &app.InternalPort, &assignedPort, &rl,
 			&app.AutoDeploy, &app.WebhookID, &app.CustomDockerfile, &app.CustomDomain,
 			&app.CreatedAt, &app.UpdatedAt,
-			&gc.ID, &gc.TemplateID, &gc.Image, &gc.GamePort, &gc.QueryPort, &gc.DataDir, &gc.DataVolume, &gc.Volumes, &gc.Protocol, &gc.ConfigFields); err != nil {
+			&gc.ID, &gc.TemplateID, &gc.Image, &gc.GamePort, &gc.QueryPort, &gc.DataDir, &gc.DataVolume, &gc.Volumes, &gc.ExtraPorts, &gc.Protocol, &gc.ConfigFields); err != nil {
 			return nil, 0, err
 		}
 		if assignedPort != nil {
@@ -370,6 +370,7 @@ type gameConfigNullable struct {
 	DataDir      *string
 	DataVolume   *string
 	Volumes      *json.RawMessage
+	ExtraPorts   *json.RawMessage
 	Protocol     *string
 	ConfigFields *json.RawMessage
 }
@@ -393,6 +394,9 @@ func (g *gameConfigNullable) toModel() *model.GameServerConfig {
 	}
 	if g.Volumes != nil {
 		_ = json.Unmarshal(*g.Volumes, &cfg.Volumes)
+	}
+	if g.ExtraPorts != nil {
+		_ = json.Unmarshal(*g.ExtraPorts, &cfg.ExtraPorts)
 	}
 	return cfg
 }

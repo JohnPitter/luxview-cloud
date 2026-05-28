@@ -155,6 +155,10 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 			dataDir = "/data"
 		}
 		protocol := "udp"
+		tmpl := service.GetGameTemplate(gc.TemplateID)
+		if tmpl != nil && tmpl.Protocol != "" {
+			protocol = tmpl.Protocol
+		}
 
 		resourceLimits := model.ResourceLimits{CPU: "1.0", Memory: "4g", Disk: "1g"}
 
@@ -176,17 +180,16 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Populate per-template volumes (e.g. V Rising needs both binaries + saves).
-		// Engine-generated volume names follow luxview-game-{subdomain}-{slug-of-mount-path}.
 		var volumes []model.GameVolume
-		if tmpl := service.GetGameTemplate(gc.TemplateID); tmpl != nil && len(tmpl.DefaultVolumes) > 0 {
-			volumes = make([]model.GameVolume, 0, len(tmpl.DefaultVolumes))
+		var extraPorts []model.ExtraPort
+		if tmpl != nil {
 			for _, dv := range tmpl.DefaultVolumes {
 				volumes = append(volumes, model.GameVolume{
 					Name:      defaultVolumeName(subdomain, dv.MountPath),
 					MountPath: dv.MountPath,
 				})
 			}
+			extraPorts = tmpl.DefaultExtraPorts
 		}
 
 		gameCfg := &model.GameServerConfig{
@@ -195,6 +198,7 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 			Image:        gc.Image,
 			GamePort:     gc.GamePort,
 			QueryPort:    gc.QueryPort,
+			ExtraPorts:   extraPorts,
 			DataDir:      dataDir,
 			DataVolume:   gc.DataVolume,
 			Volumes:      volumes,

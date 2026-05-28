@@ -40,6 +40,12 @@ export interface GameVolume {
   mountPath: string;
 }
 
+export interface ExtraPort {
+  port: number;
+  protocol: string;
+  label?: string;
+}
+
 export interface GameServerConfig {
   id: string;
   appId: string;
@@ -47,6 +53,7 @@ export interface GameServerConfig {
   image: string;
   gamePort: number;
   queryPort?: number;
+  extraPorts?: ExtraPort[];
   dataDir: string;
   dataVolume?: string;
   volumes: GameVolume[];

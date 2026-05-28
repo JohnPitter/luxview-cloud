@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { GameServerConfig, GameVolume, CreateGameServerPayload, App } from './apps';
+import type { GameServerConfig, GameVolume, CreateGameServerPayload, App, ExtraPort } from './apps';
 
 export interface ConfigFieldOption {
   value: string;
@@ -22,6 +22,7 @@ export interface GameTemplate {
   protocol: string;
   defaultGamePort: number;
   defaultQueryPort: number;
+  defaultExtraPorts?: ExtraPort[];
   defaultImage: string;
   configFields: ConfigFieldDef[];
   supportsQuery: boolean;

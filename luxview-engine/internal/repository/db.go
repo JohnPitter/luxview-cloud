@@ -439,6 +439,7 @@ func (db *DB) migrate(ctx context.Context) error {
 		)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS game_server_configs_app_id_idx ON game_server_configs(app_id)`,
 		`ALTER TABLE game_server_configs ADD COLUMN IF NOT EXISTS volumes JSONB NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE game_server_configs ADD COLUMN IF NOT EXISTS extra_ports JSONB NOT NULL DEFAULT '[]'`,
 		// Backfill V Rising (migrated from docker-compose) — it needs both the saves and the binaries volume
 		`UPDATE game_server_configs
 		   SET volumes = '[{"name":"luxview-cloud_vrising-data","mount_path":"/vrising-data"},{"name":"luxview-cloud_vrising-server","mount_path":"/vrising-server"}]'::jsonb

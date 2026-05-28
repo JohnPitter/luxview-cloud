@@ -185,7 +185,7 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
               </code>
             </div>
 
-            {config.queryPort && (
+            {config.queryPort && config.template?.supportsQuery !== false && (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-zinc-500">Query:</span>
                 <code className={`text-xs font-mono px-2 py-0.5 rounded-md ${isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'}`}>
@@ -193,6 +193,18 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
                 </code>
               </div>
             )}
+
+            {config.extraPorts?.map((ep) => (
+              <div key={ep.port} className="flex items-center gap-2">
+                <span className="text-xs text-zinc-500">{ep.label ?? `Porta ${ep.port}`}:</span>
+                <code className={`text-xs font-mono px-2 py-0.5 rounded-md ${isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'}`}>
+                  {ep.label?.toLowerCase().includes('admin') || ep.label?.toLowerCase().includes('painel')
+                    ? `http://${config.serverIp ?? '...'}:${ep.port}`
+                    : `:${ep.port}`
+                  }
+                </code>
+              </div>
+            ))}
           </div>
 
           <PillButton
