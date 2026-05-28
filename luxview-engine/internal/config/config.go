@@ -71,6 +71,13 @@ type Config struct {
 	VPSPublicIP   string // Public IP A-record users must point custom domains to
 	AcmeStorePath string // Path to Traefik acme.json (read-only mount), used for cert status
 
+	// SMTP (alert emails)
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUser     string
+	SMTPPassword string
+	SMTPFrom     string
+
 	// Analytics
 	GeoLite2Path      string
 	TraefikLogPath    string
@@ -139,6 +146,12 @@ func Load() (*Config, error) {
 
 		VPSPublicIP:   envStr("VPS_PUBLIC_IP", ""),
 		AcmeStorePath: envStr("ACME_STORE_PATH", "/letsencrypt/acme.json"),
+
+		SMTPHost:     envStr("SMTP_HOST", ""),
+		SMTPPort:     envInt("SMTP_PORT", 587),
+		SMTPUser:     envStr("SMTP_USER", ""),
+		SMTPPassword: envStr("SMTP_PASSWORD", ""),
+		SMTPFrom:     envStr("SMTP_FROM", "alerts@luxview.cloud"),
 
 		GeoLite2Path:      envStr("GEOLITE2_PATH", "/usr/share/GeoIP/GeoLite2-City.mmdb"),
 		TraefikLogPath:    envStr("TRAEFIK_LOG_PATH", ""),

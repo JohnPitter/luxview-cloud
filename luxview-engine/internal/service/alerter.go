@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/smtp"
 	"time"
 
+	"github.com/luxview/engine/internal/config"
 	"github.com/luxview/engine/internal/model"
 	"github.com/luxview/engine/internal/repository"
 	"github.com/luxview/engine/pkg/logger"
@@ -18,15 +20,33 @@ type Alerter struct {
 	alertRepo  *repository.AlertRepo
 	metricRepo *repository.MetricRepo
 	appRepo    *repository.AppRepo
+	userRepo   *repository.UserRepo
+	smtpCfg    smtpConfig
 	client     *http.Client
 }
 
-func NewAlerter(alertRepo *repository.AlertRepo, metricRepo *repository.MetricRepo, appRepo *repository.AppRepo) *Alerter {
+type smtpConfig struct {
+	Host     string
+	Port     int
+	User     string
+	Password string
+	From     string
+}
+
+func NewAlerter(alertRepo *repository.AlertRepo, metricRepo *repository.MetricRepo, appRepo *repository.AppRepo, userRepo *repository.UserRepo, cfg *config.Config) *Alerter {
 	return &Alerter{
 		alertRepo:  alertRepo,
 		metricRepo: metricRepo,
 		appRepo:    appRepo,
-		client:     &http.Client{Timeout: 10 * time.Second},
+		userRepo:   userRepo,
+		smtpCfg: smtpConfig{
+			Host:     cfg.SMTPHost,
+			Port:     cfg.SMTPPort,
+			User:     cfg.SMTPUser,
+			Password: cfg.SMTPPassword,
+			From:     cfg.SMTPFrom,
+		},
+		client: &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -116,7 +136,13 @@ func (a *Alerter) trigger(ctx context.Context, alert *model.Alert) error {
 			return err
 		}
 	case model.AlertEmail:
-		log.Info().Str("message", message).Msg("email alert (not implemented)")
+		recipient, err := a.resolveEmailRecipient(ctx, alert)
+		if err != nil {
+			return fmt.Errorf("resolve email recipient: %w", err)
+		}
+		if err := a.sendEmail(recipient, app.Name, message); err != nil {
+			return err
+		}
 	}
 
 	_ = a.alertRepo.UpdateLastTriggered(ctx, alert.ID)
@@ -156,4 +182,40 @@ func (a *Alerter) sendDiscord(channelConfig json.RawMessage, message string) err
 	}
 	defer resp.Body.Close()
 	return nil
+}
+
+func (a *Alerter) resolveEmailRecipient(ctx context.Context, alert *model.Alert) (string, error) {
+	var cfg struct {
+		Target string `json:"target"`
+	}
+	if err := json.Unmarshal(alert.ChannelConfig, &cfg); err == nil && cfg.Target != "" {
+		return cfg.Target, nil
+	}
+
+	app, err := a.appRepo.FindByID(ctx, alert.AppID)
+	if err != nil || app == nil {
+		return "", fmt.Errorf("app not found")
+	}
+	user, err := a.userRepo.FindByID(ctx, app.UserID)
+	if err != nil || user == nil {
+		return "", fmt.Errorf("user not found")
+	}
+	return user.Email, nil
+}
+
+func (a *Alerter) sendEmail(to, appName, message string) error {
+	if a.smtpCfg.Host == "" {
+		return fmt.Errorf("SMTP not configured")
+	}
+
+	subject := fmt.Sprintf("LuxView Alert — %s", appName)
+	body := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n%s",
+		a.smtpCfg.From, to, subject, message)
+
+	addr := fmt.Sprintf("%s:%d", a.smtpCfg.Host, a.smtpCfg.Port)
+	var auth smtp.Auth
+	if a.smtpCfg.User != "" {
+		auth = smtp.PlainAuth("", a.smtpCfg.User, a.smtpCfg.Password, a.smtpCfg.Host)
+	}
+	return smtp.SendMail(addr, auth, a.smtpCfg.From, []string{to}, []byte(body))
 }

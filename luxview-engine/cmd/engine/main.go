@@ -84,7 +84,7 @@ func main() {
 	deployer := service.NewDeployer(appRepo, deployRepo, userRepo, serviceRepo, settingsRepo, provisioner, docker, portManager, encryptionKey, sourceCheckout, time.Duration(cfg.BuildTimeout)*time.Second, cfg.AppNetwork)
 	metricsCollector := service.NewMetricsCollector(appRepo, metricRepo, docker)
 	healthChecker := service.NewHealthChecker(appRepo, containerMgr)
-	alerter := service.NewAlerter(alertRepo, metricRepo, appRepo)
+	alerter := service.NewAlerter(alertRepo, metricRepo, appRepo, userRepo, cfg)
 	backupSvc := service.NewBackupService(backupRepo, settingsRepo, auditSvc, cfg.BackupDir, service.ContainerConfig{
 		PGPlatformContainer: "luxview-pg-platform",
 		PGPlatformUser:      "luxview",

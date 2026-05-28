@@ -38,6 +38,7 @@ import { useAppsStore } from '../stores/apps.store';
 import { useThemeStore } from '../stores/theme.store';
 import { useNotificationsStore } from '../stores/notifications.store';
 import { useMetricsLive } from '../hooks/useMetricsLive';
+import { type MetricPeriod } from '../api/metrics';
 import { formatBytes, formatPercent, formatRelativeTime } from '../lib/format';
 import { deploymentsApi, type Deployment } from '../api/deployments';
 import { servicesApi, type AppService } from '../api/services';
@@ -113,7 +114,8 @@ export function AppDetail() {
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [analysisMode, setAnalysisMode] = useState<'failure' | 'first-deploy'>('failure');
 
-  const { metrics } = useMetricsLive(appId || '');
+  const [metricsPeriod, setMetricsPeriod] = useState<MetricPeriod>('1h');
+  const { metrics } = useMetricsLive(appId || '', metricsPeriod);
 
   useEffect(() => {
     if (appId) {
@@ -372,13 +374,19 @@ export function AppDetail() {
   const currentMemory = latestMetric?.memoryBytes ?? 0;
 
   const metricsData = metrics.map((m, i) => {
-    // Network values are cumulative — compute delta between consecutive readings
     const prev = i > 0 ? metrics[i - 1] : null;
     const timeDelta = prev ? (new Date(m.timestamp).getTime() - new Date(prev.timestamp).getTime()) / 1000 : 1;
     const rxDelta = prev ? Math.max(0, m.networkRx - prev.networkRx) : 0;
     const txDelta = prev ? Math.max(0, m.networkTx - prev.networkTx) : 0;
+    const ts = new Date(m.timestamp);
+    let time: string;
+    if (metricsPeriod === '1h' || metricsPeriod === '24h') {
+      time = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else {
+      time = ts.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
     return {
-      time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time,
       cpu: m.cpuPercent,
       memory: m.memoryBytes / (1024 * 1024),
       networkRx: timeDelta > 0 ? rxDelta / 1024 / timeDelta : 0,
@@ -1009,7 +1017,25 @@ export function AppDetail() {
 
         {/* ==================== METRICS ==================== */}
         {activeTab === 'metrics' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" data-tour="app-metrics">
+          <div className="space-y-4" data-tour="app-metrics">
+          <div className="flex gap-2">
+            {(['1h', '24h', '7d', '30d', '365d'] as MetricPeriod[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => setMetricsPeriod(p)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
+                  metricsPeriod === p
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : isDark
+                      ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                }`}
+              >
+                {t(`app.metrics.period.${p}`)}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <MetricsChart
               data={metricsData}
               dataKey="cpu"
@@ -1038,6 +1064,7 @@ export function AppDetail() {
               color="#a78bfa"
               unit=" KB/s"
             />
+          </div>
           </div>
         )}
 

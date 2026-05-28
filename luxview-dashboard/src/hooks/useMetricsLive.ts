@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { metricsApi, type MetricPoint } from '../api/metrics';
+import { metricsApi, type MetricPoint, type MetricPeriod } from '../api/metrics';
 
-export function useMetricsLive(appId: string, period = '1h', refreshInterval = 30000) {
+export function useMetricsLive(appId: string, period: MetricPeriod = '1h', refreshInterval = 30000) {
   const [metrics, setMetrics] = useState<MetricPoint[]>([]);
   const [loading, setLoading] = useState(false);
 

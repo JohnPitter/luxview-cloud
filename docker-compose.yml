@@ -78,6 +78,11 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - TRAEFIK_LOG_PATH=/var/log/traefik/access.json
       - MAIL_CONTAINER_NAME=luxview-mailserver
+      - SMTP_HOST=luxview-mailserver
+      - SMTP_PORT=587
+      - SMTP_USER=${SMTP_USER:-alerts@luxview.cloud}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-alerts@luxview.cloud}
       - VPS_PUBLIC_IP=${VPS_PUBLIC_IP:-}
       - ACME_STORE_PATH=/letsencrypt/acme.json
     networks:
