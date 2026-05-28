@@ -390,10 +390,10 @@ export function AppDetail() {
     }
     return {
       time,
-      cpu: m.cpuPercent,
-      memory: m.memoryBytes / (1024 * 1024),
-      networkRx: timeDelta > 0 ? rxDelta / 1024 / timeDelta : 0,
-      networkTx: timeDelta > 0 ? txDelta / 1024 / timeDelta : 0,
+      cpu: Math.round(m.cpuPercent * 10) / 10,
+      memory: Math.round(m.memoryBytes / (1024 * 1024)),
+      networkRx: Math.round((timeDelta > 0 ? rxDelta / 1024 / timeDelta : 0) * 10) / 10,
+      networkTx: Math.round((timeDelta > 0 ? txDelta / 1024 / timeDelta : 0) * 10) / 10,
     };
   });
 
