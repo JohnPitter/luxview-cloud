@@ -77,7 +77,7 @@ export function AppDetail() {
     { id: 'overview', label: t('app.tabs.overview') },
     { id: 'game', label: 'Configurações do Jogo' },
     { id: 'logs', label: t('app.tabs.logs') },
-    { id: 'env', label: t('app.tabs.env') },
+    { id: 'env', label: t('app.tabs.environment') },
     { id: 'services', label: t('app.tabs.services') },
     { id: 'metrics', label: t('app.tabs.metrics') },
     { id: 'alerts', label: t('app.tabs.alerts') },
