@@ -185,7 +185,7 @@ func (s *GameServerService) QueryPlayers(ctx context.Context, cfg *model.GameSer
 
 // GetTemplates returns all available game server templates.
 func GetGameTemplates() []model.GameTemplate {
-	return []model.GameTemplate{vrisingTemplate(), openmuTemplate()}
+	return []model.GameTemplate{vrisingTemplate(), openmuTemplate(), muemuTemplate()}
 }
 
 func GetGameTemplate(id string) *model.GameTemplate {
