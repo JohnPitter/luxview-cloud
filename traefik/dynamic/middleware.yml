@@ -28,3 +28,10 @@ http:
       compress:
         excludedContentTypes:
           - "text/event-stream"
+
+    # Redirect unknown subdomains to the main dashboard
+    redirect-to-main:
+      redirectRegex:
+        regex: "^https?://.*"
+        replacement: "https://luxview.cloud"
+        permanent: false

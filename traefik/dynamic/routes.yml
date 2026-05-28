@@ -62,29 +62,17 @@ http:
         - security-headers
       priority: 10
 
-    # Luxview Games → game server management UI
-    luxview-games:
-      rule: "Host(`games.luxview.cloud`)"
-      entryPoints:
-        - websecure
-      service: luxview-games-svc
-      tls:
-        certResolver: letsencrypt
-      middlewares:
-        - security-headers
-      priority: 10
-
-    # Catch-all for deleted/unknown *.luxview.cloud subdomains
-    # Priority must be lower than dynamic app routes (which default to rule length)
+    # Catch-all for deleted/unknown *.luxview.cloud subdomains.
+    # Redirects to the main dashboard instead of showing errors.
+    # Uses tls:{} (no certResolver) to avoid issuing certs for random subdomains.
     app-not-found:
       rule: "HostRegexp(`^.+\\.luxview\\.cloud$`)"
       entryPoints:
         - websecure
       service: dashboard-svc
-      tls:
-        certResolver: letsencrypt
+      tls: {}
       middlewares:
-        - security-headers
+        - redirect-to-main
       priority: 1
 
   serversTransports:
@@ -112,8 +100,3 @@ http:
       loadBalancer:
         servers:
           - url: "http://luxview-roundcube:80"
-
-    luxview-games-svc:
-      loadBalancer:
-        servers:
-          - url: "http://luxview-games:8080"
