@@ -45,16 +45,27 @@ func (r *MetricRepo) InsertBatch(ctx context.Context, metrics []model.Metric) er
 
 func (r *MetricRepo) GetAggregated(ctx context.Context, appID uuid.UUID, from, to time.Time, intervalSec int) ([]model.MetricAggregation, error) {
 	query := fmt.Sprintf(`
+		WITH deltas AS (
+			SELECT
+				timestamp,
+				cpu_percent,
+				memory_bytes,
+				GREATEST(0, network_rx - LAG(network_rx) OVER (ORDER BY timestamp))
+					/ NULLIF(EXTRACT(EPOCH FROM timestamp - LAG(timestamp) OVER (ORDER BY timestamp)), 0) AS rx_rate,
+				GREATEST(0, network_tx - LAG(network_tx) OVER (ORDER BY timestamp))
+					/ NULLIF(EXTRACT(EPOCH FROM timestamp - LAG(timestamp) OVER (ORDER BY timestamp)), 0) AS tx_rate
+			FROM metrics
+			WHERE app_id = $1 AND timestamp >= $2 AND timestamp <= $3
+		)
 		SELECT
 			date_trunc('second', timestamp) - (EXTRACT(EPOCH FROM timestamp)::int %% $4) * interval '1 second' AS bucket,
 			AVG(cpu_percent) AS avg_cpu,
 			MAX(cpu_percent) AS max_cpu,
 			AVG(memory_bytes) AS avg_memory,
 			MAX(memory_bytes) AS max_memory,
-			MAX(network_rx) AS avg_network_rx,
-			MAX(network_tx) AS avg_network_tx
-		FROM metrics
-		WHERE app_id = $1 AND timestamp >= $2 AND timestamp <= $3
+			COALESCE(AVG(rx_rate), 0) AS avg_network_rx,
+			COALESCE(AVG(tx_rate), 0) AS avg_network_tx
+		FROM deltas
 		GROUP BY bucket
 		ORDER BY bucket ASC`)
 

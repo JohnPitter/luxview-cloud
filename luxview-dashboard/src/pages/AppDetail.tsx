@@ -376,11 +376,7 @@ export function AppDetail() {
   const currentCpu = latestMetric?.cpuPercent ?? 0;
   const currentMemory = latestMetric?.memoryBytes ?? 0;
 
-  const metricsData = metrics.map((m, i) => {
-    const prev = i > 0 ? metrics[i - 1] : null;
-    const timeDelta = prev ? (new Date(m.timestamp).getTime() - new Date(prev.timestamp).getTime()) / 1000 : 1;
-    const rxDelta = prev ? Math.max(0, m.networkRx - prev.networkRx) : 0;
-    const txDelta = prev ? Math.max(0, m.networkTx - prev.networkTx) : 0;
+  const metricsData = metrics.map((m) => {
     const ts = new Date(m.timestamp);
     let time: string;
     if (metricsPeriod === '1h' || metricsPeriod === '24h') {
@@ -392,8 +388,8 @@ export function AppDetail() {
       time,
       cpu: Math.round(m.cpuPercent * 10) / 10,
       memory: Math.round(m.memoryBytes / (1024 * 1024)),
-      networkRx: Math.round((timeDelta > 0 ? rxDelta / 1024 / timeDelta : 0) * 10) / 10,
-      networkTx: Math.round((timeDelta > 0 ? txDelta / 1024 / timeDelta : 0) * 10) / 10,
+      networkRx: Math.round(m.networkRx / 1024 * 10) / 10,
+      networkTx: Math.round(m.networkTx / 1024 * 10) / 10,
     };
   });
 
