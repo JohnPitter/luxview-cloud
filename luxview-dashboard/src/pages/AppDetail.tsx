@@ -374,7 +374,7 @@ export function AppDetail() {
 
   const latestMetric = metrics.length > 0 ? metrics[metrics.length - 1] : null;
   const currentCpu = latestMetric?.cpuPercent ?? 0;
-  const currentMemory = latestMetric?.memoryBytes ?? 0;
+  const currentMemory = latestMetric?.memoryMB ?? 0;
 
   const metricsData = metrics.map((m) => {
     const ts = new Date(m.timestamp);
@@ -386,10 +386,10 @@ export function AppDetail() {
     }
     return {
       time,
-      cpu: Math.round(m.cpuPercent * 10) / 10,
-      memory: Math.round(m.memoryBytes / (1024 * 1024)),
-      networkRx: Math.round(m.networkRx / 1024 * 10) / 10,
-      networkTx: Math.round(m.networkTx / 1024 * 10) / 10,
+      cpu: m.cpuPercent,
+      memory: m.memoryMB,
+      networkRx: m.networkRxKBs,
+      networkTx: m.networkTxKBs,
     };
   });
 
@@ -692,7 +692,7 @@ export function AppDetail() {
                   <div className="flex justify-between text-xs mb-2">
                     <span className="text-zinc-500">{t('app.resources.memory')}</span>
                     <span className={isDark ? 'text-zinc-300' : 'text-zinc-700'}>
-                      {formatBytes(currentMemory)}
+                      {`${currentMemory} MB`}
                     </span>
                   </div>
                   <div className={`h-2 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
@@ -700,7 +700,7 @@ export function AppDetail() {
                       className="h-full rounded-full bg-blue-400 transition-all duration-500"
                       style={{
                         width: `${Math.min(
-                          (currentMemory / (() => { const m = app.resourceLimits?.memory || '512m'; const n = parseFloat(m); return m.endsWith('g') ? n * 1024 * 1024 * 1024 : n * 1024 * 1024; })()) * 100,
+                          (currentMemory / (() => { const m = app.resourceLimits?.memory || '512m'; const n = parseFloat(m); return m.endsWith('g') ? n * 1024 : n; })()) * 100,
                           100,
                         )}%`,
                       }}

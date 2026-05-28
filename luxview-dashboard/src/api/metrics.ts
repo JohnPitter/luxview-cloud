@@ -14,18 +14,18 @@ interface RawAggregation {
 export interface MetricPoint {
   timestamp: string;
   cpuPercent: number;
-  memoryBytes: number;
-  networkRx: number;
-  networkTx: number;
+  memoryMB: number;
+  networkRxKBs: number;
+  networkTxKBs: number;
 }
 
 function mapAggregation(raw: RawAggregation): MetricPoint {
   return {
     timestamp: raw.timestamp,
     cpuPercent: raw.avgCpu ?? 0,
-    memoryBytes: raw.avgMemory ?? 0,
-    networkRx: raw.avgNetworkRx ?? 0,
-    networkTx: raw.avgNetworkTx ?? 0,
+    memoryMB: raw.avgMemory ?? 0,
+    networkRxKBs: raw.avgNetworkRx ?? 0,
+    networkTxKBs: raw.avgNetworkTx ?? 0,
   };
 }
 

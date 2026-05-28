@@ -59,12 +59,12 @@ func (r *MetricRepo) GetAggregated(ctx context.Context, appID uuid.UUID, from, t
 		)
 		SELECT
 			date_trunc('second', timestamp) - (EXTRACT(EPOCH FROM timestamp)::int %% $4) * interval '1 second' AS bucket,
-			AVG(cpu_percent) AS avg_cpu,
-			MAX(cpu_percent) AS max_cpu,
-			AVG(memory_bytes) AS avg_memory,
-			MAX(memory_bytes) AS max_memory,
-			COALESCE(AVG(rx_rate), 0) AS avg_network_rx,
-			COALESCE(AVG(tx_rate), 0) AS avg_network_tx
+			ROUND(AVG(cpu_percent)::numeric, 1) AS avg_cpu,
+			ROUND(MAX(cpu_percent)::numeric, 1) AS max_cpu,
+			ROUND(AVG(memory_bytes)::numeric / (1024 * 1024)) AS avg_memory,
+			ROUND(MAX(memory_bytes)::numeric / (1024 * 1024)) AS max_memory,
+			ROUND(COALESCE(AVG(rx_rate), 0)::numeric / 1024, 1) AS avg_network_rx,
+			ROUND(COALESCE(AVG(tx_rate), 0)::numeric / 1024, 1) AS avg_network_tx
 		FROM deltas
 		GROUP BY bucket
 		ORDER BY bucket ASC`)
