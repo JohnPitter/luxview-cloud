@@ -129,6 +129,7 @@ services:
     restart: unless-stopped
     volumes:
       - /opt/mu-browser/dist:/usr/share/nginx/html:ro
+      - ./luxview-games/games/openmu/mu-browser/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - traefik-public
 
