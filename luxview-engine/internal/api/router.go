@@ -282,8 +282,8 @@ func NewRouter(deps Deps) *chi.Mux {
 			// Alerts
 			r.Post("/apps/{id}/alerts", alertHandler.Create)
 			r.Get("/apps/{id}/alerts", alertHandler.List)
-			r.Patch("/alerts/{id}", alertHandler.Update)
-			r.Delete("/alerts/{id}", alertHandler.Delete)
+			r.Patch("/apps/{id}/alerts/{alertId}", alertHandler.Update)
+			r.Delete("/apps/{id}/alerts/{alertId}", alertHandler.Delete)
 
 			// Analytics
 			r.Get("/analytics/overview", analyticsHandler.Overview)

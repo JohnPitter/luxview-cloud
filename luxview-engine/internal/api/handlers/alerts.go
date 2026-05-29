@@ -133,7 +133,7 @@ func (h *AlertHandler) Update(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)
 
-	alertID, err := uuid.Parse(chi.URLParam(r, "id"))
+	alertID, err := uuid.Parse(chi.URLParam(r, "alertId"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid alert ID")
 		return
@@ -200,7 +200,7 @@ func (h *AlertHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)
 
-	alertID, err := uuid.Parse(chi.URLParam(r, "id"))
+	alertID, err := uuid.Parse(chi.URLParam(r, "alertId"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid alert ID")
 		return
