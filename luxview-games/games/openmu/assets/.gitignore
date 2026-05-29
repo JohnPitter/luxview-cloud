@@ -1,0 +1,7 @@
+# Binários do client OpenMU não vão pro git (multi-GB).
+# O zip base é colocado manualmente na VPS no path montado pela engine.
+*
+!.gitkeep
+!.gitignore
+!README.md
+!build-base-zip.sh
