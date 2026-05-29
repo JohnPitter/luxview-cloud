@@ -13,6 +13,16 @@ func openmuTemplate() model.GameTemplate {
 		DefaultExtraPorts: []model.ExtraPort{
 			{Port: 55980, Protocol: "tcp", Label: "ChatServer"},
 			{Port: 8080, Protocol: "tcp", Label: "Painel Admin"},
+			// OpenMU's default data defines multiple GameServers (Server 0/1/2) on
+			// ports 55901-55906. The ConnectServer advertises these endpoints to
+			// clients, so they must all be published or players get disconnected
+			// right after picking a server from the list. 55901 is the main game
+			// port (DefaultQueryPort); 55902-55906 are the rest.
+			{Port: 55902, Protocol: "tcp", Label: "GameServer 0b"},
+			{Port: 55903, Protocol: "tcp", Label: "GameServer 1"},
+			{Port: 55904, Protocol: "tcp", Label: "GameServer 1b"},
+			{Port: 55905, Protocol: "tcp", Label: "GameServer 2"},
+			{Port: 55906, Protocol: "tcp", Label: "GameServer 2b"},
 		},
 		DefaultImage:  "luxview-cloud-openmu:latest",
 		SupportsQuery: false,
