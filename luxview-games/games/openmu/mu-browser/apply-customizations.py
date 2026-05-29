@@ -72,6 +72,21 @@ patch("src/ui/pages/worldPage/index.tsx", [
     ("<Skills />", "{false && <Skills />}"),
 ])
 
+# 3d-2) Position the browser as a preview: a clear CTA to download the full
+#       Windows client (the complete experience — combat, classic HUD).
+patch("src/ui/pages/preloaderPage/index.tsx", [
+    ("""        <button onClick={() => Store.playOnline()}>Play Online</button>
+      </div>""",
+     """        <button onClick={() => Store.playOnline()}>Play Online</button>
+      </div>
+      <a
+        href="https://mu.luxview.cloud/client/LuxViewMU-Windows.zip"
+        style={{ display: 'block', marginTop: '18px', padding: '14px 24px', background: '#f5a623', color: '#1a1a1a', fontWeight: 'bold', textDecoration: 'none', borderRadius: '8px', textAlign: 'center', maxWidth: '380px' }}
+      >
+        🪟 Baixar Client Windows — experiência completa
+      </a>"""),
+])
+
 # 3e) Auto-play each model's idle animation on load (it was commented out) so
 #     characters/monsters/NPCs animate instead of standing frozen — a big
 #     "alive / like the native client" win. Verified via screenshots.
