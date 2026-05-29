@@ -71,6 +71,8 @@ type Config struct {
 	VPSPublicIP   string // Public IP A-record users must point custom domains to
 	AcmeStorePath string // Path to Traefik acme.json (read-only mount), used for cert status
 
+	OpenMUClientBaseZipPath string // Base Season 6 client zip used to generate configured downloads
+
 	// SMTP (alert emails)
 	SMTPHost     string
 	SMTPPort     int
@@ -146,6 +148,8 @@ func Load() (*Config, error) {
 
 		VPSPublicIP:   envStr("VPS_PUBLIC_IP", ""),
 		AcmeStorePath: envStr("ACME_STORE_PATH", "/letsencrypt/acme.json"),
+
+		OpenMUClientBaseZipPath: envStr("OPENMU_CLIENT_BASE_ZIP", "/opt/luxview/clients/openmu-s6-base.zip"),
 
 		SMTPHost:     envStr("SMTP_HOST", ""),
 		SMTPPort:     envInt("SMTP_PORT", 587),

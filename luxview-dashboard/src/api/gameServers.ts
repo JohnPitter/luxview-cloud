@@ -32,6 +32,7 @@ export interface GameTemplate {
 export interface GameConfigResponse extends GameServerConfig {
   template?: GameTemplate;
   serverIp?: string;
+  clientDownloadUrl?: string;
 }
 
 export interface GameServerStatus {
@@ -78,4 +79,22 @@ export const gameServersApi = {
     const { data } = await api.get<PlayerInfo[]>(`/apps/${appId}/game-players`);
     return data;
   },
+
+  async downloadClient(appId: string): Promise<{ blob: Blob; filename: string }> {
+    const response = await api.get<Blob>(`/apps/${appId}/game-client/download`, {
+      responseType: 'blob',
+      timeout: 300_000,
+    });
+    const disposition = response.headers['content-disposition'];
+    return {
+      blob: response.data,
+      filename: parseDownloadFilename(disposition) ?? 'openmu-client.zip',
+    };
+  },
 };
+
+function parseDownloadFilename(disposition: string | undefined): string | null {
+  if (!disposition) return null;
+  const match = disposition.match(/filename="?([^"]+)"?/i);
+  return match?.[1] ?? null;
+}

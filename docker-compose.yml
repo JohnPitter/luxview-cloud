@@ -49,6 +49,7 @@ services:
       - /data/luxview/storage:/data/luxview/storage
       - /data/luxview/repositories:/data/luxview/repositories
       - /backups:/backups
+      - /opt/luxview/clients:/opt/luxview/clients:ro
     environment:
       - PORT=${ENGINE_PORT:-8080}
       - DATABASE_URL=postgres://luxview:${DB_PASSWORD}@pg-platform:5432/luxview_platform?sslmode=disable
@@ -85,6 +86,7 @@ services:
       - SMTP_FROM=${SMTP_FROM:-alerts@luxview.cloud}
       - VPS_PUBLIC_IP=${VPS_PUBLIC_IP:-}
       - ACME_STORE_PATH=/letsencrypt/acme.json
+      - OPENMU_CLIENT_BASE_ZIP=${OPENMU_CLIENT_BASE_ZIP:-/opt/luxview/clients/openmu-s6-base.zip}
     networks:
       - luxview-net
       - traefik-public

@@ -16,31 +16,31 @@ import (
 
 // Deps holds all dependencies needed to set up the router.
 type Deps struct {
-	Config         *config.Config
-	UserRepo       *repository.UserRepo
-	RepositoryRepo *repository.RepositoryRepo
-	AppRepo        *repository.AppRepo
-	DeployRepo     *repository.DeploymentRepo
-	ActionRepo     *repository.ActionRepo
-	ServiceRepo    *repository.ServiceRepo
-	MetricRepo     *repository.MetricRepo
-	AlertRepo      *repository.AlertRepo
-	Container      *service.ContainerManager
-	Provisioner    *service.Provisioner
-	Router         *service.RouterService
-	WebhookSvc     *service.WebhookService
-	ActionSvc      *service.ActionService
-	RepositorySvc  *service.RepositoryService
-	GitHubAppSvc   *service.GitHubAppService
-	BuildQueue     chan<- service.DeployRequest
-	EncryptKey     []byte
-	PlanRepo       *repository.PlanRepo
-	SettingsRepo   *repository.SettingsRepo
-	Docker         *dockerclient.Client
-	AuditRepo      *repository.AuditLogRepo
-	AuditSvc       *service.AuditService
-	PageviewRepo   *repository.PageviewRepo
-	MailboxRepo    *repository.MailboxRepo
+	Config          *config.Config
+	UserRepo        *repository.UserRepo
+	RepositoryRepo  *repository.RepositoryRepo
+	AppRepo         *repository.AppRepo
+	DeployRepo      *repository.DeploymentRepo
+	ActionRepo      *repository.ActionRepo
+	ServiceRepo     *repository.ServiceRepo
+	MetricRepo      *repository.MetricRepo
+	AlertRepo       *repository.AlertRepo
+	Container       *service.ContainerManager
+	Provisioner     *service.Provisioner
+	Router          *service.RouterService
+	WebhookSvc      *service.WebhookService
+	ActionSvc       *service.ActionService
+	RepositorySvc   *service.RepositoryService
+	GitHubAppSvc    *service.GitHubAppService
+	BuildQueue      chan<- service.DeployRequest
+	EncryptKey      []byte
+	PlanRepo        *repository.PlanRepo
+	SettingsRepo    *repository.SettingsRepo
+	Docker          *dockerclient.Client
+	AuditRepo       *repository.AuditLogRepo
+	AuditSvc        *service.AuditService
+	PageviewRepo    *repository.PageviewRepo
+	MailboxRepo     *repository.MailboxRepo
 	BackupSvc       *service.BackupService
 	PushEventSvc    *service.PushEventService
 	PullRequestRepo *repository.PullRequestRepo
@@ -107,7 +107,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	backupHandler := handlers.NewBackupHandler(deps.BackupSvc, deps.AuditSvc)
 	domainChecker := service.NewDomainChecker(deps.Config.VPSPublicIP, deps.Config.AcmeStorePath)
 	domainCheckHandler := handlers.NewDomainCheckHandler(deps.AppRepo, domainChecker)
-	gameServerHandler := handlers.NewGameServerHandler(deps.AppRepo, deps.GameConfigRepo, deps.GameServerSvc, deps.Config.VPSPublicIP)
+	gameServerHandler := handlers.NewGameServerHandler(deps.AppRepo, deps.GameConfigRepo, deps.GameServerSvc, deps.Config.VPSPublicIP, deps.Config.OpenMUClientBaseZipPath)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 	optionalAuthMiddleware := middleware.OptionalAuth(deps.Config.JWTSecret, deps.UserRepo)
@@ -228,6 +228,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Put("/apps/{id}/game-config", gameServerHandler.UpdateConfig)
 			r.Get("/apps/{id}/game-status", gameServerHandler.GetStatus)
 			r.Get("/apps/{id}/game-players", gameServerHandler.GetPlayers)
+			r.Get("/apps/{id}/game-client/download", gameServerHandler.DownloadClient)
 
 			// AI Analyze
 			r.Post("/apps/{id}/analyze", analyzeHandler.Analyze)

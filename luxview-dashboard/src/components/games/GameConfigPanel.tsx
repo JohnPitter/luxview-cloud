@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Save, Loader2, Users, Wifi, WifiOff, RefreshCw, RotateCw, X, Clock, Trophy } from 'lucide-react';
+import { Save, Loader2, Users, Wifi, WifiOff, RefreshCw, RotateCw, X, Clock, Trophy, Download } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { PillButton } from '../common/PillButton';
 import { useThemeStore } from '../../stores/theme.store';
@@ -29,6 +29,7 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
   const [playersModal, setPlayersModal] = useState(false);
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [playersLoading, setPlayersLoading] = useState(false);
+  const [clientDownloading, setClientDownloading] = useState(false);
   const restartingSinceRef = useRef<number>(0);
 
   const loadConfig = useCallback(async () => {
@@ -103,6 +104,25 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
       addNotification({ type: 'error', title: 'Falha ao salvar configuração' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleClientDownload = async () => {
+    setClientDownloading(true);
+    try {
+      const { blob, filename } = await gameServersApi.downloadClient(appId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch {
+      addNotification({ type: 'error', title: 'Falha ao baixar client OpenMU' });
+    } finally {
+      setClientDownloading(false);
     }
   };
 
@@ -216,6 +236,18 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
           >
             Atualizar
           </PillButton>
+
+          {config.clientDownloadUrl && (
+            <PillButton
+              variant="secondary"
+              size="sm"
+              onClick={handleClientDownload}
+              disabled={clientDownloading}
+              icon={clientDownloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+            >
+              {clientDownloading ? 'Baixando...' : 'Baixar Client'}
+            </PillButton>
+          )}
         </div>
         {restarting && (
           <div className={`mt-3 text-xs ${isDark ? 'text-amber-300/70' : 'text-amber-700/80'}`}>

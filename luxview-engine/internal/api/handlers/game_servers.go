@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -19,6 +21,7 @@ type GameServerHandler struct {
 	gameConfigRepo *repository.GameServerConfigRepo
 	gameServerSvc  *service.GameServerService
 	serverIP       string
+	clientBaseZip  string
 }
 
 func NewGameServerHandler(
@@ -26,12 +29,14 @@ func NewGameServerHandler(
 	gameConfigRepo *repository.GameServerConfigRepo,
 	gameServerSvc *service.GameServerService,
 	serverIP string,
+	clientBaseZip string,
 ) *GameServerHandler {
 	return &GameServerHandler{
 		appRepo:        appRepo,
 		gameConfigRepo: gameConfigRepo,
 		gameServerSvc:  gameServerSvc,
 		serverIP:       serverIP,
+		clientBaseZip:  clientBaseZip,
 	}
 }
 
@@ -75,10 +80,16 @@ func (h *GameServerHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	tmpl := service.GetGameTemplate(cfg.TemplateID)
 	type response struct {
 		*model.GameServerConfig
-		Template *model.GameTemplate `json:"template,omitempty"`
-		ServerIP string              `json:"serverIp"`
+		Template          *model.GameTemplate `json:"template,omitempty"`
+		ServerIP          string              `json:"serverIp"`
+		ClientDownloadURL string              `json:"clientDownloadUrl,omitempty"`
 	}
-	writeJSON(w, http.StatusOK, response{cfg, tmpl, h.serverIP})
+	writeJSON(w, http.StatusOK, response{
+		GameServerConfig:  cfg,
+		Template:          tmpl,
+		ServerIP:          h.serverIP,
+		ClientDownloadURL: gameClientDownloadURL(appID.String(), cfg.TemplateID),
+	})
 }
 
 // UpdateConfig saves new game settings and restarts the container.
@@ -221,4 +232,77 @@ func (h *GameServerHandler) GetPlayers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, players)
+}
+
+func (h *GameServerHandler) DownloadClient(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app id")
+		return
+	}
+
+	app, err := h.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	if app.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	if app.AppType != model.AppTypeGame {
+		writeError(w, http.StatusBadRequest, "app is not a game server")
+		return
+	}
+
+	cfg, err := h.gameConfigRepo.GetByAppID(ctx, appID)
+	if err != nil || cfg == nil {
+		writeError(w, http.StatusNotFound, "game config not found")
+		return
+	}
+	if cfg.TemplateID != openMUTemplateID {
+		writeError(w, http.StatusNotFound, "client download is not available for this template")
+		return
+	}
+	if h.serverIP == "" {
+		writeError(w, http.StatusInternalServerError, "server IP is not configured")
+		return
+	}
+
+	baseZip, err := os.Open(h.clientBaseZip)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "OpenMU client base zip not found")
+		return
+	}
+	defer baseZip.Close()
+
+	stat, err := baseZip.Stat()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to read OpenMU client base zip")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-openmu-client.zip", app.Subdomain))
+
+	if err := service.WriteOpenMUClientZip(baseZip, stat.Size(), w, service.OpenMUClientOptions{
+		ServerName: app.Name,
+		ServerIP:   h.serverIP,
+		GamePort:   cfg.GamePort,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate OpenMU client")
+		return
+	}
+}
+
+const openMUTemplateID = "openmu"
+
+func gameClientDownloadURL(appID string, templateID string) string {
+	if templateID != openMUTemplateID {
+		return ""
+	}
+	return "/api/apps/" + appID + "/game-client/download"
 }
