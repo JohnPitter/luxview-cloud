@@ -45,16 +45,15 @@ public class Launcher
         }
 
         var info = new DirectoryInfo(this.MainExePath!);
+        // UseShellExecute=false launches via CreateProcess directly, avoiding the
+        // "Open File - Security Warning"/SmartScreen prompt that ShellExecute shows
+        // for downloaded exes (Mark-of-the-Web) — which surfaced as ERROR_CANCELLED.
+        // The launcher is already elevated, so main.exe inherits the token.
         var startInfo = new ProcessStartInfo(this.MainExePath, ["connect", $"/u{ipAddress}", $"/p{this.HostPort}"])
         {
             WorkingDirectory = info.Parent!.FullName,
-            UseShellExecute = true,
-            Verb = "open",
+            UseShellExecute = false,
         };
-        if (OperatingSystem.IsWindows())
-        {
-            startInfo.LoadUserProfile = true;
-        }
 
         Process.Start(startInfo);
     }
