@@ -51,6 +51,13 @@ patch("src/libs/babylon/utils.ts", [
 for f in ("src/common/BMD/createMeshes.ts", "src/common/utils.ts"):
     patch(f, [("anisotropicFilteringLevel = 1;", "anisotropicFilteringLevel = 16;")])
 
+# 3b) Hide the dev debug overlay (coords/tile/flags + Save Pos/Exit buttons)
+#     so it looks like a real client instead of a demo.
+patch("src/App.tsx", [
+    ("{state === UIState.World && <Debug />}",
+     "{false && state === UIState.World && <Debug />}"),
+])
+
 # 4) Lock the WS->TCP proxy to our OpenMU (no open relay).
 proxy = "proxy/main.ts"
 try:
