@@ -8,6 +8,7 @@ import (
 	"math"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -181,6 +182,40 @@ func (s *GameServerService) QueryPlayers(ctx context.Context, cfg *model.GameSer
 	}
 	addr := net.JoinHostPort(serverIP, strconv.Itoa(cfg.QueryPort))
 	return queryA2SPlayers(addr)
+}
+
+// CountConnections counts established TCP connections inside the container whose
+// local port is in the given set. Used to estimate online players for emulators
+// without a query protocol (e.g. OpenMU), by counting connections on the game
+// server ports. Reads /proc/net/tcp(6) via a container exec.
+func (s *GameServerService) CountConnections(ctx context.Context, containerNameOrID string, ports map[int]bool) (int, error) {
+	out, err := s.docker.ContainerExec(ctx, containerNameOrID, []string{"cat", "/proc/net/tcp", "/proc/net/tcp6"})
+	if err != nil {
+		return 0, err
+	}
+
+	const tcpStateEstablished = "01"
+	count := 0
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		// Layout: "sl local_address rem_address st ...". Skip header/short lines.
+		if len(fields) < 4 || fields[3] != tcpStateEstablished {
+			continue
+		}
+		localAddr := fields[1]
+		idx := strings.LastIndex(localAddr, ":")
+		if idx < 0 {
+			continue
+		}
+		port, err := strconv.ParseInt(localAddr[idx+1:], 16, 32)
+		if err != nil {
+			continue
+		}
+		if ports[int(port)] {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // GetTemplates returns all available game server templates.

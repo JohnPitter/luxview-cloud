@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -191,6 +193,13 @@ func (h *GameServerHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// OpenMU has no A2S query protocol; estimate online players by counting
+	// established connections on its game-server ports inside the container.
+	if cfg.TemplateID == openMUTemplateID {
+		writeJSON(w, http.StatusOK, h.openMUStatus(ctx, app, cfg))
+		return
+	}
+
 	if status := staticGameServerStatus(app, service.GetGameTemplate(cfg.TemplateID)); status != nil {
 		writeJSON(w, http.StatusOK, status)
 		return
@@ -317,4 +326,43 @@ func staticGameServerStatus(app *model.App, tmpl *model.GameTemplate) *model.Gam
 		return nil
 	}
 	return &model.GameServerStatus{Running: app.Status == model.AppStatusRunning}
+}
+
+// openMUStatus reports the OpenMU server status, estimating the online player
+// count from established connections on the game-server ports (OpenMU has no
+// query protocol). Uses the container name so it survives container recreation.
+func (h *GameServerHandler) openMUStatus(ctx context.Context, app *model.App, cfg *model.GameServerConfig) *model.GameServerStatus {
+	status := &model.GameServerStatus{Running: app.Status == model.AppStatusRunning}
+	if !status.Running {
+		return status
+	}
+	status.MaxPlayers = openMUMaxPlayers(cfg)
+	if n, err := h.gameServerSvc.CountConnections(ctx, service.ContainerName(app.Subdomain), openMUGamePorts(cfg)); err == nil {
+		status.Players = n
+	}
+	return status
+}
+
+// openMUGamePorts is the set of ports players hold a connection on while in-game:
+// the main game port (QueryPort) plus the extra "GameServer" ports.
+func openMUGamePorts(cfg *model.GameServerConfig) map[int]bool {
+	ports := make(map[int]bool)
+	if cfg.QueryPort > 0 {
+		ports[cfg.QueryPort] = true
+	}
+	for _, ep := range cfg.ExtraPorts {
+		if strings.Contains(strings.ToLower(ep.Label), "gameserver") {
+			ports[ep.Port] = true
+		}
+	}
+	return ports
+}
+
+func openMUMaxPlayers(cfg *model.GameServerConfig) int {
+	if v := cfg.ConfigFields["OPENMU_MAX_CONNECTIONS"]; v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 1000
 }
