@@ -162,7 +162,7 @@ func (s *GameServerService) QueryStatus(ctx context.Context, cfg *model.GameServ
 	if cfg.QueryPort == 0 {
 		return &model.GameServerStatus{Running: true}, nil
 	}
-	addr := fmt.Sprintf("%s:%d", serverIP, cfg.QueryPort)
+	addr := net.JoinHostPort(serverIP, strconv.Itoa(cfg.QueryPort))
 	info, err := queryA2S(addr)
 	if err != nil {
 		return &model.GameServerStatus{Running: false}, nil
@@ -179,7 +179,7 @@ func (s *GameServerService) QueryPlayers(ctx context.Context, cfg *model.GameSer
 	if cfg.QueryPort == 0 {
 		return nil, fmt.Errorf("query port not configured")
 	}
-	addr := fmt.Sprintf("%s:%d", serverIP, cfg.QueryPort)
+	addr := net.JoinHostPort(serverIP, strconv.Itoa(cfg.QueryPort))
 	return queryA2SPlayers(addr)
 }
 

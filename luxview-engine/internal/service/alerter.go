@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/smtp"
+	"strconv"
 	"time"
 
 	"github.com/luxview/engine/internal/config"
@@ -277,7 +278,7 @@ func (a *Alerter) sendEmail(to, appName, message string) error {
 	body := fmt.Sprintf("From: LuxView Alerts <%s>\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\n%s",
 		a.smtpCfg.From, to, subject, time.Now().Format(time.RFC1123Z), msgID, message)
 
-	addr := fmt.Sprintf("%s:%d", a.smtpCfg.Host, a.smtpCfg.Port)
+	addr := net.JoinHostPort(a.smtpCfg.Host, strconv.Itoa(a.smtpCfg.Port))
 	log.Info().Str("to", to).Str("host", addr).Msg("sending alert email")
 
 	// Connect via plain TCP (internal docker network, no TLS needed)
