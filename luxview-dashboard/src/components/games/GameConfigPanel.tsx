@@ -29,7 +29,6 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
   const [playersModal, setPlayersModal] = useState(false);
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [playersLoading, setPlayersLoading] = useState(false);
-  const [clientDownloading, setClientDownloading] = useState(false);
   const restartingSinceRef = useRef<number>(0);
 
   const loadConfig = useCallback(async () => {
@@ -107,23 +106,17 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
     }
   };
 
-  const handleClientDownload = async () => {
-    setClientDownloading(true);
-    try {
-      const { blob, filename } = await gameServersApi.downloadClient(appId);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch {
-      addNotification({ type: 'error', title: 'Falha ao baixar client OpenMU' });
-    } finally {
-      setClientDownloading(false);
-    }
+  const handleClientDownload = () => {
+    if (!config?.clientDownloadUrl) return;
+    // Native browser download (server sets Content-Disposition). Avoids buffering
+    // the ~700MB client in memory; the browser shows progress and streams to disk.
+    const link = document.createElement('a');
+    link.href = gameServersApi.clientDownloadHref(config.clientDownloadUrl);
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    addNotification({ type: 'success', title: 'Download iniciado — acompanhe na barra do navegador' });
   };
 
   const inputClass = `
@@ -242,10 +235,9 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
               variant="secondary"
               size="sm"
               onClick={handleClientDownload}
-              disabled={clientDownloading}
-              icon={clientDownloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+              icon={<Download size={13} />}
             >
-              {clientDownloading ? 'Baixando...' : 'Baixar Client'}
+              Baixar Client
             </PillButton>
           )}
         </div>

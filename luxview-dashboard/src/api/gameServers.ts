@@ -80,21 +80,13 @@ export const gameServersApi = {
     return data;
   },
 
-  async downloadClient(appId: string): Promise<{ blob: Blob; filename: string }> {
-    const response = await api.get<Blob>(`/apps/${appId}/game-client/download`, {
-      responseType: 'blob',
-      timeout: 300_000,
-    });
-    const disposition = response.headers['content-disposition'];
-    return {
-      blob: response.data,
-      filename: parseDownloadFilename(disposition) ?? 'openmu-client.zip',
-    };
+  // Builds a native browser-download URL for the configured client. The engine's
+  // auth accepts the JWT via the `token` query param (same as WebSockets), so the
+  // browser can download the large (~700MB) file natively — with a real progress
+  // bar and streaming to disk — instead of buffering it in memory via XHR.
+  clientDownloadHref(downloadUrl: string): string {
+    const token = localStorage.getItem('lv_token') ?? '';
+    const sep = downloadUrl.includes('?') ? '&' : '?';
+    return `${downloadUrl}${sep}token=${encodeURIComponent(token)}`;
   },
 };
-
-function parseDownloadFilename(disposition: string | undefined): string | null {
-  if (!disposition) return null;
-  const match = disposition.match(/filename="?([^"]+)"?/i);
-  return match?.[1] ?? null;
-}

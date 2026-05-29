@@ -74,21 +74,26 @@ func WriteOpenMUClientZip(base io.ReaderAt, size int64, out io.Writer, opts Open
 	return err
 }
 
+// copyZipFile copies an entry from the base zip into the output without
+// recompressing it: CreateRaw + OpenRaw stream the already-compressed bytes
+// directly. For a ~700MB client this turns a CPU-bound recompression (tens of
+// seconds) into a fast I/O copy.
 func copyZipFile(writer *zip.Writer, file *zip.File) error {
 	header := file.FileHeader
-	target, err := writer.CreateHeader(&header)
-	if err != nil {
-		return err
-	}
 	if file.FileInfo().IsDir() {
-		return nil
+		_, err := writer.CreateHeader(&header)
+		return err
 	}
 
-	source, err := file.Open()
+	target, err := writer.CreateRaw(&header)
 	if err != nil {
 		return err
 	}
-	defer source.Close()
+
+	source, err := file.OpenRaw()
+	if err != nil {
+		return err
+	}
 
 	_, err = io.Copy(target, source)
 	return err
