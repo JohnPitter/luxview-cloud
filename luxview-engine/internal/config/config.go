@@ -149,7 +149,7 @@ func Load() (*Config, error) {
 		VPSPublicIP:   envStr("VPS_PUBLIC_IP", ""),
 		AcmeStorePath: envStr("ACME_STORE_PATH", "/letsencrypt/acme.json"),
 
-		OpenMUClientBaseZipPath: envStr("OPENMU_CLIENT_BASE_ZIP", "/opt/luxview/clients/openmu-s6-base.zip"),
+		OpenMUClientBaseZipPath: envStr("OPENMU_CLIENT_BASE_ZIP", "/opt/luxview/openmu-assets/openmu-s6-base.zip"),
 
 		SMTPHost:     envStr("SMTP_HOST", ""),
 		SMTPPort:     envInt("SMTP_PORT", 587),
