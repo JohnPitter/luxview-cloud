@@ -1,0 +1,3 @@
+# O client base (~750MB+) e artefatos de build não entram no contexto da imagem.
+assets/
+i18n/out/
