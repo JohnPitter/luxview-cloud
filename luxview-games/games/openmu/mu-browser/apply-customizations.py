@@ -15,6 +15,19 @@ WS_HOST = "wss://muproxy.luxview.cloud"
 WS_PORT = "443"
 
 
+def append_once(path, marker, content):
+    try:
+        s = open(path, encoding="utf-8").read()
+    except FileNotFoundError:
+        print(f"MISSING {path}")
+        return
+    if marker in s:
+        print(f"no-change {path} (append)")
+        return
+    open(path, "a", encoding="utf-8").write("\n" + content + "\n")
+    print(f"appended {path}")
+
+
 def patch(path, replacements, required=True):
     try:
         s = open(path, encoding="utf-8").read()
@@ -86,6 +99,48 @@ patch("src/ui/pages/preloaderPage/index.tsx", [
         🪟 Baixar Client Windows — experiência completa
       </a>"""),
 ])
+
+# 3d-3) Polish the bottom HUD (life bars + buttons) toward a MU gold/bronze look
+#       — the buttons were tiny 8px default browser buttons.
+append_once(
+    "src/ui/pages/worldPage/components/bottomBar/style.less",
+    "LuxView HUD polish",
+    """/* LuxView HUD polish */
+.bottom-bar {
+  .panel {
+    background: linear-gradient(to bottom, #1a1612, #0b0907);
+    border-top: 2px solid #b8860b;
+    padding: 6px 0 4px;
+  }
+  .skills button,
+  .buttons button {
+    font-size: 12px;
+    line-height: 1;
+    color: #ffd9a0;
+    background: linear-gradient(to bottom, #2c2218, #14100a);
+    border: 1px solid #8a6d3b;
+    border-radius: 4px;
+    padding: 5px 3px;
+    margin: 1px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .skills button:hover,
+  .buttons button:hover {
+    background: linear-gradient(to bottom, #3c2f20, #1d160d);
+    border-color: #d4af37;
+    color: #fff;
+  }
+  .vertical-bar .bg {
+    border: 2px solid #6b4f1d;
+    border-radius: 4px;
+    box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.7);
+  }
+  .consumable-item {
+    border-color: #6b4f1d !important;
+  }
+}""",
+)
 
 # 3e) Auto-play each model's idle animation on load (it was commented out) so
 #     characters/monsters/NPCs animate instead of standing frozen — a big
