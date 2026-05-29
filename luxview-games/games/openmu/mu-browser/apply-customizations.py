@@ -72,6 +72,18 @@ patch("src/ui/pages/worldPage/index.tsx", [
     ("<Skills />", "{false && <Skills />}"),
 ])
 
+# 3e) Auto-play each model's idle animation on load (it was commented out) so
+#     characters/monsters/NPCs animate instead of standing frozen — a big
+#     "alive / like the native client" win. Verified via screenshots.
+patch("src/common/modelLoader.ts", [
+    ("""          // if (task.loadedAnimationGroups.length > 0) {
+          //   task.loadedAnimationGroups[0].play(true);
+          // }""",
+     """          if (task.loadedAnimationGroups.length > 0) {
+            task.loadedAnimationGroups[0].play(true);
+          }"""),
+])
+
 # 4) Lock the WS->TCP proxy to our OpenMU (no open relay).
 proxy = "proxy/main.ts"
 try:
