@@ -40,14 +40,22 @@ jogador: <https://dotnet.microsoft.com/download/dotnet/10.0>
 
 ## Onde colocar na VPS
 
-A engine lê o caminho de `OPENMU_CLIENT_BASE_ZIP`
-(default `/opt/luxview/openmu-assets/openmu-s6-base.zip`), montado via
-`docker-compose.yml` a partir de `./luxview-games/games/openmu/assets`.
+O binário **não fica no repositório**. Ele vive no volume do serviço
+**"Armazenamento"** (storage) da plataforma, sob `STORAGE_BASE_PATH`
+(`/data/luxview/storage/app-<id>/`), que já é montado na engine.
+
+A engine lê o caminho de `OPENMU_CLIENT_BASE_ZIP` (definido no
+`docker-compose.yml`/`.env` apontando para esse volume). Para atualizar o
+client, suba o novo `openmu-s6-base.zip` pelo Storage Explorer do dashboard,
+ou copie direto na VPS:
 
 ```bash
 scp -i ~/.ssh/vps_key openmu-s6-base.zip \
-  root@187.77.227.65:/opt/luxview-cloud/luxview-games/games/openmu/assets/
+  root@187.77.227.65:/data/luxview/storage/app-<id-do-storage>/openmu-s6-base.zip
 ```
 
 Sem esse arquivo o endpoint responde `404 — OpenMU client base zip not found`
 e o botão de download mostra erro (degrada de forma controlada).
+
+> O diretório `assets/` deste repo serve só de área de staging para montar o
+> zip com o `build-base-zip.sh` — o artefato final vai para o storage.

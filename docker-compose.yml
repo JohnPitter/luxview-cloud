@@ -49,7 +49,6 @@ services:
       - /data/luxview/storage:/data/luxview/storage
       - /data/luxview/repositories:/data/luxview/repositories
       - /backups:/backups
-      - ./luxview-games/games/openmu/assets:/opt/luxview/openmu-assets:ro
     environment:
       - PORT=${ENGINE_PORT:-8080}
       - DATABASE_URL=postgres://luxview:${DB_PASSWORD}@pg-platform:5432/luxview_platform?sslmode=disable
@@ -86,7 +85,10 @@ services:
       - SMTP_FROM=${SMTP_FROM:-alerts@luxview.cloud}
       - VPS_PUBLIC_IP=${VPS_PUBLIC_IP:-}
       - ACME_STORE_PATH=/letsencrypt/acme.json
-      - OPENMU_CLIENT_BASE_ZIP=${OPENMU_CLIENT_BASE_ZIP:-/opt/luxview/openmu-assets/openmu-s6-base.zip}
+      # Base client zip lives in the "Armazenamento" (storage) service volume
+      # under STORAGE_BASE_PATH (already mounted above). Deployment-specific path
+      # set via .env; falls back to the OpenMU app's storage volume.
+      - OPENMU_CLIENT_BASE_ZIP=${OPENMU_CLIENT_BASE_ZIP:-/data/luxview/storage/app-6c43b313-8d94-45ad-ba65-173ca7f381dd/openmu-s6-base.zip}
     networks:
       - luxview-net
       - traefik-public
