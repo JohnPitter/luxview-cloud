@@ -58,6 +58,13 @@ patch("src/App.tsx", [
      "{false && state === UIState.World && <Debug />}"),
 ])
 
+# 3c) Punchier image (contrast + exposure) so colors pop closer to the native
+#     client's warmer look. Applied post-process, safe to tune.
+patch("src/scenes/testScene.ts", [
+    ("this.ambientColor = new Color3(1, 1, 1);",
+     "this.ambientColor = new Color3(1, 1, 1);\n    this.imageProcessingConfiguration.contrast = 1.35;\n    this.imageProcessingConfiguration.exposure = 1.2;"),
+])
+
 # 4) Lock the WS->TCP proxy to our OpenMU (no open relay).
 proxy = "proxy/main.ts"
 try:
