@@ -1,6 +1,14 @@
 # Stage 1: get the OpenMU app files from the official image
 FROM munique/openmu:latest AS openmu-source
 
+# Stage 1b: build pt-BR satellite assemblies from the i18n JSON sources
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS i18n
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 && \
+    rm -rf /var/lib/apt/lists/*
+COPY i18n /i18n
+RUN cd /i18n && bash build-satellites.sh
+
 # Stage 2: all-in-one image with PostgreSQL + OpenMU
 FROM ubuntu:24.04
 
@@ -21,6 +29,9 @@ RUN apt-get update && \
 
 # Copy OpenMU application from official image
 COPY --from=openmu-source /app /opt/openmu
+
+# Overlay the pt-BR satellite assemblies (auto-detected by OpenMU at startup)
+COPY --from=i18n /i18n/out/pt-BR /opt/openmu/pt-BR
 
 COPY entrypoint.sh /opt/entrypoint.sh
 COPY supervisord.conf /etc/supervisor/conf.d/openmu.conf

@@ -1,0 +1,19 @@
+{
+  "Name": "Nome",
+  "Number": "Número",
+  "OnlinePlayers": "Jogadores online:",
+  "Position": "Posição",
+  "TerrainOf": "Terreno de {0}",
+  "Initializing": "Inicializando...",
+  "NoGameMapsHosted": "Nenhum mapa hospedado. Eles são criados assim que um jogador entra em um mapa.",
+  "MapName": "Nome do Mapa",
+  "PlayerCount": "Jogadores",
+  "Spectate": "Assistir",
+  "PlayerName": "Nome do Jogador",
+  "Actions": "Ações",
+  "Disconnect": "Desconectar",
+  "TemporarilyBan": "Banir temporariamente",
+  "About": "Sobre",
+  "Home": "Início",
+  "Maps": "Mapas"
+}

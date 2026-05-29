@@ -1,0 +1,12 @@
+{
+  "IpResolverType_Auto_Name": "Automático",
+  "IpResolverType_Auto_Description": "O IP é detectado automaticamente considerando o ambiente. Nenhum parâmetro necessário.",
+  "IpResolverType_Public_Name": "Público",
+  "IpResolverType_Public_Description": "O IP é detectado consultando um serviço externo (https://www.ipify.org/) sobre o próprio IP. Nenhum parâmetro necessário. Use isto quando o servidor está rodando em um servidor e deve ser acessível pela internet. É necessário liberar o firewall para as portas dos servidores de game, connect e chat.",
+  "IpResolverType_Local_Name": "Local",
+  "IpResolverType_Local_Description": "O IP é detectado consultando o DNS sobre o IP do próprio nome de host. O primeiro IP é usado. Nenhum parâmetro necessário. Use isto se você quer usar o servidor em uma LAN local, ex.: em casa.",
+  "IpResolverType_Loopback_Name": "Loopback",
+  "IpResolverType_Loopback_Description": "O IP é resolvido como '127.127.127.127'. Nenhum parâmetro necessário. Use isto se você quer usar o servidor e o client apenas no seu próprio computador, ex.: durante o desenvolvimento.",
+  "IpResolverType_Custom_Name": "Personalizado",
+  "IpResolverType_Custom_Description": "O IP ou um nome de host pode ser definido manualmente. Use isto se as outras opções não funcionarem para você."
+}

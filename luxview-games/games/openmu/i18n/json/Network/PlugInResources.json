@@ -1,0 +1,10 @@
+{
+  "OpenSourceClientNetworkEncryptionFactoryPlugIn_Name": "Criptografia de Rede - Season 6 Episódio 3, Client Open Source",
+  "OpenSourceClientNetworkEncryptionFactoryPlugIn_Description": "Um plugin que fornece criptografadores e descriptografadores de rede para os clients open source em inglês da season 6 episódio 3, versão 2.04d",
+  "PreSeason6NetworkEncryptionFactoryPlugIn_Name": "Criptografia de Rede - Antes da Season 6",
+  "PreSeason6NetworkEncryptionFactoryPlugIn_Description": "Um plugin que fornece criptografadores e descriptografadores de rede para clients anteriores à season 6.",
+  "Season6Episode3NetworkEncryptionFactoryPlugIn_Name": "Criptografia de Rede - Season 6 Episódio 3, 1.04d, ENG",
+  "Season6Episode3NetworkEncryptionFactoryPlugIn_Description": "Um plugin que fornece criptografadores e descriptografadores de rede para clients em inglês da season 6 episódio 3, versão 1.04d",
+  "Version075NetworkEncryptionFactoryPlugIn_Name": "Criptografia de Rede - 0.75",
+  "Version075NetworkEncryptionFactoryPlugIn_Description": "Um plugin que fornece criptografadores e descriptografadores de rede para clients da versão 0.75 (versão de servidor 0.65)"
+}

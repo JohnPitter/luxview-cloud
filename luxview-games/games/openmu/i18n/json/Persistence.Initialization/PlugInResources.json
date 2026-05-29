@@ -1,0 +1,21 @@
+{
+  "DataInitialization075_Name": "Inicialização da Versão 0.75",
+  "DataInitialization075_Description": "Fornece dados iniciais para a Versão 0.75",
+  "DataInitialization095d_Name": "Inicialização da Versão 0.95d",
+  "DataInitialization095d_Description": "Fornece dados iniciais para a Versão 0.95d",
+  "DataInitialization_Name": "Inicialização da Season 6 Episódio 3",
+  "DataInitialization_Description": "Fornece dados iniciais para a Season 6 Episódio 3.",
+  "AddArrowsForFairyElf_Description": "Adiciona flechas a um personagem fairy elf recém-criado.",
+  "AddChargeForRageFighter_Description": "Adiciona a skill Charge a um personagem rage fighter recém-criado.",
+  "AddEnergyBallForDarkWizard_Description": "Adiciona a skill energy ball a um personagem dark wizard recém-criado.",
+  "AddForceForDarkLord_Description": "Adiciona a skill Force a um personagem dark lord recém-criado.",
+  "AddLanceForSummoner_Description": "Adiciona a skill Lance a um personagem summoner recém-criado.",
+  "AddRingOfWarriorLevel40ForNewCharacters_Description": "Adiciona o anel que pode ser dropado no nível 40.",
+  "AddRingOfWarriorLevel80ForNewCharacters_Description": "Adiciona o anel que pode ser dropado no nível 80.",
+  "AddShortBowForFairyElf_Description": "Adiciona um short bow a um personagem fairy elf recém-criado.",
+  "AddShortSwordForDarkLord_Description": "Adiciona uma short sword a um personagem dark lord recém-criado.",
+  "AddShortSwordForMagicGladiator_Description": "Adiciona uma short sword a um personagem magic gladiator recém-criado.",
+  "AddSmallAxeForDarkKnight_Description": "Adiciona um small axe a um personagem dark knight recém-criado.",
+  "AddSmallShieldForDarkLord_Description": "Adiciona um small shield a um personagem dark lord recém-criado.",
+  "AddSmallShieldForMagicGladiator_Description": "Adiciona um small shield a um personagem magic gladiator recém-criado."
+}

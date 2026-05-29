@@ -1,0 +1,14 @@
+{
+  "SystemConfiguration_IpResolver_Description": "Define como o próprio endereço IP é determinado. Ele é informado de volta ao client do jogo quando ele solicita conexão a um game server selecionado (tela de seleção de servidor) ou ao chat server (ao iniciar um chat com o mensageiro in-game). Isso pode ser útil se o servidor é iniciado em um ambiente onde o IP público não é acessível de fora (ex.: porque você compartilha seu endereço IPv4 ou está atrás de um firewall) e você quer usá-lo no seu computador ou rede privada.",
+  "SystemConfiguration_IpResolver_Name": "Resolução de IP",
+  "SystemConfiguration_IpResolverParameter_Description": "Define o parâmetro para a resolução de IP, quando definido como 'Personalizado'.",
+  "SystemConfiguration_IpResolverParameter_Name": "IP / Hostname Personalizado",
+  "SystemConfiguration_AutoStart_Name": "Início Automático",
+  "SystemConfiguration_AutoStart_Description": "Define se os (sub-)servidores devem ser iniciados automaticamente quando o processo do servidor inicia. Esta configuração se aplica apenas ao servidor all-in-one (MUnique.OpenMU.Startup).",
+  "SystemConfiguration_ReadConsoleInput_Description": "Define se o usuário pode digitar comandos no console do processo do servidor. Esta configuração se aplica apenas ao servidor all-in-one (MUnique.OpenMU.Startup). Ela substitui o parâmetro de inicialização '-deamon'.",
+  "SystemConfiguration_ReadConsoleInput_Name": "Ler entrada do console",
+  "SystemConfiguration_Name": "Configuração do Sistema",
+  "SystemConfiguration_Description": "Estas configurações se aplicam a todo o sistema. Lembre-se de que elas podem ser sobrescritas por parâmetros de inicialização e variáveis de ambiente. Veja o Readme do Startup se quiser saber mais sobre isso.",
+  "SystemConfiguration_AutoUpdateSchema_Name": "Atualizar Schema do Banco Automaticamente",
+  "SystemConfiguration_AutoUpdateSchema_Description": "Define se o servidor all-in-one (MUnique.OpenMU.Startup) atualiza automaticamente o schema do banco de dados quando o processo do servidor inicia. Em uma implantação distribuída, o usuário deve iniciar a atualização manualmente pelo painel de administração."
+}
