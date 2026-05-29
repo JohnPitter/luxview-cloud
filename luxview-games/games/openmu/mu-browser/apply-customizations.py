@@ -24,6 +24,8 @@ def patch(path, replacements, required=True):
         return
     orig = s
     for old, new in replacements:
+        if new in s:
+            continue  # already applied (idempotent)
         if old in s:
             s = s.replace(old, new)
     if s != orig:
@@ -63,6 +65,11 @@ patch("src/App.tsx", [
 patch("src/scenes/testScene.ts", [
     ("this.ambientColor = new Color3(1, 1, 1);",
      "this.ambientColor = new Color3(1, 1, 1);\n    this.imageProcessingConfiguration.contrast = 1.35;\n    this.imageProcessingConfiguration.exposure = 1.2;"),
+])
+
+# 3d) Hide the in-world skill-test buttons (dev effect triggers) for a cleaner HUD.
+patch("src/ui/pages/worldPage/index.tsx", [
+    ("<Skills />", "{false && <Skills />}"),
 ])
 
 # 4) Lock the WS->TCP proxy to our OpenMU (no open relay).
