@@ -75,6 +75,28 @@ http:
         - gzip-compress
       priority: 10
 
+    # MU browser client (muonlinejs) → mu-play (nginx)
+    mu-play:
+      rule: "Host(`play.luxview.cloud`)"
+      entryPoints:
+        - websecure
+      service: mu-play-svc
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - gzip-compress
+      priority: 10
+
+    # MU WebSocket↔TCP proxy (browser client → OpenMU) → mu-proxy (Bun)
+    mu-proxy:
+      rule: "Host(`muproxy.luxview.cloud`)"
+      entryPoints:
+        - websecure
+      service: mu-proxy-svc
+      tls:
+        certResolver: letsencrypt
+      priority: 10
+
     # Catch-all for deleted/unknown *.luxview.cloud subdomains.
     # Redirects to the main dashboard instead of showing errors.
     # Uses tls:{} (no certResolver) to avoid issuing certs for random subdomains.
@@ -118,3 +140,13 @@ http:
       loadBalancer:
         servers:
           - url: "http://luxview-mu-web:80"
+
+    mu-play-svc:
+      loadBalancer:
+        servers:
+          - url: "http://luxview-mu-play:80"
+
+    mu-proxy-svc:
+      loadBalancer:
+        servers:
+          - url: "http://luxview-mu-proxy:3000"

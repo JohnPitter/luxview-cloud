@@ -120,6 +120,34 @@ services:
       - luxview-net
 
   # ---------------------------------------------------------------------------
+  # MU Browser POC — muonlinejs web client (play.luxview.cloud) + WS↔TCP proxy
+  # (muproxy.luxview.cloud). Source cloned at /opt/mu-browser (external, MIT).
+  # ---------------------------------------------------------------------------
+  mu-play:
+    image: nginx:alpine
+    container_name: luxview-mu-play
+    restart: unless-stopped
+    volumes:
+      - /opt/mu-browser/dist:/usr/share/nginx/html:ro
+    networks:
+      - traefik-public
+
+  mu-proxy:
+    image: oven/bun:latest
+    container_name: luxview-mu-proxy
+    restart: unless-stopped
+    working_dir: /app
+    command: ["bun", "proxy/main.ts"]
+    environment:
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    volumes:
+      - /opt/mu-browser:/app:ro
+    networks:
+      - traefik-public
+      - luxview-net
+
+  # ---------------------------------------------------------------------------
   # PostgreSQL — Platform Database
   # ---------------------------------------------------------------------------
   pg-platform:
