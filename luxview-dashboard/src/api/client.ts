@@ -15,6 +15,7 @@ const PRESERVE_NESTED_KEYS = new Set([
   'env_vars', 'envVars',
   'resource_limits', 'resourceLimits',
   'config_fields', 'configFields',
+  'credentials',
 ]);
 
 function transformKeys(obj: unknown, fn: (key: string) => string, preserveValues = false): unknown {

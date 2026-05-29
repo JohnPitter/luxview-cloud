@@ -191,6 +191,11 @@ func (h *GameServerHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if status := staticGameServerStatus(app, service.GetGameTemplate(cfg.TemplateID)); status != nil {
+		writeJSON(w, http.StatusOK, status)
+		return
+	}
+
 	// Query via internal Docker network (container name) so the engine
 	// can reach the game server without hairpinning through the public IP.
 	containerAddr := service.ContainerName(app.Subdomain)
@@ -305,4 +310,11 @@ func gameClientDownloadURL(appID string, templateID string) string {
 		return ""
 	}
 	return "/api/apps/" + appID + "/game-client/download"
+}
+
+func staticGameServerStatus(app *model.App, tmpl *model.GameTemplate) *model.GameServerStatus {
+	if tmpl == nil || tmpl.SupportsQuery {
+		return nil
+	}
+	return &model.GameServerStatus{Running: app.Status == model.AppStatusRunning}
 }
