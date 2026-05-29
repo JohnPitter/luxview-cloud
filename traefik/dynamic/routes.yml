@@ -62,6 +62,19 @@ http:
         - security-headers
       priority: 10
 
+    # MU launcher web (news + client patches) → mu-web (nginx)
+    mu-web:
+      rule: "Host(`mu.luxview.cloud`)"
+      entryPoints:
+        - websecure
+      service: mu-web-svc
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+        - gzip-compress
+      priority: 10
+
     # Catch-all for deleted/unknown *.luxview.cloud subdomains.
     # Redirects to the main dashboard instead of showing errors.
     # Uses tls:{} (no certResolver) to avoid issuing certs for random subdomains.
@@ -100,3 +113,8 @@ http:
       loadBalancer:
         servers:
           - url: "http://luxview-roundcube:80"
+
+    mu-web-svc:
+      loadBalancer:
+        servers:
+          - url: "http://luxview-mu-web:80"

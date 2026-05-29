@@ -107,6 +107,19 @@ services:
       - traefik-public
 
   # ---------------------------------------------------------------------------
+  # MU Web — launcher news page + client patch host (mu.luxview.cloud)
+  # ---------------------------------------------------------------------------
+  mu-web:
+    image: nginx:alpine
+    container_name: luxview-mu-web
+    restart: unless-stopped
+    volumes:
+      - /data/luxview/mu-web:/usr/share/nginx/html:ro
+    networks:
+      - traefik-public
+      - luxview-net
+
+  # ---------------------------------------------------------------------------
   # PostgreSQL — Platform Database
   # ---------------------------------------------------------------------------
   pg-platform:
