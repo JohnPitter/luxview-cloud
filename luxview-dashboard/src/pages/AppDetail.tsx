@@ -534,7 +534,7 @@ export function AppDetail() {
               </h1>
               {isGame ? (
                 <span className="text-xs text-zinc-500">
-                  UDP :{app.gameConfig?.gamePort ?? '?'}
+                  {(app.gameConfig?.protocol ?? 'udp').toUpperCase()} :{app.gameConfig?.gamePort ?? '?'}
                   {app.gameConfig?.queryPort ? ` · Query :${app.gameConfig.queryPort}` : ''}
                 </span>
               ) : (
@@ -663,7 +663,7 @@ export function AppDetail() {
                 {(isGame ? [
                   { label: t('app.info.status'), value: <AppStatusBadge status={app.status} size="md" /> },
                   { label: 'Template', value: app.gameConfig?.templateId ?? '—' },
-                  { label: 'Porta UDP', value: app.gameConfig?.gamePort ? `:${app.gameConfig.gamePort}` : '—' },
+                  { label: `Porta ${(app.gameConfig?.protocol ?? 'udp').toUpperCase()}`, value: app.gameConfig?.gamePort ? `:${app.gameConfig.gamePort}` : '—' },
                   { label: 'Porta Query', value: app.gameConfig?.queryPort ? `:${app.gameConfig.queryPort}` : '—' },
                   { label: t('app.info.created'), value: formatRelativeTime(app.createdAt) },
                   { label: t('app.info.lastUpdated'), value: formatRelativeTime(app.updatedAt) },
