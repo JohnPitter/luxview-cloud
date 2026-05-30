@@ -304,7 +304,7 @@ func (h *GameServerHandler) DownloadClient(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-%s-client.zip", app.Subdomain, cfg.TemplateID))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-client.zip", app.Subdomain))
 
 	switch cfg.TemplateID {
 	case rakionTemplateID:
