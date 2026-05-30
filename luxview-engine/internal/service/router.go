@@ -20,9 +20,10 @@ type TraefikHTTP struct {
 }
 
 type TraefikRouter struct {
-	Rule    string      `json:"rule"`
-	Service string      `json:"service"`
-	TLS     *TraefikTLS `json:"tls,omitempty"`
+	Rule        string      `json:"rule"`
+	Service     string      `json:"service"`
+	EntryPoints []string    `json:"entryPoints,omitempty"`
+	TLS         *TraefikTLS `json:"tls,omitempty"`
 }
 
 type TraefikTLS struct {
@@ -103,13 +104,36 @@ func (rs *RouterService) GenerateConfig(ctx context.Context) (*TraefikConfig, er
 			continue
 		}
 
-		// Apps with an HTTP service (including game servers that expose an
-		// auth/admin web at their AssignedPort) are routed over HTTPS at
-		// "<subdomain>.<domain>" with an auto-provisioned Let's Encrypt cert.
-		// The platform's web entrypoint redirects :80 -> :443, so a client
-		// hitting http://<host>/... is redirected to HTTPS (the redirect
-		// preserves GET requests + query string, which is what the Rakion
-		// launcher login uses).
+		// Game servers expose an auth/admin web at their AssignedPort. Legacy
+		// game clients (e.g. Rakion's NyxLauncher) speak plain http:// on :80 and
+		// do NOT follow the 80->443 redirect for their fetch/auto-download step,
+		// so game web apps get TWO routers: a plain-HTTP one on the "web"
+		// entrypoint (for the launcher) and an HTTPS one on "websecure" (for the
+		// admin panel in a browser). Both point at the same backend.
+		if app.AppType == model.AppTypeGame {
+			config.HTTP.Routers[routerName+"-web"] = TraefikRouter{
+				Rule:        fmt.Sprintf("Host(`%s.%s`)", app.Subdomain, rs.domain),
+				Service:     serviceName,
+				EntryPoints: []string{"web"},
+			}
+			config.HTTP.Routers[routerName] = TraefikRouter{
+				Rule:        fmt.Sprintf("Host(`%s.%s`)", app.Subdomain, rs.domain),
+				Service:     serviceName,
+				EntryPoints: []string{"websecure"},
+				TLS:         &TraefikTLS{CertResolver: "letsencrypt"},
+			}
+			config.HTTP.Services[serviceName] = TraefikService{
+				LoadBalancer: TraefikLB{
+					Servers: []TraefikServer{
+						{URL: fmt.Sprintf("http://host.docker.internal:%d", app.AssignedPort)},
+					},
+				},
+			}
+			continue
+		}
+
+		// Standard web apps: HTTPS at "<subdomain>.<domain>" (Let's Encrypt).
+		// The platform's :80 catch-all redirects HTTP to HTTPS.
 		config.HTTP.Routers[routerName] = TraefikRouter{
 			Rule:    fmt.Sprintf("Host(`%s.%s`)", app.Subdomain, rs.domain),
 			Service: serviceName,
