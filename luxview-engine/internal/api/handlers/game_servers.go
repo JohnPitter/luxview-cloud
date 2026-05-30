@@ -23,7 +23,8 @@ type GameServerHandler struct {
 	gameConfigRepo *repository.GameServerConfigRepo
 	gameServerSvc  *service.GameServerService
 	serverIP       string
-	clientBaseZip  string
+	domain         string
+	clientBaseZips map[string]string // templateID -> base client zip path
 }
 
 func NewGameServerHandler(
@@ -31,14 +32,16 @@ func NewGameServerHandler(
 	gameConfigRepo *repository.GameServerConfigRepo,
 	gameServerSvc *service.GameServerService,
 	serverIP string,
-	clientBaseZip string,
+	domain string,
+	clientBaseZips map[string]string,
 ) *GameServerHandler {
 	return &GameServerHandler{
 		appRepo:        appRepo,
 		gameConfigRepo: gameConfigRepo,
 		gameServerSvc:  gameServerSvc,
 		serverIP:       serverIP,
-		clientBaseZip:  clientBaseZip,
+		domain:         domain,
+		clientBaseZips: clientBaseZips,
 	}
 }
 
@@ -277,7 +280,8 @@ func (h *GameServerHandler) DownloadClient(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusNotFound, "game config not found")
 		return
 	}
-	if cfg.TemplateID != openMUTemplateID {
+	baseZipPath := h.clientBaseZips[cfg.TemplateID]
+	if baseZipPath == "" {
 		writeError(w, http.StatusNotFound, "client download is not available for this template")
 		return
 	}
@@ -286,36 +290,58 @@ func (h *GameServerHandler) DownloadClient(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	baseZip, err := os.Open(h.clientBaseZip)
+	baseZip, err := os.Open(baseZipPath)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "OpenMU client base zip not found")
+		writeError(w, http.StatusNotFound, "client base zip not found")
 		return
 	}
 	defer baseZip.Close()
 
 	stat, err := baseZip.Stat()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to read OpenMU client base zip")
+		writeError(w, http.StatusInternalServerError, "failed to read client base zip")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-openmu-client.zip", app.Subdomain))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-%s-client.zip", app.Subdomain, cfg.TemplateID))
 
-	if err := service.WriteOpenMUClientZip(baseZip, stat.Size(), w, service.OpenMUClientOptions{
-		ServerName: app.Name,
-		ServerIP:   h.serverIP,
-		GamePort:   cfg.GamePort,
-	}); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to generate OpenMU client")
-		return
+	switch cfg.TemplateID {
+	case rakionTemplateID:
+		// Rakion's client reaches the auth web at the server's subdomain; the
+		// injected config.xfs points there (plain HTTP, see router.go).
+		authHost := fmt.Sprintf("%s.%s", app.Subdomain, h.domain)
+		if err := service.WriteRakionClientZip(baseZip, stat.Size(), w, service.RakionClientOptions{
+			AuthHost: authHost,
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to generate Rakion client")
+			return
+		}
+	default: // openMUTemplateID
+		if err := service.WriteOpenMUClientZip(baseZip, stat.Size(), w, service.OpenMUClientOptions{
+			ServerName: app.Name,
+			ServerIP:   h.serverIP,
+			GamePort:   cfg.GamePort,
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to generate OpenMU client")
+			return
+		}
 	}
 }
 
-const openMUTemplateID = "openmu"
+const (
+	openMUTemplateID = "openmu"
+	rakionTemplateID = "rakion"
+)
+
+// gameClientWithDownload lists templates that offer a configured client download.
+var gameClientWithDownload = map[string]bool{
+	openMUTemplateID: true,
+	rakionTemplateID: true,
+}
 
 func gameClientDownloadURL(appID string, templateID string) string {
-	if templateID != openMUTemplateID {
+	if !gameClientWithDownload[templateID] {
 		return ""
 	}
 	return "/api/apps/" + appID + "/game-client/download"

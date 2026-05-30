@@ -89,6 +89,8 @@ services:
       # under STORAGE_BASE_PATH (already mounted above). Deployment-specific path
       # set via .env; falls back to the OpenMU app's storage volume.
       - OPENMU_CLIENT_BASE_ZIP=${OPENMU_CLIENT_BASE_ZIP:-/data/luxview/storage/app-6c43b313-8d94-45ad-ba65-173ca7f381dd/openmu-s6-base.zip}
+      # Rakion base client zip — config.xfs é injetado por servidor (subdomínio).
+      - RAKION_CLIENT_BASE_ZIP=${RAKION_CLIENT_BASE_ZIP:-/data/luxview/storage/rakion-assets/rakion-client-base.zip}
     networks:
       - luxview-net
       - traefik-public

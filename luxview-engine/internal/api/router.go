@@ -107,7 +107,11 @@ func NewRouter(deps Deps) *chi.Mux {
 	backupHandler := handlers.NewBackupHandler(deps.BackupSvc, deps.AuditSvc)
 	domainChecker := service.NewDomainChecker(deps.Config.VPSPublicIP, deps.Config.AcmeStorePath)
 	domainCheckHandler := handlers.NewDomainCheckHandler(deps.AppRepo, domainChecker)
-	gameServerHandler := handlers.NewGameServerHandler(deps.AppRepo, deps.GameConfigRepo, deps.GameServerSvc, deps.Config.VPSPublicIP, deps.Config.OpenMUClientBaseZipPath)
+	gameClientBaseZips := map[string]string{
+		"openmu": deps.Config.OpenMUClientBaseZipPath,
+		"rakion": deps.Config.RakionClientBaseZipPath,
+	}
+	gameServerHandler := handlers.NewGameServerHandler(deps.AppRepo, deps.GameConfigRepo, deps.GameServerSvc, deps.Config.VPSPublicIP, deps.Config.Domain, gameClientBaseZips)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 	optionalAuthMiddleware := middleware.OptionalAuth(deps.Config.JWTSecret, deps.UserRepo)

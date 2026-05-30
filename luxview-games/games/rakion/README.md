@@ -63,6 +63,24 @@ python tools/gconfig.py <subdominio>.luxview.cloud client/Bin/config.xfs
 
 (copie também para a raiz `client/`). O broker/world o cliente acessa via `VPS_IP:40706`.
 
+## Download do client (via Storage)
+
+Igual ao Mu: a engine gera o **client de download** de cada servidor a partir de um
+**zip base** (`rakion-client-base.zip`) que vive no volume do serviço **Armazenamento**
+(`STORAGE_BASE_PATH`). Ao baixar, a engine injeta um `config.xfs` novo apontando para
+o **subdomínio** daquele servidor (`<subdomínio>.luxview.cloud`), em HTTP puro.
+
+```bash
+# Montar o zip base (a partir do client funcional) e subir no storage da VPS:
+cd rakion-tutorial && zip -r rakion-client-base.zip client
+scp -i ~/.ssh/vps_key rakion-client-base.zip \
+    root@187.77.227.65:/data/luxview/storage/rakion-assets/rakion-client-base.zip
+```
+
+A engine lê o caminho de `RAKION_CLIENT_BASE_ZIP` (docker-compose.yml). Sem o arquivo,
+o botão "Baixar Client" responde 404 (degrada de forma controlada). O `config.xfs`
+é gerado em Go (`service/rakion_client_artifact.go`, port do `tools/gconfig.py`).
+
 ## Persistência
 
 O volume montado em `/var/lib/mysql` preserva contas e personagens entre restarts.
