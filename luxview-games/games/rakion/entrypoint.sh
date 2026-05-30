@@ -92,28 +92,31 @@ log "subindo auth web (php -S :80 -t $WEB)..."
 php -S 0.0.0.0:80 -t "$WEB" >/var/log/php.log 2>&1 &
 
 #############################################
-# 4. Xvfb + Wine (broker + world)
+# 4. Xvfb + Wine (broker + world). Sequência validada (e2e_start.sh).
 #############################################
-export DISPLAY=:0
+export DISPLAY=:0 WINEARCH=win32
+unset WINEDEBUG WINEDLLOVERRIDES
 Xvfb :0 -screen 0 1024x768x16 >/var/log/xvfb.log 2>&1 &
 sleep 2
 
 log "=== BrokenServer.exe (broker :40706) ==="
 cd "$BROKER" || exit 1
 wine BrokenServer.exe >"$SRV/broker_run.log" 2>&1 &
-sleep 6
+sleep 10
 
-log "=== RakionWorldServ.exe (world :40708) — install + start (serviço Wine) ==="
+log "=== RakionWorldServ.exe (world :40708) — install + SCM start ==="
 cd "$WORLD" || exit 1
 wine RakionWorldServ.exe -install >"$SRV/world_install.log" 2>&1
 sleep 3
-wine RakionWorldServ.exe -start >"$SRV/world_run.log" 2>&1 &
-sleep 12
+wine sc start "Rakion World [1]" >"$SRV/world_run.log" 2>&1
+# o world sob Wine leva ~30-90s pra bindar; aguarda até 120s antes do fallback
+for i in $(seq 1 24); do ss -ltn 2>/dev/null | grep -q ':40708' && break; sleep 5; done
 if ! ss -ltn 2>/dev/null | grep -q ':40708'; then
-    log "world via serviço não bindou; tentando launch direto..."
+    log "world via SCM não bindou em 120s; tentando launch direto..."
     wine RakionWorldServ.exe >>"$SRV/world_run.log" 2>&1 &
-    sleep 10
+    sleep 15
 fi
+ss -ltn 2>/dev/null | grep -q ':40708' && log "world OK (:40708 bound)" || log "world AINDA não bindou — ver world_run.log"
 
 #############################################
 # 5. Status + mantém o container vivo
