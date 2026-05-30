@@ -46,8 +46,13 @@ cd /opt/luxview-cloud && git pull && docker compose up -d --build engine dashboa
 |--------------|------------------------|------------------------------------|
 | 40706/tcp    | BrokenServer (broker)  | publicada no host (VPS_IP:40706)   |
 | 40708/tcp    | RakionWorldServ (world)| publicada no host (VPS_IP:40708)   |
-| 40709/udp    | World (UDP)            | publicada no host (VPS_IP:40709)   |
+| 40708/udp    | World UDP1 (gameplay)  | publicada (VPS_IP:40708/udp)       |
+| 40709/udp    | World UDP2             | publicada (VPS_IP:40709/udp)       |
+| 41016/udp    | World UDP3 (csauth)    | publicada (VPS_IP:41016/udp)       |
 | 80 (web)     | Auth + painel admin    | **Traefik → `https://<subdomínio>.luxview.cloud`** |
+
+> **UDP é essencial:** o gameplay do Rakion roda em UDP. As 3 portas UDP (40708/40709/41016)
+> precisam estar publicadas, senão o cliente conecta no world (TCP) mas não entra ("blocked").
 
 A auth web é publicada na `AssignedPort` do app e roteada pelo Traefik via
 subdomínio em **HTTPS** (cert Let's Encrypt automático). O login do NyxLauncher é
