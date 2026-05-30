@@ -1,0 +1,19 @@
+# HTTP (:80) handling para coexistir game servers (HTTP puro) + apps (HTTPS).
+# Catch-all: redireciona todo :80 -> :443 (substitui o redirect de entrypoint).
+# Routers de game na entrypoint web (sem TLS, prioridade do Host > catch-all)
+# servem HTTP puro e nao sao redirecionados.
+http:
+  middlewares:
+    https-redirect:
+      redirectScheme:
+        scheme: https
+        permanent: true
+  routers:
+    http-catchall:
+      rule: "PathPrefix(`/`)"
+      entryPoints:
+        - web
+      service: dashboard-svc@file
+      middlewares:
+        - https-redirect
+      priority: 1
