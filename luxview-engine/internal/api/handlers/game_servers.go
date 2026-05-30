@@ -88,12 +88,14 @@ func (h *GameServerHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		Template          *model.GameTemplate `json:"template,omitempty"`
 		ServerIP          string              `json:"serverIp"`
 		ClientDownloadURL string              `json:"clientDownloadUrl,omitempty"`
+		ClientPublicURL   string              `json:"clientPublicUrl,omitempty"`
 	}
 	writeJSON(w, http.StatusOK, response{
 		GameServerConfig:  cfg,
 		Template:          tmpl,
 		ServerIP:          h.serverIP,
 		ClientDownloadURL: gameClientDownloadURL(appID.String(), cfg.TemplateID),
+		ClientPublicURL:   gameClientPublicURL("https://"+h.domain, appID.String(), cfg.TemplateID),
 	})
 }
 
@@ -251,6 +253,7 @@ func (h *GameServerHandler) GetPlayers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, players)
 }
 
+// DownloadClient serves the per-server game client to the authenticated owner.
 func (h *GameServerHandler) DownloadClient(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)
@@ -270,12 +273,37 @@ func (h *GameServerHandler) DownloadClient(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
+	h.serveGameClient(w, r, app)
+}
+
+// DownloadClientPublic serves the per-server game client over a public,
+// unauthenticated link so players can share it with friends. No owner check —
+// the client is meant to be distributed; it carries only the public server host.
+func (h *GameServerHandler) DownloadClientPublic(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app id")
+		return
+	}
+	app, err := h.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	h.serveGameClient(w, r, app)
+}
+
+// serveGameClient generates and streams the configured client zip for app.
+func (h *GameServerHandler) serveGameClient(w http.ResponseWriter, r *http.Request, app *model.App) {
+	ctx := r.Context()
 	if app.AppType != model.AppTypeGame {
 		writeError(w, http.StatusBadRequest, "app is not a game server")
 		return
 	}
 
-	cfg, err := h.gameConfigRepo.GetByAppID(ctx, appID)
+	cfg, err := h.gameConfigRepo.GetByAppID(ctx, app.ID)
 	if err != nil || cfg == nil {
 		writeError(w, http.StatusNotFound, "game config not found")
 		return
@@ -346,6 +374,16 @@ func gameClientDownloadURL(appID string, templateID string) string {
 		return ""
 	}
 	return "/api/apps/" + appID + "/game-client/download"
+}
+
+// gameClientPublicURL is the shareable, unauthenticated client download link
+// players can pass to friends. baseURL is the platform origin (e.g.
+// https://luxview.cloud).
+func gameClientPublicURL(baseURL, appID, templateID string) string {
+	if !gameClientWithDownload[templateID] {
+		return ""
+	}
+	return baseURL + "/api/public/game-client/" + appID
 }
 
 func staticGameServerStatus(app *model.App, tmpl *model.GameTemplate) *model.GameServerStatus {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Save, Loader2, Users, Wifi, WifiOff, RefreshCw, RotateCw, X, Clock, Trophy, Download } from 'lucide-react';
+import { Save, Loader2, Users, Wifi, WifiOff, RefreshCw, RotateCw, X, Clock, Trophy, Download, Copy, Check } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { PillButton } from '../common/PillButton';
 import { useThemeStore } from '../../stores/theme.store';
@@ -29,6 +29,7 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
   const [playersModal, setPlayersModal] = useState(false);
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [playersLoading, setPlayersLoading] = useState(false);
+  const [copiedPublicUrl, setCopiedPublicUrl] = useState(false);
   const restartingSinceRef = useRef<number>(0);
 
   const loadConfig = useCallback(async () => {
@@ -117,6 +118,17 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
     link.click();
     document.body.removeChild(link);
     addNotification({ type: 'success', title: 'Download iniciado — acompanhe na barra do navegador' });
+  };
+
+  const handleCopyPublicUrl = async () => {
+    if (!config?.clientPublicUrl) return;
+    try {
+      await navigator.clipboard.writeText(config.clientPublicUrl);
+      setCopiedPublicUrl(true);
+      setTimeout(() => setCopiedPublicUrl(false), 2000);
+    } catch {
+      addNotification({ type: 'error', title: 'Não foi possível copiar o link' });
+    }
   };
 
   const inputClass = `
@@ -241,6 +253,28 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
             </PillButton>
           )}
         </div>
+
+        {config.clientPublicUrl && (
+          <div className="mt-3">
+            <div className={`text-xs mb-1.5 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+              Link público do client (compartilhe com os amigos):
+            </div>
+            <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${isDark ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-zinc-200'}`}>
+              <code className={`flex-1 text-xs truncate ${isDark ? 'text-amber-300/90' : 'text-amber-700'}`}>
+                {config.clientPublicUrl}
+              </code>
+              <button
+                type="button"
+                onClick={handleCopyPublicUrl}
+                className={`shrink-0 inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors ${isDark ? 'hover:bg-zinc-800 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-600'}`}
+                title="Copiar link"
+              >
+                {copiedPublicUrl ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                {copiedPublicUrl ? 'Copiado' : 'Copiar'}
+              </button>
+            </div>
+          </div>
+        )}
         {restarting && (
           <div className={`mt-3 text-xs ${isDark ? 'text-amber-300/70' : 'text-amber-700/80'}`}>
             O servidor está reiniciando com as novas configurações. Pode levar 2–3 minutos até voltar online.

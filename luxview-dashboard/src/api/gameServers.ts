@@ -33,6 +33,7 @@ export interface GameConfigResponse extends GameServerConfig {
   template?: GameTemplate;
   serverIp?: string;
   clientDownloadUrl?: string;
+  clientPublicUrl?: string;
 }
 
 export interface GameServerStatus {

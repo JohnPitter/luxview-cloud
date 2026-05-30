@@ -151,6 +151,9 @@ func NewRouter(deps Deps) *chi.Mux {
 		// Webhooks (public, verified by signature)
 		r.Post("/webhooks/github", webhookHandler.GitHubWebhook)
 
+		// Public game client download — shareable link for players (no auth).
+		r.Get("/public/game-client/{id}", gameServerHandler.DownloadClientPublic)
+
 		// Internal (Traefik)
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.InternalAuth(deps.Config.InternalToken))
