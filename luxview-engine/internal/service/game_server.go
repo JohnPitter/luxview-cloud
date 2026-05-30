@@ -27,10 +27,11 @@ type GameServerService struct {
 	gameNetwork string
 	appRepo     *repository.AppRepo
 	portManager *PortManager
+	serverIP    string // VPS public IP, injected so game entrypoints can advertise it
 }
 
-func NewGameServerService(docker *dockerclient.Client, gameNetwork string, appRepo *repository.AppRepo, portManager *PortManager) *GameServerService {
-	return &GameServerService{docker: docker, gameNetwork: gameNetwork, appRepo: appRepo, portManager: portManager}
+func NewGameServerService(docker *dockerclient.Client, gameNetwork string, appRepo *repository.AppRepo, portManager *PortManager, serverIP string) *GameServerService {
+	return &GameServerService{docker: docker, gameNetwork: gameNetwork, appRepo: appRepo, portManager: portManager, serverIP: serverIP}
 }
 
 // ContainerName returns the Docker container name for a game server app.
@@ -132,6 +133,11 @@ func (s *GameServerService) Start(ctx context.Context, app *model.App, cfg *mode
 	var envList []string
 	for k, v := range cfg.ConfigFields {
 		envList = append(envList, fmt.Sprintf("%s=%s", k, v))
+	}
+	// Public IP so game entrypoints can advertise the server to remote clients
+	// (e.g. Rakion's broker GameServers.ini wan=<public ip>).
+	if s.serverIP != "" {
+		envList = append(envList, "LUXVIEW_PUBLIC_IP="+s.serverIP)
 	}
 
 	// Build mount list. Prefer the multi-volume Volumes field; fall back to the legacy

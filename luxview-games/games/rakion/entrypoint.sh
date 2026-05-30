@@ -83,6 +83,18 @@ log "ajustando IPs nos *.ini do servidor (192.168.1.x -> 127.0.0.1)..."
 find "$SRV" -name '*.ini' -print0 2>/dev/null | while IFS= read -r -d '' f; do
     sed -i 's/192\.168\.1\.[0-9]\+/127.0.0.1/g' "$f"
 done
+
+# GameServers.ini: o broker usa 'ip' (127.0.0.1) p/ o IPC interno com o world,
+# e anuncia 'wan' (IP PÚBLICO da VPS) pros clientes remotos. lan_wan=1 = usa wan.
+GS="$BROKER/Settings/GameServers.ini"
+if [ -f "$GS" ]; then
+    sed -i 's/^ip=.*/ip=127.0.0.1/' "$GS"
+    if [ -n "${LUXVIEW_PUBLIC_IP:-}" ]; then
+        sed -i "s/^wan=.*/wan=${LUXVIEW_PUBLIC_IP}/" "$GS"
+        sed -i 's/^lan_wan=.*/lan_wan=1/' "$GS"
+        log "GameServers.ini: wan=${LUXVIEW_PUBLIC_IP} lan_wan=1 (anuncio público)"
+    fi
+fi
 log "csauth2.cfg = $(cat "$WORLD/csauth2.cfg" 2>/dev/null) (GameGuard server-side mantido)"
 
 #############################################

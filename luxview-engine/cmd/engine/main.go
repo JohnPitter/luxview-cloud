@@ -72,7 +72,7 @@ func main() {
 	// Services
 	portManager := service.NewPortManager(appRepo, cfg.PortRangeStart, cfg.PortRangeEnd)
 	containerMgr := service.NewContainerManager(docker, cfg.AppNetwork)
-	gameServerSvc := service.NewGameServerService(docker, cfg.GameNetwork, appRepo, portManager)
+	gameServerSvc := service.NewGameServerService(docker, cfg.GameNetwork, appRepo, portManager, cfg.VPSPublicIP)
 	provisioner := service.NewProvisioner(serviceRepo, mailboxRepo, cfg, encryptionKey)
 	routerSvc := service.NewRouterService(appRepo, cfg.Domain)
 	repositorySvc := service.NewRepositoryService(repositoryRepo, cfg.RepositoryBasePath)
