@@ -23,7 +23,9 @@ func rakionTemplate() model.GameTemplate {
 		DefaultGamePort:  40706, // BrokenServer (broker) — cliente conecta aqui primeiro
 		DefaultQueryPort: 40708, // RakionWorldServ (world) TCP
 		DefaultExtraPorts: []model.ExtraPort{
-			{Port: 40709, Protocol: "udp", Label: "World UDP"},
+			{Port: 40708, Protocol: "udp", Label: "World UDP1"}, // gameplay UDP (== world TCP port)
+			{Port: 40709, Protocol: "udp", Label: "World UDP2"},
+			{Port: 41016, Protocol: "udp", Label: "World UDP3"}, // csauth/extra world UDP
 		},
 		WebPort:       80, // auth web + painel admin -> roteado por subdomínio (HTTP puro)
 		DefaultImage:  "luxview-cloud-rakion:latest",
