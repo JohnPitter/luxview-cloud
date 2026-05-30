@@ -20,10 +20,9 @@ type TraefikHTTP struct {
 }
 
 type TraefikRouter struct {
-	Rule        string      `json:"rule"`
-	Service     string      `json:"service"`
-	EntryPoints []string    `json:"entryPoints,omitempty"`
-	TLS         *TraefikTLS `json:"tls,omitempty"`
+	Rule    string      `json:"rule"`
+	Service string      `json:"service"`
+	TLS     *TraefikTLS `json:"tls,omitempty"`
 }
 
 type TraefikTLS struct {
@@ -104,26 +103,13 @@ func (rs *RouterService) GenerateConfig(ctx context.Context) (*TraefikConfig, er
 			continue
 		}
 
-		// Game servers expose their HTTP service (auth/admin web) at the app's
-		// AssignedPort, but legacy game clients only speak plain http:// on port 80
-		// and do not follow the 80->443 redirect. Route them on the "web"
-		// entrypoint WITHOUT TLS so the redirect is bypassed for that host.
-		if app.AppType == model.AppTypeGame {
-			config.HTTP.Routers[routerName] = TraefikRouter{
-				Rule:        fmt.Sprintf("Host(`%s.%s`)", app.Subdomain, rs.domain),
-				Service:     serviceName,
-				EntryPoints: []string{"web"},
-			}
-			config.HTTP.Services[serviceName] = TraefikService{
-				LoadBalancer: TraefikLB{
-					Servers: []TraefikServer{
-						{URL: fmt.Sprintf("http://host.docker.internal:%d", app.AssignedPort)},
-					},
-				},
-			}
-			continue
-		}
-
+		// Apps with an HTTP service (including game servers that expose an
+		// auth/admin web at their AssignedPort) are routed over HTTPS at
+		// "<subdomain>.<domain>" with an auto-provisioned Let's Encrypt cert.
+		// The platform's web entrypoint redirects :80 -> :443, so a client
+		// hitting http://<host>/... is redirected to HTTPS (the redirect
+		// preserves GET requests + query string, which is what the Rakion
+		// launcher login uses).
 		config.HTTP.Routers[routerName] = TraefikRouter{
 			Rule:    fmt.Sprintf("Host(`%s.%s`)", app.Subdomain, rs.domain),
 			Service: serviceName,

@@ -309,7 +309,7 @@ func (h *GameServerHandler) DownloadClient(w http.ResponseWriter, r *http.Reques
 	switch cfg.TemplateID {
 	case rakionTemplateID:
 		// Rakion's client reaches the auth web at the server's subdomain; the
-		// injected config.xfs points there (plain HTTP, see router.go).
+		// injected config.xfs points there (served via Traefik/HTTPS).
 		authHost := fmt.Sprintf("%s.%s", app.Subdomain, h.domain)
 		if err := service.WriteRakionClientZip(baseZip, stat.Size(), w, service.RakionClientOptions{
 			AuthHost: authHost,

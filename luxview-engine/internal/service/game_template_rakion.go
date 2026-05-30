@@ -10,11 +10,10 @@ import "github.com/luxview/engine/internal/model"
 //   - PHP auth web + admin panel : HTTP 80    — routed via Traefik subdomain (plain HTTP)
 //
 // The broker/world are raw TCP/UDP (players connect to VPS_IP:40706). The auth
-// web is HTTP, so it is exposed at "<subdomain>.<domain>" via Traefik. The
-// legacy NyxLauncher only speaks http:// on port 80 and does not follow the
-// 80->443 redirect, so the engine routes this WebPort in PLAIN HTTP (see
-// router.go game-server branch). The client's config.xfs must point at that
-// subdomain (regenerate with tools/gconfig.py <subdomain>).
+// web (WebPort) is published to the app's AssignedPort and exposed at
+// "<subdomain>.<domain>" via Traefik over HTTPS (Let's Encrypt). The client's
+// config.xfs points at that subdomain; the launcher login is an HTTP GET, and
+// the platform's :80->:443 redirect preserves GET+query, so it reaches HTTPS.
 func rakionTemplate() model.GameTemplate {
 	return model.GameTemplate{
 		ID:               "rakion",

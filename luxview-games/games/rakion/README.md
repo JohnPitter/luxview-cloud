@@ -47,11 +47,13 @@ cd /opt/luxview-cloud && git pull && docker compose up -d --build engine dashboa
 | 40706/tcp    | BrokenServer (broker)  | publicada no host (VPS_IP:40706)   |
 | 40708/tcp    | RakionWorldServ (world)| publicada no host (VPS_IP:40708)   |
 | 40709/udp    | World (UDP)            | publicada no host (VPS_IP:40709)   |
-| 80 (web)     | Auth + painel admin    | **Traefik → `<subdomínio>.luxview.cloud` (HTTP puro)** |
+| 80 (web)     | Auth + painel admin    | **Traefik → `https://<subdomínio>.luxview.cloud`** |
 
-A auth web é roteada pelo Traefik via subdomínio em **HTTP puro** (sem redirect
-para HTTPS) porque o NyxLauncher (2007) só fala `http://` na porta 80 e não segue
-o 301→443. A engine cuida disso automaticamente (`router.go`, branch de game).
+A auth web é publicada na `AssignedPort` do app e roteada pelo Traefik via
+subdomínio em **HTTPS** (cert Let's Encrypt automático). O login do NyxLauncher é
+um **GET** (`launcherlogin.php?user=&pass=`); o redirect `:80→:443` da plataforma
+preserva GET+query, então o cliente chega no HTTPS. A engine gera a rota
+automaticamente (`router.go`) quando o template tem `WebPort`.
 
 ## Cliente
 
@@ -68,7 +70,7 @@ python tools/gconfig.py <subdominio>.luxview.cloud client/Bin/config.xfs
 Igual ao Mu: a engine gera o **client de download** de cada servidor a partir de um
 **zip base** (`rakion-client-base.zip`) que vive no volume do serviço **Armazenamento**
 (`STORAGE_BASE_PATH`). Ao baixar, a engine injeta um `config.xfs` novo apontando para
-o **subdomínio** daquele servidor (`<subdomínio>.luxview.cloud`), em HTTP puro.
+o **subdomínio** daquele servidor (`<subdomínio>.luxview.cloud`, via HTTPS).
 
 ```bash
 # Montar o zip base (a partir do client funcional) e subir no storage da VPS:
