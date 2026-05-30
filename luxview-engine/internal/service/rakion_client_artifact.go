@@ -101,7 +101,8 @@ func BuildRakionConfigXfs(host string) ([]byte, error) {
 
 // RakionClientOptions configures a per-server Rakion client download.
 type RakionClientOptions struct {
-	AuthHost string // host the client's config.xfs points at (auth web)
+	AuthHost string // host the client's config.xfs / fetch URLs point at (auth web)
+	ServerIP string // raw server IP for the broker (NyxLauncherEnc Ip=)
 }
 
 // WriteRakionClientZip streams the base client zip to out, replacing every
@@ -143,6 +144,24 @@ func WriteRakionClientZip(base io.ReaderAt, size int64, out io.Writer, opts Raki
 				return err
 			}
 			if _, err := w.Write(rewriteNyxLauncherINI(content, opts.AuthHost)); err != nil {
+				return err
+			}
+			continue
+		}
+		if isRakionLauncherEnc(file.Name) {
+			content, err := readZipFile(file)
+			if err != nil {
+				return err
+			}
+			rewritten, err := rewriteRakionLauncherEnc(content, opts.AuthHost, opts.ServerIP)
+			if err != nil {
+				return err
+			}
+			w, err := writer.Create(file.Name)
+			if err != nil {
+				return err
+			}
+			if _, err := w.Write(rewritten); err != nil {
 				return err
 			}
 			continue

@@ -313,6 +313,7 @@ func (h *GameServerHandler) DownloadClient(w http.ResponseWriter, r *http.Reques
 		authHost := fmt.Sprintf("%s.%s", app.Subdomain, h.domain)
 		if err := service.WriteRakionClientZip(baseZip, stat.Size(), w, service.RakionClientOptions{
 			AuthHost: authHost,
+			ServerIP: h.serverIP,
 		}); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to generate Rakion client")
 			return
