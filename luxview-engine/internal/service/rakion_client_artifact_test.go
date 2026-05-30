@@ -89,6 +89,28 @@ func TestIsRakionConfigEntry(t *testing.T) {
 	}
 }
 
+func TestRewriteNyxLauncherINI(t *testing.T) {
+	in := "Url_Notice=http://192.168.1.5/note_rakion.htm\n" +
+		"Url_Softnyx=http://www.192.168.1.5/\n" +
+		"Url_FullDownload=http://192.168.1.5/download/client.asp\n"
+	out := string(rewriteNyxLauncherINI([]byte(in), "rakion.luxview.cloud"))
+	if strings.Contains(out, "192.168.1.5") {
+		t.Errorf("dev host still present: %q", out)
+	}
+	if strings.Contains(out, "www.rakion.luxview.cloud") {
+		t.Errorf("www. should have been dropped, not prefixed: %q", out)
+	}
+	for _, want := range []string{
+		"http://rakion.luxview.cloud/note_rakion.htm",
+		"http://rakion.luxview.cloud/",
+		"http://rakion.luxview.cloud/download/client.asp",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+}
+
 func TestWriteRakionClientZipReplacesConfig(t *testing.T) {
 	// Build a tiny base zip with a placeholder config.xfs + an untouched file.
 	var baseBuf bytes.Buffer

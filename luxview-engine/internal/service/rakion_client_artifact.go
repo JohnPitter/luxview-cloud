@@ -26,6 +26,11 @@ const (
 	rakionFixedKey   = "s&a3edecuwuy@ye*"                   // 16-byte AES key from GConfig
 	rakionCharset    = "bcdefghijkmnopqrstuvwxyz023456789*" // alphabet for the random key/iv
 	rakionConfigName = "config.xfs"
+	// NyxLauncher.ini carries the launcher's web URLs (notice, patch/auto-download,
+	// signup, etc.) hard-coded to the dev host. The engine rewrites that host to
+	// the server's auth host when generating each client download.
+	rakionLauncherINI = "nyxlauncher.ini"
+	rakionDevHost     = "192.168.1.5"
 )
 
 // aesECBSpacePadB64 encrypts text with AES-ECB (space-padded to a 16-byte
@@ -128,6 +133,20 @@ func WriteRakionClientZip(base io.ReaderAt, size int64, out io.Writer, opts Raki
 			}
 			continue
 		}
+		if isRakionLauncherINI(file.Name) {
+			content, err := readZipFile(file)
+			if err != nil {
+				return err
+			}
+			w, err := writer.Create(file.Name)
+			if err != nil {
+				return err
+			}
+			if _, err := w.Write(rewriteNyxLauncherINI(content, opts.AuthHost)); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := copyZipFile(writer, file); err != nil {
 			return err
 		}
@@ -135,12 +154,42 @@ func WriteRakionClientZip(base io.ReaderAt, size int64, out io.Writer, opts Raki
 	return nil
 }
 
-// isRakionConfigEntry reports whether a zip entry's base name is config.xfs
-// (matches both "config.xfs" and "Bin/config.xfs", case-insensitively).
-func isRakionConfigEntry(name string) bool {
+// rewriteNyxLauncherINI swaps the hard-coded dev host for the server's auth host
+// in NyxLauncher.ini (notice/patch/auto-download/signup URLs). The "www." form is
+// replaced first so it doesn't become "www.<host>" (which wouldn't resolve).
+func rewriteNyxLauncherINI(content []byte, host string) []byte {
+	s := string(content)
+	s = strings.ReplaceAll(s, "www."+rakionDevHost, host)
+	s = strings.ReplaceAll(s, rakionDevHost, host)
+	return []byte(s)
+}
+
+// readZipFile returns the decompressed bytes of a zip entry.
+func readZipFile(f *zip.File) ([]byte, error) {
+	rc, err := f.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+	return io.ReadAll(rc)
+}
+
+func isRakionLauncherINI(name string) bool {
+	return strings.EqualFold(baseName(name), rakionLauncherINI)
+}
+
+// baseName returns the final path element of a zip entry name, treating both
+// "/" and "\" as separators.
+func baseName(name string) string {
 	name = strings.ReplaceAll(name, "\\", "/")
 	if i := strings.LastIndex(name, "/"); i >= 0 {
 		name = name[i+1:]
 	}
-	return strings.EqualFold(name, rakionConfigName)
+	return name
+}
+
+// isRakionConfigEntry reports whether a zip entry's base name is config.xfs
+// (matches both "config.xfs" and "Bin/config.xfs", case-insensitively).
+func isRakionConfigEntry(name string) bool {
+	return strings.EqualFold(baseName(name), rakionConfigName)
 }
