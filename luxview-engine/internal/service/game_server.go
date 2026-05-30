@@ -16,6 +16,7 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
 	"github.com/luxview/engine/internal/model"
+	"github.com/luxview/engine/internal/repository"
 	dockerclient "github.com/luxview/engine/pkg/docker"
 	"github.com/luxview/engine/pkg/logger"
 )
@@ -24,10 +25,12 @@ import (
 type GameServerService struct {
 	docker      *dockerclient.Client
 	gameNetwork string
+	appRepo     *repository.AppRepo
+	portManager *PortManager
 }
 
-func NewGameServerService(docker *dockerclient.Client, gameNetwork string) *GameServerService {
-	return &GameServerService{docker: docker, gameNetwork: gameNetwork}
+func NewGameServerService(docker *dockerclient.Client, gameNetwork string, appRepo *repository.AppRepo, portManager *PortManager) *GameServerService {
+	return &GameServerService{docker: docker, gameNetwork: gameNetwork, appRepo: appRepo, portManager: portManager}
 }
 
 // ContainerName returns the Docker container name for a game server app.
@@ -98,6 +101,31 @@ func (s *GameServerService) Start(ctx context.Context, app *model.App, cfg *mode
 		portSet[epNat] = struct{}{}
 		portMap[epNat] = []nat.PortBinding{
 			{HostIP: "0.0.0.0", HostPort: strconv.Itoa(ep.Port)},
+		}
+	}
+
+	// HTTP web service (auth/admin panel) routed via Traefik subdomain. The
+	// template's WebPort (container side) is published to the app's AssignedPort
+	// (host side); router.go then routes "<subdomain>.<domain>" to it in plain
+	// HTTP. Allocate AssignedPort on first start if the app doesn't have one.
+	if tmpl := GetGameTemplate(cfg.TemplateID); tmpl != nil && tmpl.WebPort > 0 {
+		if app.AssignedPort == 0 && s.portManager != nil && s.appRepo != nil {
+			port, err := s.portManager.Allocate(ctx)
+			if err != nil {
+				return "", fmt.Errorf("allocate web port: %w", err)
+			}
+			if err := s.appRepo.UpdatePort(ctx, app.ID, port); err != nil {
+				s.portManager.Release(port)
+				return "", fmt.Errorf("persist web port: %w", err)
+			}
+			app.AssignedPort = port
+		}
+		if app.AssignedPort > 0 {
+			webNat := nat.Port(fmt.Sprintf("%d/tcp", tmpl.WebPort))
+			portSet[webNat] = struct{}{}
+			portMap[webNat] = []nat.PortBinding{
+				{HostIP: "0.0.0.0", HostPort: strconv.Itoa(app.AssignedPort)},
+			}
 		}
 	}
 
@@ -220,7 +248,7 @@ func (s *GameServerService) CountConnections(ctx context.Context, containerNameO
 
 // GetTemplates returns all available game server templates.
 func GetGameTemplates() []model.GameTemplate {
-	return []model.GameTemplate{vrisingTemplate(), openmuTemplate(), muemuTemplate()}
+	return []model.GameTemplate{vrisingTemplate(), openmuTemplate(), muemuTemplate(), rakionTemplate()}
 }
 
 func GetGameTemplate(id string) *model.GameTemplate {
