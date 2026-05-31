@@ -23,7 +23,7 @@ import (
 )
 
 // appVersion is shown in the UI.
-const appVersion = "v1.0"
+const appVersion = "v1.1"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -316,11 +316,14 @@ func (a *App) Play(card GameCard, user, pass string) error {
 		return fmt.Errorf("falha ao iniciar o jogo: %w", err)
 	}
 
-	// Camada de modo janela: a Serious Engine prende a janela no canto sem moldura.
-	// Em modo janela, achamos a janela do jogo (pela resolução) e a tornamos
-	// centrada e arrastável.
-	if s, err := a.GetSettings(card); err == nil && !s.Fullscreen {
-		go frameGameWindow(int32(s.ScreenWidth), int32(s.ScreenHeight))
+	// O load.bin mostra um diálogo "Window Mode / FullScreen" — clicamos o botão
+	// do modo escolhido nas Opções para ele não bloquear. Em modo janela, ainda
+	// centralizamos e damos moldura à janela do jogo (a engine a prende no canto).
+	if s, err := a.GetSettings(card); err == nil {
+		go autoSelectDisplayMode(s.Fullscreen)
+		if !s.Fullscreen {
+			go frameGameWindow(int32(s.ScreenWidth), int32(s.ScreenHeight))
+		}
 	}
 	return nil
 }
