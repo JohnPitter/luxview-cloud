@@ -4,11 +4,23 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"strings"
+	"syscall"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
+
+// startGameCmd launches the game with an EXACT command line (no exe path as the
+// first token). The game reads its login from the start of the command line, so
+// SysProcAttr.CmdLine guarantees it sees "user hexpass ticket" verbatim.
+func startGameCmd(exePath, cmdLine, cwd string) (*exec.Cmd, error) {
+	cmd := exec.Command(exePath)
+	cmd.Dir = cwd
+	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: cmdLine}
+	return cmd, cmd.Start()
+}
 
 func shellExec(verb, exe, args, cwd string, show int32) error {
 	v, _ := windows.UTF16PtrFromString(verb)

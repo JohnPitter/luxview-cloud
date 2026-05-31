@@ -2,10 +2,19 @@
 
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"os/exec"
+)
 
 func runGame(_, _, _ string) error {
 	return fmt.Errorf("o jogo só roda no Windows")
+}
+
+func startGameCmd(exePath, _, cwd string) (*exec.Cmd, error) {
+	cmd := exec.Command(exePath)
+	cmd.Dir = cwd
+	return cmd, cmd.Start()
 }
 
 func hklmLocationOK(_, _ string) bool   { return true }
