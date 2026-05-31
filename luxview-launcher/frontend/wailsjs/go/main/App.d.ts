@@ -4,10 +4,20 @@ import {main} from '../models';
 
 export function GetGames():Promise<Array<main.GameCard>>;
 
+export function GetSettings(arg1:main.GameCard):Promise<main.GameSettings>;
+
 export function InstallGame(arg1:main.GameCard):Promise<void>;
+
+export function IsGameRunning(arg1:string):Promise<boolean>;
 
 export function IsInstalled(arg1:string,arg2:string):Promise<boolean>;
 
-export function LaunchGame(arg1:main.GameCard):Promise<void>;
+export function Login(arg1:main.GameCard,arg2:string,arg3:string):Promise<string>;
 
 export function OpenInstallFolder(arg1:string):Promise<void>;
+
+export function Play(arg1:main.GameCard,arg2:string,arg3:string):Promise<void>;
+
+export function SaveSettings(arg1:main.GameCard,arg2:main.GameSettings):Promise<void>;
+
+export function Version():Promise<string>;

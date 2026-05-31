@@ -23,7 +23,7 @@ import (
 )
 
 // appVersion is shown in the UI.
-const appVersion = "v1.11"
+const appVersion = "v1.27"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -66,7 +66,7 @@ type launchSpec struct {
 var launchSpecs = map[string]launchSpec{
 	"rakion": {
 		clientDir:   "client",
-		gameExe:     `Bin\load.bin`, // wrapper de proteção: faz o setup do GameGuard e lança o rakion.bin
+		gameExe:     `Bin\load.bin`, // RakionLauncher (.NET): o driver invisível o desempacota e roda sem o diálogo
 		settingsINI: `Scripts\PersistentSymbols.ini`,
 		regHKCU:     `Software\Softnyx\Rakion`,
 		regHKLM:     `SOFTWARE\Softnyx\Rakion`,
@@ -299,7 +299,6 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	if _, err := a.Login(card, user, pass); err != nil {
 		return err
 	}
-	const authTicket = "1" // 4º arg (%d) — o world valida user+senha, não o ticket
 	dir, err := installDir(card.AppID)
 	if err != nil {
 		return err
@@ -314,30 +313,20 @@ func (a *App) Play(card GameCard, user, pass string) error {
 
 	passHex := hex.EncodeToString([]byte(pass))
 
-	// Working dir = the CLIENT ROOT (like NyxLauncher), not Bin/ — the game reads
-	// config.xfs from the cwd.
-	// We launch load.bin (the protection wrapper) exactly like NyxLauncher does:
-	// QUOTED exe path + user + hex-pass + ticket (format string "%s" %s %s %d).
-	// load.bin then sets up GameGuard (making its dead-server failure non-fatal)
-	// and CreateProcess'es rakion.bin — which needs our elevated integrity.
-	cmdLine := fmt.Sprintf(`"%s" %s %s %s`, exePath, user, passHex, authTicket)
-	// The launcher runs elevated (manifest), so CreateProcess can start load.bin/
-	// rakion.bin (requireAdministrator) with the exact command line. ShellExecute
-	// can't run a ".bin" (no file association), so CreateProcess is the only path.
-	if _, err := startGameCmd(exePath, cmdLine, clientDir); err != nil {
-		return fmt.Errorf("falha ao iniciar o jogo: %w", err)
-	}
-
-	// O jogo mostra um diálogo "Window Mode / FullScreen" no startup. Escondemos
-	// ele (movendo pra fora da tela) e clicamos o botão do modo escolhido nas
-	// Opções. Em modo janela, ainda centralizamos a janela do jogo (a engine a
-	// prende no canto).
+	// BYPASS do diálogo "Window Mode / FullScreen": o load.bin é o RakionLauncher
+	// (.NET, MPRESS-packed) que mostra o diálogo. Em vez de rodá-lo normal, um driver
+	// (PowerShell 32-bit) desempacota o load.bin, instancia o Form1 dele INVISÍVEL
+	// com o modo escolhido pré-selecionado, e roda a pipeline ORIGINAL (login +
+	// decrypt config.xfs + lança rakion.bin + patches do GameGuard) — sem o diálogo.
+	windowed := true
 	if s, err := a.GetSettings(card); err == nil {
-		go suppressDisplayModeDialog(s.Fullscreen)
-		go autoSelectDisplayMode(s.Fullscreen)
-		if !s.Fullscreen {
+		windowed = !s.Fullscreen
+		if windowed {
 			go frameGameWindow(int32(s.ScreenWidth), int32(s.ScreenHeight))
 		}
+	}
+	if err := invokeRakionDriver(clientDir, user, passHex, windowed); err != nil {
+		return err
 	}
 	return nil
 }

@@ -80,13 +80,26 @@ let runningGame = ''; // game id atualmente em execução (botão fica "Em execu
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// monitorGame mantém o botão "Em execução" enquanto o jogo está aberto.
+// monitorGame mantém o botão "Em execução" desde o clique em Jogar até o jogo
+// FECHAR. O driver desempacota o load.bin + faz checks de MD5 antes de lançar o
+// rakion.bin (~15-25s), então primeiro esperamos o processo APARECER (fase 1) e
+// só então rastreamos até ele sumir (fase 2) — assim o botão não re-habilita no
+// meio do startup.
 async function monitorGame(g: Card) {
   runningGame = g.game;
   paintFooter();
-  await sleep(8000); // dá tempo do jogo + GameGuard subirem
   try {
-    while (await IsGameRunning(g.game)) await sleep(3000);
+    // Fase 1: esperar o rakion.bin aparecer (timeout generoso p/ não travar o
+    // botão pra sempre caso o launch falhe).
+    let appeared = false;
+    for (let i = 0; i < 90; i++) {
+      if (await IsGameRunning(g.game)) { appeared = true; break; }
+      await sleep(1000);
+    }
+    // Fase 2: enquanto estiver rodando, mantém "Em execução".
+    if (appeared) {
+      while (await IsGameRunning(g.game)) await sleep(3000);
+    }
   } catch { /* ignore */ }
   runningGame = '';
   paintFooter();

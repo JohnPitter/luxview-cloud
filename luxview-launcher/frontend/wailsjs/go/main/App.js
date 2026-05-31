@@ -6,18 +6,38 @@ export function GetGames() {
   return window['go']['main']['App']['GetGames']();
 }
 
+export function GetSettings(arg1) {
+  return window['go']['main']['App']['GetSettings'](arg1);
+}
+
 export function InstallGame(arg1) {
   return window['go']['main']['App']['InstallGame'](arg1);
+}
+
+export function IsGameRunning(arg1) {
+  return window['go']['main']['App']['IsGameRunning'](arg1);
 }
 
 export function IsInstalled(arg1, arg2) {
   return window['go']['main']['App']['IsInstalled'](arg1, arg2);
 }
 
-export function LaunchGame(arg1) {
-  return window['go']['main']['App']['LaunchGame'](arg1);
+export function Login(arg1, arg2, arg3) {
+  return window['go']['main']['App']['Login'](arg1, arg2, arg3);
 }
 
 export function OpenInstallFolder(arg1) {
   return window['go']['main']['App']['OpenInstallFolder'](arg1);
+}
+
+export function Play(arg1, arg2, arg3) {
+  return window['go']['main']['App']['Play'](arg1, arg2, arg3);
+}
+
+export function SaveSettings(arg1, arg2) {
+  return window['go']['main']['App']['SaveSettings'](arg1, arg2);
+}
+
+export function Version() {
+  return window['go']['main']['App']['Version']();
 }
