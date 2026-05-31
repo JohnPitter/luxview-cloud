@@ -63,12 +63,13 @@ const (
 	bmClick        = 0x00F5
 	swpNoSize      = 0x0001
 
-	eventObjectCreate    = 0x8000
-	eventObjectShow      = 0x8002
-	objidWindow          = 0
-	wineventOutOfContext = 0x0000
-	wmQuit               = 0x0012
-	offScreenXY          = uintptr(0xFFFF8300) // -32000 (low 32 bits)
+	eventObjectCreate       = 0x8000
+	eventObjectShow         = 0x8002
+	eventObjectLocationChng = 0x800B
+	objidWindow             = 0
+	wineventOutOfContext    = 0x0000
+	wmQuit                  = 0x0012
+	offScreenXY             = uintptr(0xFFFF8300) // -32000 (low 32 bits)
 )
 
 type win32msg struct {
@@ -94,19 +95,26 @@ func suppressLoadBinDialog(pid uint32) {
 	defer runtime.UnlockOSThread()
 
 	cb := syscall.NewCallback(func(_, event, hwnd, idObject, _, _, _ uintptr) uintptr {
-		if (event != eventObjectCreate && event != eventObjectShow) || idObject != objidWindow || hwnd == 0 {
+		switch event {
+		case eventObjectCreate, eventObjectShow, eventObjectLocationChng:
+		default:
+			return 0
+		}
+		if idObject != objidWindow || hwnd == 0 {
 			return 0
 		}
 		var rc winRect
 		procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
 		w, h := rc.Right-rc.Left, rc.Bottom-rc.Top
-		if w > 120 && w < 520 && h > 70 && h < 360 { // dialog-sized
+		// dialog-sized AND currently on-screen -> shove it off-screen (the > -10000
+		// check avoids re-moving (looping) a window we already moved away).
+		if w > 120 && w < 520 && h > 70 && h < 360 && rc.Left > -10000 {
 			procSetWindowPos.Call(hwnd, 0, offScreenXY, offScreenXY, 0, 0, swpNoSize|swpNoZOrder|swpNoActivate)
 		}
 		return 0
 	})
 	hook, _, _ := procSetWinEventHook.Call(
-		eventObjectCreate, eventObjectShow, 0, cb, uintptr(pid), 0, wineventOutOfContext)
+		eventObjectCreate, eventObjectLocationChng, 0, cb, uintptr(pid), 0, wineventOutOfContext)
 	if hook == 0 {
 		return
 	}
