@@ -16,7 +16,9 @@ entryPoints:
     transport:
       respondingTimeouts:
         readTimeout: 300s
-        writeTimeout: 300s
+        # Generoso: downloads de client de jogo (centenas de MB) em conexões
+        # lentas podem levar muitos minutos; senão o stream é cortado (EOF).
+        writeTimeout: 1800s
         idleTimeout: 300s
     http:
       tls:

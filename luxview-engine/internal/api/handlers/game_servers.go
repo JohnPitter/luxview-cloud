@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -384,6 +385,14 @@ func (h *GameServerHandler) serveGameClient(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to read client base zip")
 		return
+	}
+
+	// The client zip is large (hundreds of MB) and is streamed/generated on the
+	// fly, so a slow client can take many minutes. Clear the server's write
+	// deadline for this response so the connection isn't cut mid-stream
+	// (otherwise the player sees "unexpected EOF").
+	if rc := http.NewResponseController(w); rc != nil {
+		_ = rc.SetWriteDeadline(time.Time{})
 	}
 
 	w.Header().Set("Content-Type", "application/zip")

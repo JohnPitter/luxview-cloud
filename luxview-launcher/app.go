@@ -157,26 +157,23 @@ func (a *App) InstallGame(card GameCard) error {
 		return err
 	}
 	tmpPath := tmp.Name()
+	tmp.Close()
 	defer os.Remove(tmpPath)
 
-	resp, err := a.dl.Get(card.DownloadURL)
-	if err != nil {
-		tmp.Close()
-		return fmt.Errorf("falha no download: %w", err)
+	// Retry como rede de segurança (queda de conexão no meio do stream).
+	var dlErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		if dlErr = a.downloadZip(card, tmpPath); dlErr == nil {
+			break
+		}
+		if attempt < 3 {
+			a.progressMsg(card.Game, "download", -1, fmt.Sprintf("conexão caiu, tentando de novo (%d/3)…", attempt))
+			time.Sleep(2 * time.Second)
+		}
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		tmp.Close()
-		return fmt.Errorf("download falhou (HTTP %d)", resp.StatusCode)
+	if dlErr != nil {
+		return fmt.Errorf("falha no download após 3 tentativas: %w", dlErr)
 	}
-
-	total := resp.ContentLength
-	pw := &progressWriter{a: a, game: card.Game, total: total}
-	if _, err := io.Copy(tmp, io.TeeReader(resp.Body, pw)); err != nil {
-		tmp.Close()
-		return fmt.Errorf("falha ao gravar o download: %w", err)
-	}
-	tmp.Close()
 
 	a.progress(card.Game, "extract", 0)
 	if err := unzip(tmpPath, dir, func(done, count int) {
@@ -187,6 +184,30 @@ func (a *App) InstallGame(card GameCard) error {
 		return fmt.Errorf("falha ao extrair: %w", err)
 	}
 	a.progress(card.Game, "done", 100)
+	return nil
+}
+
+// downloadZip streams the client zip to path (one attempt), emitting progress.
+func (a *App) downloadZip(card GameCard, path string) error {
+	out, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	resp, err := a.dl.Get(card.DownloadURL)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	pw := &progressWriter{a: a, game: card.Game, total: resp.ContentLength}
+	if _, err := io.Copy(out, io.TeeReader(resp.Body, pw)); err != nil {
+		return err
+	}
 	return nil
 }
 
