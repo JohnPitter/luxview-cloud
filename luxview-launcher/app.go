@@ -274,7 +274,9 @@ func unzip(src, dest string, onProgress func(done, total int)) error {
 		if !strings.HasPrefix(targetAbs, destAbs+string(os.PathSeparator)) && targetAbs != destAbs {
 			return fmt.Errorf("entrada de zip insegura: %s", f.Name)
 		}
-		if f.FileInfo().IsDir() {
+		// Some Windows-made zips (this client) use "\" separators and may not flag
+		// directory entries via FileInfo — treat trailing-separator names as dirs.
+		if f.FileInfo().IsDir() || strings.HasSuffix(f.Name, "/") || strings.HasSuffix(f.Name, `\`) {
 			if err := os.MkdirAll(target, 0o755); err != nil {
 				return err
 			}
