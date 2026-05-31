@@ -58,6 +58,26 @@ export namespace main {
 	        this.gamma = source["gamma"];
 	    }
 	}
+	export class UpdateInfo {
+	    available: boolean;
+	    current: string;
+	    version: string;
+	    url: string;
+	    notes: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.current = source["current"];
+	        this.version = source["version"];
+	        this.url = source["url"];
+	        this.notes = source["notes"];
+	    }
+	}
 
 }
 

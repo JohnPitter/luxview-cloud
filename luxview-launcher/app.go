@@ -22,8 +22,10 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// appVersion is shown in the UI.
-const appVersion = "v1.31"
+// appVersion is shown in the UI. It is a var (not const) so the release CI can
+// stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
+// fallback when building locally.
+var appVersion = "v1.32"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }

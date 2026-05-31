@@ -112,6 +112,7 @@ func NewRouter(deps Deps) *chi.Mux {
 		"rakion": deps.Config.RakionClientBaseZipPath,
 	}
 	gameServerHandler := handlers.NewGameServerHandler(deps.AppRepo, deps.GameConfigRepo, deps.GameServerSvc, deps.Config.VPSPublicIP, deps.Config.Domain, gameClientBaseZips)
+	launcherHandler := handlers.NewLauncherHandler(deps.Config.LauncherReleaseRepo, deps.Config.LauncherAssetName, deps.Config.GitHubAPIToken)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 	optionalAuthMiddleware := middleware.OptionalAuth(deps.Config.JWTSecret, deps.UserRepo)
@@ -156,6 +157,11 @@ func NewRouter(deps Deps) *chi.Mux {
 
 		// Public game catalog — consumed by the LuxView launcher (no auth).
 		r.Get("/public/games", gameServerHandler.ListPublicGames)
+
+		// Public launcher distribution — download redirect (landing page) and
+		// latest-release JSON (launcher auto-update). No auth.
+		r.Get("/public/launcher", launcherHandler.Download)
+		r.Get("/public/launcher/latest", launcherHandler.Latest)
 
 		// Internal (Traefik)
 		r.Group(func(r chi.Router) {

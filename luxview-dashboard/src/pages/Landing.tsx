@@ -9,12 +9,16 @@ import {
   Box,
   Check,
   Database,
+  Download,
   ExternalLink,
+  Gamepad2,
   Github,
   GitBranch,
   Globe,
   Lock,
+  Monitor,
   Moon,
+  MousePointerClick,
   RefreshCcw,
   Rocket,
   Server,
@@ -408,7 +412,15 @@ export function Landing() {
   const navItems = [
     { label: t('landing.nav.features'), id: 'features' },
     { label: t('landing.nav.howItWorks'), id: 'how-it-works' },
+    { label: t('landing.nav.launcher'), id: 'launcher' },
     { label: t('landing.nav.pricing'), id: 'pricing' },
+  ];
+
+  const launcherFeatures = [
+    { icon: MousePointerClick, title: t('landing.launcher.feat1.title'), description: t('landing.launcher.feat1.desc') },
+    { icon: Zap, title: t('landing.launcher.feat2.title'), description: t('landing.launcher.feat2.desc') },
+    { icon: Gamepad2, title: t('landing.launcher.feat3.title'), description: t('landing.launcher.feat3.desc') },
+    { icon: Monitor, title: t('landing.launcher.feat4.title'), description: t('landing.launcher.feat4.desc') },
   ];
 
   const stacks = [
@@ -779,6 +791,110 @@ export function Landing() {
                 );
               })}
             </div>
+          </div>
+        </section>
+
+        <section id="launcher" className="mx-auto max-w-[1240px] px-6 pb-24 sm:px-8">
+          <Reveal variant="fade-up">
+            <SectionIntro
+              eyebrow={t('landing.launcher.eyebrow')}
+              title={t('landing.launcher.title')}
+              description={t('landing.launcher.subtitle')}
+              isDark={isDark}
+            />
+          </Reveal>
+
+          <div className="mt-12 grid items-center gap-8 lg:grid-cols-2">
+            {/* Left: features + download CTA */}
+            <Reveal variant="fade-right" delay={120}>
+              <div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {launcherFeatures.map((feature) => {
+                    const Icon = feature.icon;
+                    return (
+                      <GlassCard key={feature.title} className="h-full" hover>
+                        <div className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl ${isDark ? 'bg-zinc-950/70 ring-1 ring-white/5' : 'bg-white/85 ring-1 ring-zinc-200/80'}`}>
+                          <Icon size={20} className="text-amber-400" />
+                        </div>
+                        <h3 className={`mt-4 text-lg font-semibold tracking-tight ${isDark ? 'text-zinc-50' : 'text-zinc-950'}`}>{feature.title}</h3>
+                        <p className={`mt-2 text-sm leading-6 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>{feature.description}</p>
+                      </GlassCard>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <a
+                    href="/api/public/launcher"
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-500 px-7 py-4 text-base font-semibold text-zinc-950 shadow-[0_18px_50px_rgba(245,158,11,0.28)] transition-all duration-200 hover:bg-amber-400"
+                  >
+                    <Download size={18} />
+                    {t('landing.launcher.cta')}
+                  </a>
+                  <div className="flex flex-col">
+                    <span className={`inline-flex items-center gap-2 text-sm ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                      <Monitor size={15} className="text-amber-400" />
+                      {t('landing.launcher.forWindows')}
+                    </span>
+                    <span className={`mt-1 text-xs leading-5 ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>{t('landing.launcher.note')}</span>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* Right: launcher window mockup */}
+            <Reveal variant="fade-left" delay={220} duration={800}>
+              <div className="relative">
+                <div className="absolute -left-10 top-10 h-44 w-44 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.18), transparent 70%)' }} />
+                <div className="relative overflow-hidden rounded-[20px] border border-zinc-800/60 bg-[#0c0c0f] shadow-[0_32px_100px_rgba(0,0,0,0.55)]">
+                  {/* Title bar */}
+                  <div className="flex items-center gap-2.5 border-b border-zinc-800/50 bg-zinc-900/40 px-4 py-2.5">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 text-[11px] font-bold text-zinc-950">L</span>
+                    <div className="leading-tight">
+                      <p className="text-[12px] font-semibold text-zinc-100">LuxView Cloud</p>
+                      <p className="text-[9px] text-zinc-500">Games</p>
+                    </div>
+                    <span className="ml-auto flex items-center gap-1.5 text-[10px] text-emerald-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      {t('landing.launcher.mock.status')}
+                    </span>
+                    <span className="ml-3 text-[9px] text-zinc-600">v1.32</span>
+                  </div>
+
+                  {/* Game chips strip */}
+                  <div className="flex gap-2 px-4 pt-4">
+                    {['Rakion', 'MU', 'Metin2'].map((g, i) => (
+                      <div key={g} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] ${i === 0 ? 'border-amber-400/50 bg-amber-500/10 text-amber-300 shadow-[0_0_0_1px_rgba(245,158,11,0.3)]' : 'border-zinc-800 bg-zinc-950/60 text-zinc-500'}`}>
+                        <Gamepad2 size={12} />
+                        {g}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Hero */}
+                  <div className="p-4">
+                    <div className="relative overflow-hidden rounded-2xl border border-zinc-800/60" style={{ background: 'linear-gradient(135deg,#7f1d1d 0%,#2a0a0a 100%)' }}>
+                      <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+                      <div className="relative flex min-h-[150px] flex-col justify-end p-5">
+                        <span className="inline-flex w-fit rounded-full bg-black/30 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.2em] text-amber-300">Chaos Force</span>
+                        <h4 className="mt-2 text-2xl font-bold tracking-tight text-white">Rakion</h4>
+                        <p className="mt-1 max-w-sm text-[11px] leading-5 text-zinc-300">LuxView Brasil — servidor online, cliente pronto pra jogar.</p>
+                      </div>
+                    </div>
+
+                    {/* Footer with progress + play */}
+                    <div className="mt-3 flex items-center gap-3">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800/80">
+                        <div className="h-full w-full rounded-full bg-gradient-to-r from-amber-500 to-amber-400" />
+                      </div>
+                      <button className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 px-5 py-2 text-[12px] font-bold text-zinc-950 shadow-[0_8px_22px_rgba(245,158,11,0.35)]">
+                        ▶ {t('landing.launcher.mock.play')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
           </div>
         </section>
 

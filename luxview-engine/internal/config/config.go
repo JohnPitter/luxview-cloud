@@ -74,6 +74,10 @@ type Config struct {
 	OpenMUClientBaseZipPath string // Base Season 6 client zip used to generate configured downloads
 	RakionClientBaseZipPath string // Base Rakion client zip used to generate configured downloads
 
+	LauncherReleaseRepo string // GitHub "owner/name" whose Releases publish the launcher .exe
+	LauncherAssetName   string // Release asset filename for the launcher (e.g. luxview-launcher.exe)
+	GitHubAPIToken      string // optional token to raise the GitHub API rate limit for release lookups
+
 	// SMTP (alert emails)
 	SMTPHost     string
 	SMTPPort     int
@@ -152,6 +156,10 @@ func Load() (*Config, error) {
 
 		OpenMUClientBaseZipPath: envStr("OPENMU_CLIENT_BASE_ZIP", "/opt/luxview/openmu-assets/openmu-s6-base.zip"),
 		RakionClientBaseZipPath: envStr("RAKION_CLIENT_BASE_ZIP", "/opt/luxview/rakion-assets/rakion-client-base.zip"),
+
+		LauncherReleaseRepo: envStr("LAUNCHER_RELEASE_REPO", "JohnPitter/luxview-cloud"),
+		LauncherAssetName:   envStr("LAUNCHER_ASSET_NAME", "luxview-launcher.exe"),
+		GitHubAPIToken:      envStr("GITHUB_TOKEN", ""),
 
 		SMTPHost:     envStr("SMTP_HOST", ""),
 		SMTPPort:     envInt("SMTP_PORT", 587),

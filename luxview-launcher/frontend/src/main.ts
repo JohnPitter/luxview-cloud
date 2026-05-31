@@ -1,6 +1,6 @@
 import './style.css';
 import './app.css';
-import { GetGames, InstallGame, Play, GetSettings, SaveSettings, OpenInstallFolder, Version, IsGameRunning } from '../wailsjs/go/main/App';
+import { GetGames, InstallGame, Play, GetSettings, SaveSettings, OpenInstallFolder, Version, IsGameRunning, CheckForUpdate, ApplyUpdate } from '../wailsjs/go/main/App';
 import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
 import rakionImg from './assets/games/rakion.jpg';
 import muImg from './assets/games/mu.jpg';
@@ -78,6 +78,8 @@ let online = false;
 let version = '';
 let runningGame = ''; // game id em execução (botão "● Em execução")
 let loadingGame = ''; // game id carregando (botão "Carregando Rakion…")
+let update: { version: string; url: string; notes: string } | null = null; // nova versão disponível
+let updating = false; // aplicando atualização
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -130,6 +132,7 @@ async function load() {
   paintChips();
   paintHero();
   paintFooter();
+  void checkUpdate(); // checa atualização em background (não bloqueia a UI)
 }
 
 function mount() {
@@ -147,6 +150,7 @@ function mount() {
           <button class="wbtn close" id="winClose" title="Fechar" aria-label="Fechar"></button>
         </div>
       </div>
+      <div class="update-bar" id="updatebar"></div>
       <div class="strip" id="strip"></div>
       <div class="hero-wrap" id="hero"></div>
       <div class="footer">
@@ -161,6 +165,44 @@ function mount() {
   document.getElementById('winMin')?.addEventListener('click', () => WindowMinimise());
   document.getElementById('winMax')?.addEventListener('click', () => WindowToggleMaximise());
   document.getElementById('winClose')?.addEventListener('click', () => Quit());
+}
+
+function paintUpdate() {
+  const bar = document.getElementById('updatebar');
+  if (!bar) return;
+  if (!update) { bar.className = 'update-bar'; bar.innerHTML = ''; return; }
+  bar.className = 'update-bar show';
+  bar.innerHTML = updating
+    ? `<span class="spinner"></span><span class="ut">Atualizando o launcher…</span>`
+    : `<span class="ub">●</span>
+       <span class="ut">Nova versão <b>${esc(update.version)}</b> disponível.</span>
+       <button class="ubtn" id="doUpdate">Atualizar agora</button>`;
+  if (!updating) {
+    document.getElementById('doUpdate')?.addEventListener('click', applyUpdate);
+  }
+}
+
+async function checkUpdate() {
+  try {
+    const info = await CheckForUpdate();
+    if (info && info.available) {
+      update = { version: info.version, url: info.url, notes: info.notes };
+      paintUpdate();
+    }
+  } catch { /* offline ou sem release — ignora */ }
+}
+
+async function applyUpdate() {
+  if (!update || updating) return;
+  updating = true;
+  paintUpdate();
+  try {
+    await ApplyUpdate(update.url); // o backend reinicia o app ao concluir
+  } catch (e) {
+    updating = false;
+    paintUpdate();
+    toast(String(e), true);
+  }
 }
 
 function paintChips() {
