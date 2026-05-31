@@ -24,6 +24,7 @@ var (
 	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
 	procIsWindowVisible          = user32.NewProc("IsWindowVisible")
 	procGetClientRect            = user32.NewProc("GetClientRect")
+	procGetWindowRect            = user32.NewProc("GetWindowRect")
 	procGetWindowLongPtr         = user32.NewProc("GetWindowLongPtrW")
 	procSetWindowLongPtr         = user32.NewProc("SetWindowLongPtrW")
 	procSetWindowPos             = user32.NewProc("SetWindowPos")
@@ -144,17 +145,19 @@ func autoSelectDisplayMode(fullscreen bool) {
 	if fullscreen {
 		keyword = "fullscreen"
 	}
-	for range 60 { // ~30s
+	for range 200 { // ~30s, polled fast so the dialog barely flashes
 		if btn := findButton(keyword); btn != 0 {
 			procSendMessage.Call(btn, bmClick, 0, 0)
 			return
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(150 * time.Millisecond)
 	}
 }
 
 // frameGameWindow waits for the game's main window (matching wantW×wantH) and
 // turns it into a centered, draggable titled window. No-op for fullscreen.
+// The Serious Engine keeps pinning the window to the top-left corner during
+// init, so we re-center whenever it drifts there for a few seconds.
 func frameGameWindow(wantW, wantH int32) {
 	var hwnd uintptr
 	for range 120 { // ~60s
@@ -166,18 +169,35 @@ func frameGameWindow(wantW, wantH int32) {
 	if hwnd == 0 {
 		return
 	}
-	// Apply twice (the engine may reposition itself right after creating the window).
 	applyWindowedFrame(hwnd, wantW, wantH)
-	time.Sleep(1500 * time.Millisecond)
-	applyWindowedFrame(hwnd, wantW, wantH)
+	for range 24 { // ~12s of adaptive re-centering
+		time.Sleep(500 * time.Millisecond)
+		var rc winRect
+		procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
+		if rc.Left < 40 && rc.Top < 40 { // engine pinned it to the corner
+			centerWindow(hwnd, wantW, wantH)
+		}
+	}
 }
 
+// applyWindowedFrame gives the window a caption + resizable frame, sets its
+// title, and centers it.
 func applyWindowedFrame(hwnd uintptr, clientW, clientH int32) {
 	style, _, _ := procGetWindowLongPtr.Call(hwnd, gwlStyle)
 	style &^= wsPopup
 	style |= wsCaption | wsSysMenu | wsMinimizeBox | wsThickFrame
 	procSetWindowLongPtr.Call(hwnd, gwlStyle, style)
 
+	title, _ := windows.UTF16PtrFromString("Rakion — LuxView Cloud Games")
+	procSetWindowText.Call(hwnd, uintptr(unsafe.Pointer(title)))
+
+	centerWindow(hwnd, clientW, clientH)
+}
+
+// centerWindow positions the window (current style) centered on the primary
+// screen, sized to fit a clientW×clientH client area.
+func centerWindow(hwnd uintptr, clientW, clientH int32) {
+	style, _, _ := procGetWindowLongPtr.Call(hwnd, gwlStyle)
 	rc := winRect{0, 0, clientW, clientH}
 	procAdjustWindowRect.Call(uintptr(unsafe.Pointer(&rc)), style, 0)
 	winW := rc.Right - rc.Left
@@ -190,7 +210,4 @@ func applyWindowedFrame(hwnd uintptr, clientW, clientH int32) {
 
 	procSetWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), uintptr(winW), uintptr(winH),
 		swpNoZOrder|swpFrameChange|swpShowWindow|swpNoActivate)
-
-	title, _ := windows.UTF16PtrFromString("Rakion — LuxView Cloud Games")
-	procSetWindowText.Call(hwnd, uintptr(unsafe.Pointer(title)))
 }
