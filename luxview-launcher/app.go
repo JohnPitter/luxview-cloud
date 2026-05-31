@@ -23,7 +23,7 @@ import (
 )
 
 // appVersion is shown in the UI so we can confirm which build is running.
-const appVersion = "v13 · elevated"
+const appVersion = "v14 · load.bin+elev"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -77,7 +77,7 @@ type launchSpec struct {
 var launchSpecs = map[string]launchSpec{
 	"rakion": {
 		clientDir:   "client",
-		gameExe:     `Bin\rakion.bin`, // o jogo real; o load.bin é só o wrapper de proteção
+		gameExe:     `Bin\load.bin`, // wrapper de proteção: faz o setup do GameGuard e lança o rakion.bin
 		settingsINI: `Scripts\PersistentSymbols.ini`,
 		regHKCU:     `Software\Softnyx\Rakion`,
 		regHKLM:     `SOFTWARE\Softnyx\Rakion`,
@@ -316,11 +316,11 @@ func (a *App) Play(card GameCard, user, pass string) error {
 
 	// Working dir = the CLIENT ROOT (like NyxLauncher), not Bin/ — the game reads
 	// config.xfs from the cwd.
-	// We launch rakion.bin directly with the EXACT command line that load.bin (the
-	// protection wrapper) gives it: "<user> <hex-pass> <ticket>" with NO exe path
-	// as the first token. (Captured via Process Monitor: load.bin -> rakion.bin
-	// "test 74657374 1".) This skips load.bin's GameGuard/handle handshake.
-	cmdLine := fmt.Sprintf(`%s %s %s`, user, passHex, authTicket)
+	// We launch load.bin (the protection wrapper) exactly like NyxLauncher does:
+	// QUOTED exe path + user + hex-pass + ticket (format string "%s" %s %s %d).
+	// load.bin then sets up GameGuard (making its dead-server failure non-fatal)
+	// and CreateProcess'es rakion.bin — which needs our elevated integrity.
+	cmdLine := fmt.Sprintf(`"%s" %s %s %s`, exePath, user, passHex, authTicket)
 	a.logLaunch(exePath, cmdLine)
 	// The launcher runs elevated (manifest), so CreateProcess can start rakion.bin
 	// (requireAdministrator) directly with the exact command line. ShellExecute
