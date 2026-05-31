@@ -310,6 +310,12 @@ func (a *App) Play(card GameCard, user, pass string) error {
 		}
 		return fmt.Errorf("falha ao iniciar o jogo: %w", err)
 	}
+
+	// Camada de modo janela: a Serious Engine prende a janela no canto sem moldura.
+	// Em modo janela, achamos a janela do jogo e a tornamos centrada e arrastável.
+	if s, err := a.GetSettings(card); err == nil && !s.Fullscreen {
+		go frameGameWindow(uint32(cmd.Process.Pid), int32(s.ScreenWidth), int32(s.ScreenHeight))
+	}
 	return nil
 }
 
