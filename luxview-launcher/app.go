@@ -23,7 +23,7 @@ import (
 )
 
 // appVersion is shown in the UI.
-const appVersion = "v1.1"
+const appVersion = "v1.2"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -452,11 +452,14 @@ func (a *App) SaveSettings(card GameCard, s GameSettings) error {
 	c = setSymbol(c, "snd_fSoundVolume", ftoa(s.SoundVolume))
 	c = setSymbol(c, "snd_fMusicVolume", ftoa(s.MusicVolume))
 	c = setSymbol(c, "gfx_fGamma", ftoa(s.Gamma))
-	// The client may ship the file read-only (locked); make it writable.
+	// The file may be locked read-only (below / by the client); make it writable.
 	_ = os.Chmod(p, 0o644)
 	if err := os.WriteFile(p, []byte(c), 0o644); err != nil {
 		return fmt.Errorf("falha ao salvar as opções: %w", err)
 	}
+	// Lock it read-only so the game can't overwrite our settings on exit (the
+	// Serious Engine persists its own display mode otherwise — losing our choice).
+	_ = os.Chmod(p, 0o444)
 	return nil
 }
 
