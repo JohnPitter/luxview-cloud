@@ -54,13 +54,17 @@ func abs32(v int32) int32 {
 	return v
 }
 
-func findWindowForPID(pid uint32, wantW, wantH int32) uintptr {
+// findGameWindow scans all top-level windows for one whose client area matches
+// wantW×wantH — the game runs in a separate process (load.bin exits after
+// spawning rakion.bin), so we match by size, not PID. Our own window is skipped.
+func findGameWindow(wantW, wantH int32) uintptr {
+	selfPID := windows.GetCurrentProcessId()
 	var found uintptr
 	cb := syscall.NewCallback(func(hwnd, _ uintptr) uintptr {
 		var wpid uint32
 		procGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&wpid)))
-		if wpid != pid {
-			return 1
+		if wpid == selfPID {
+			return 1 // skip the launcher's own window
 		}
 		if r, _, _ := procIsWindowVisible.Call(hwnd); r == 0 {
 			return 1
@@ -80,10 +84,10 @@ func findWindowForPID(pid uint32, wantW, wantH int32) uintptr {
 
 // frameGameWindow waits for the game's main window (matching wantW×wantH) and
 // turns it into a centered, draggable titled window. No-op for fullscreen.
-func frameGameWindow(pid uint32, wantW, wantH int32) {
+func frameGameWindow(wantW, wantH int32) {
 	var hwnd uintptr
 	for range 120 { // ~60s
-		if hwnd = findWindowForPID(pid, wantW, wantH); hwnd != 0 {
+		if hwnd = findGameWindow(wantW, wantH); hwnd != 0 {
 			break
 		}
 		time.Sleep(500 * time.Millisecond)

@@ -22,23 +22,11 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// appVersion is shown in the UI so we can confirm which build is running.
-const appVersion = "v14 · load.bin+elev"
+// appVersion is shown in the UI.
+const appVersion = "v1.0"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
-
-// logLaunch records the exact command line used to start the game, for
-// diagnostics (%APPDATA%/LuxViewLauncher/last-launch.log).
-func (a *App) logLaunch(exePath, cmdLine string) {
-	root, err := installsRoot()
-	if err != nil {
-		return
-	}
-	line := time.Now().Format(time.RFC3339) + "\n" + appVersion +
-		"\nexe: " + exePath + "\ncmdline: " + cmdLine + "\n"
-	_ = os.WriteFile(filepath.Join(filepath.Dir(root), "last-launch.log"), []byte(line), 0o644)
-}
 
 // baseURL is the LuxView platform origin the launcher talks to. Overridable via
 // the LUXVIEW_BASE_URL env var (handy for testing against the VPS directly).
@@ -321,19 +309,18 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	// load.bin then sets up GameGuard (making its dead-server failure non-fatal)
 	// and CreateProcess'es rakion.bin — which needs our elevated integrity.
 	cmdLine := fmt.Sprintf(`"%s" %s %s %s`, exePath, user, passHex, authTicket)
-	a.logLaunch(exePath, cmdLine)
-	// The launcher runs elevated (manifest), so CreateProcess can start rakion.bin
-	// (requireAdministrator) directly with the exact command line. ShellExecute
+	// The launcher runs elevated (manifest), so CreateProcess can start load.bin/
+	// rakion.bin (requireAdministrator) with the exact command line. ShellExecute
 	// can't run a ".bin" (no file association), so CreateProcess is the only path.
-	cmd, err := startGameCmd(exePath, cmdLine, clientDir)
-	if err != nil {
+	if _, err := startGameCmd(exePath, cmdLine, clientDir); err != nil {
 		return fmt.Errorf("falha ao iniciar o jogo: %w", err)
 	}
 
 	// Camada de modo janela: a Serious Engine prende a janela no canto sem moldura.
-	// Em modo janela, achamos a janela do jogo e a tornamos centrada e arrastável.
+	// Em modo janela, achamos a janela do jogo (pela resolução) e a tornamos
+	// centrada e arrastável.
 	if s, err := a.GetSettings(card); err == nil && !s.Fullscreen {
-		go frameGameWindow(uint32(cmd.Process.Pid), int32(s.ScreenWidth), int32(s.ScreenHeight))
+		go frameGameWindow(int32(s.ScreenWidth), int32(s.ScreenHeight))
 	}
 	return nil
 }
