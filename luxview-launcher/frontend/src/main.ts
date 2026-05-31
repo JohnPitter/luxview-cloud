@@ -15,25 +15,26 @@ type Card = {
   installed: boolean;
 };
 
-type Theme = { accent: string; grad: string; tag: string; initials: string };
+type Theme = { grad: string; accent: string; tag: string; initials: string };
 
 const THEMES: Record<string, Theme> = {
-  rakion:   { accent: '#e0392b', grad: 'linear-gradient(135deg,#7f1d1d 0%,#2a0a0a 100%)', tag: 'Chaos Force', initials: 'R' },
-  wolfteam: { accent: '#22d3ee', grad: 'linear-gradient(135deg,#155e75 0%,#0a1f2a 100%)', tag: 'Wolf Team', initials: 'W' },
-  gunbound: { accent: '#f59e0b', grad: 'linear-gradient(135deg,#92400e 0%,#2a1c05 100%)', tag: 'World Champion', initials: 'G' },
-  openmu:   { accent: '#a855f7', grad: 'linear-gradient(135deg,#581c87 0%,#1e0a2e 100%)', tag: 'MMORPG', initials: 'M' },
-  muemu:    { accent: '#a855f7', grad: 'linear-gradient(135deg,#581c87 0%,#1e0a2e 100%)', tag: 'MMORPG', initials: 'M' },
+  rakion:   { grad: 'linear-gradient(135deg,#7f1d1d 0%,#2a0a0a 100%)', accent: '#e0392b', tag: 'Chaos Force', initials: 'R' },
+  openmu:   { grad: 'linear-gradient(135deg,#581c87 0%,#1b0a2e 100%)', accent: '#a855f7', tag: 'MMORPG', initials: 'M' },
+  muemu:    { grad: 'linear-gradient(135deg,#581c87 0%,#1b0a2e 100%)', accent: '#a855f7', tag: 'MMORPG', initials: 'M' },
+  metin2:   { grad: 'linear-gradient(135deg,#7c2d12 0%,#2a1505 100%)', accent: '#fb923c', tag: 'MMORPG', initials: 'M2' },
+  priston:  { grad: 'linear-gradient(135deg,#0e7490 0%,#082530 100%)', accent: '#22d3ee', tag: 'Tale', initials: 'PT' },
 };
-const FALLBACK: Theme = { accent: '#71717a', grad: 'linear-gradient(135deg,#3f3f46 0%,#18181b 100%)', tag: 'Em breve', initials: '?' };
+const FALLBACK: Theme = { grad: 'linear-gradient(135deg,#3f3f46 0%,#18181b 100%)', accent: '#71717a', tag: 'Em breve', initials: '?' };
 const theme = (g: string): Theme => THEMES[g] || FALLBACK;
 
 function ph(game: string, name: string, desc: string): Card {
   return { app_id: '', name, game, display_name: name, description: desc, enabled: false, download_url: '', server_ip: '', installed: false };
 }
-// Coming-soon placeholders so the grid feels full (à la SoftNyx).
+// Próximos jogos da LuxView Cloud (cinza até ter servidor deployado + listado).
 const PLACEHOLDERS: Card[] = [
-  ph('wolfteam', 'Wolf Team', 'TPS de ação multiplayer — em breve na LuxView Cloud.'),
-  ph('gunbound', 'GunBound', 'Artilharia por turnos clássica — em breve na LuxView Cloud.'),
+  ph('openmu', 'Mu Online', 'MMORPG de ação clássico (OpenMU). Em breve na LuxView Cloud.'),
+  ph('metin2', 'Metin2', 'MMORPG de ação oriental. Em breve na LuxView Cloud.'),
+  ph('priston', 'Priston Tale', 'MMORPG isométrico clássico. Em breve na LuxView Cloud.'),
 ];
 
 let games: Card[] = [];
@@ -58,13 +59,13 @@ async function load() {
     selected = 0;
     toast(String(e), true);
   }
-  render();
+  mount();
+  paintChips();
+  paintHero();
+  paintFooter();
 }
 
-function render() {
-  const cur = games[selected];
-  const t = theme(cur?.game || '');
-
+function mount() {
   app.innerHTML = `
     <div class="shell">
       <div class="topbar">
@@ -73,36 +74,31 @@ function render() {
         <div class="spacer"></div>
         <div class="status ${online ? '' : 'off'}"><span class="dot"></span>${online ? 'Conectado' : 'Offline'}</div>
       </div>
-
-      <div class="strip">
-        ${games.map((g, i) => chip(g, i)).join('')}
-      </div>
-
-      ${cur ? hero(cur, t) : '<div class="hero hero-empty">Nenhum jogo disponível</div>'}
-
+      <div class="strip" id="strip"></div>
+      <div class="hero-wrap" id="hero"></div>
       <div class="footer">
         <div class="progress-wrap">
-          <div class="progress-line" id="pline">${footerLine(cur)}</div>
-          <div class="bar"><i id="pbar" style="width:0%"></i></div>
+          <div class="progress-line" id="pline"></div>
+          <div class="bar" id="pbarwrap"><i id="pbar"></i></div>
         </div>
-        <div class="actions">
-          <button class="btn icon" id="folderBtn" title="Abrir pasta de instalação" ${cur && cur.installed ? '' : 'disabled'}>📁</button>
-          ${actionBtn(cur)}
-        </div>
+        <div class="actions" id="actions"></div>
       </div>
-    </div>
-  `;
+    </div>`;
+}
 
+function paintChips() {
+  const strip = document.getElementById('strip')!;
+  strip.innerHTML = games.map((g, i) => chip(g, i)).join('');
   games.forEach((_, i) => {
-    document.getElementById('chip-' + i)?.addEventListener('click', () => {
-      if (installing) return;
+    const el = document.getElementById('chip-' + i)!;
+    el.style.animationDelay = `${i * 70}ms`;
+    el.addEventListener('click', () => {
+      if (installing || i === selected) return;
       selected = i;
-      render();
+      document.querySelectorAll('.chip').forEach((c, j) => c.classList.toggle('selected', j === selected));
+      paintHero();
+      paintFooter();
     });
-  });
-  document.getElementById('actionBtn')?.addEventListener('click', doAction);
-  document.getElementById('folderBtn')?.addEventListener('click', () => {
-    if (cur && cur.app_id) OpenInstallFolder(cur.app_id);
   });
 }
 
@@ -115,7 +111,7 @@ function chip(g: Card, i: number): string {
   return `
     <div class="${cls.join(' ')}" id="chip-${i}">
       ${pill}
-      <div class="ico" style="background:${t.grad};box-shadow:0 0 14px ${t.accent}66">${t.initials}</div>
+      <div class="ico" style="background:${t.grad};box-shadow:0 0 16px ${t.accent}66">${t.initials}</div>
       <div class="meta">
         <div class="nm">${esc(g.display_name)}</div>
         <div class="tg">${esc(t.tag)}</div>
@@ -123,27 +119,48 @@ function chip(g: Card, i: number): string {
     </div>`;
 }
 
-function hero(g: Card, t: Theme): string {
+function paintHero() {
+  const g = games[selected];
+  const host = document.getElementById('hero')!;
+  if (!g) { host.innerHTML = '<div class="hero hero-empty">Nenhum jogo disponível</div>'; return; }
+  const t = theme(g.game);
   const server = g.enabled
     ? `<div class="server">
          <span>Servidor: <b>${esc(g.name)}</b></span>
          ${g.server_ip ? `<span>IP: <b>${esc(g.server_ip)}</b></span>` : ''}
-         <span>Status: <b style="color:#4ade80">Online</b></span>
+         <span class="live">Online</span>
        </div>`
     : `<div class="server"><span>Status: <b>Em breve</b></span></div>`;
-  return `
+  host.innerHTML = `
     <div class="hero" style="--hero-grad:${t.grad}">
-      <span class="tag">${esc(t.tag)}</span>
-      <h1>${esc(g.display_name)}</h1>
-      <div class="desc">${esc(g.description || '')}</div>
-      ${server}
+      <div class="glint"></div>
+      <div class="c">
+        <span class="tag">${esc(t.tag)}</span>
+        <h1>${esc(g.display_name)}</h1>
+        <div class="desc">${esc(g.description || '')}</div>
+        ${server}
+      </div>
     </div>`;
+}
+
+function paintFooter() {
+  const g = games[selected];
+  document.getElementById('pline')!.textContent = footerLine(g);
+  const bar = document.getElementById('pbarwrap')!;
+  const fill = document.getElementById('pbar') as HTMLElement;
+  if (!installing) { bar.classList.remove('active'); fill.style.width = '0%'; }
+  const actions = document.getElementById('actions')!;
+  actions.innerHTML = `
+    <button class="btn icon" id="folderBtn" title="Abrir pasta de instalação" ${g && g.installed ? '' : 'disabled'}>📁</button>
+    ${actionBtn(g)}`;
+  document.getElementById('actionBtn')?.addEventListener('click', doAction);
+  document.getElementById('folderBtn')?.addEventListener('click', () => { if (g && g.app_id) OpenInstallFolder(g.app_id); });
 }
 
 function actionBtn(g?: Card): string {
   if (!g) return '';
   if (!g.enabled) return `<button class="btn" disabled>Indisponível</button>`;
-  if (installing) return `<button class="btn primary" disabled>Instalando…</button>`;
+  if (installing) return `<button class="btn primary" disabled><span class="spinner"></span> Instalando…</button>`;
   if (g.installed) return `<button class="btn primary" id="actionBtn">▶ JOGAR</button>`;
   return `<button class="btn primary" id="actionBtn">⬇ INSTALAR</button>`;
 }
@@ -160,17 +177,14 @@ async function doAction() {
   if (!g || !g.enabled || installing) return;
 
   if (g.installed) {
-    try {
-      await LaunchGame(g as any);
-      toast('Abrindo o jogo…');
-    } catch (e) {
-      toast(String(e), true);
-    }
+    try { await LaunchGame(g as any); toast('Abrindo o jogo…'); }
+    catch (e) { toast(String(e), true); }
     return;
   }
 
   installing = true;
-  render();
+  paintFooter();
+  document.getElementById('pbarwrap')!.classList.add('active');
   try {
     await InstallGame(g as any);
     g.installed = true;
@@ -179,17 +193,18 @@ async function doAction() {
     toast(String(e), true);
   } finally {
     installing = false;
-    render();
+    paintFooter();
+    paintChips();
   }
 }
 
 EventsOn('install:progress', (p: { game: string; phase: string; percent: number }) => {
   const bar = document.getElementById('pbar') as HTMLElement | null;
   const line = document.getElementById('pline');
-  if (bar) bar.style.width = `${p.percent}%`;
+  if (bar) bar.style.width = `${Math.max(2, p.percent)}%`;
   if (line) {
     line.textContent =
-      p.phase === 'download' ? `Baixando… ${p.percent}%` :
+      p.phase === 'download' ? (p.percent > 0 ? `Baixando… ${p.percent}%` : 'Baixando client…') :
       p.phase === 'extract' ? `Extraindo… ${p.percent}%` :
       p.phase === 'done' ? 'Concluído!' : '';
   }
@@ -198,14 +213,11 @@ EventsOn('install:progress', (p: { game: string; phase: string; percent: number 
 let toastTimer: number | undefined;
 function toast(msg: string, err = false) {
   let el = document.getElementById('toast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'toast';
-    document.body.appendChild(el);
-  }
+  if (!el) { el = document.createElement('div'); el.id = 'toast'; document.body.appendChild(el); }
   el.className = 'toast' + (err ? ' err' : '');
   el.textContent = msg;
-  requestAnimationFrame(() => el!.classList.add('show'));
+  // restart animation
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => el!.classList.remove('show'), 3200);
 }
