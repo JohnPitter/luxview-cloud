@@ -23,7 +23,7 @@ import (
 )
 
 // appVersion is shown in the UI.
-const appVersion = "v1.5"
+const appVersion = "v1.6"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }

@@ -145,14 +145,14 @@ func autoSelectDisplayMode(fullscreen bool) {
 	if fullscreen {
 		keyword = "fullscreen"
 	}
-	for range 300 { // ~30s, polled fast so the dialog barely flashes
+	for range 3000 { // ~30s, polled very fast so the dialog shows for ~1 frame
 		if btn := findButton(keyword); btn != 0 {
-			// NOTE: don't hide the dialog before clicking — load.bin then fails to
-			// process the click and the game never launches. Just click it.
+			// NOTE: don't hide/move the dialog before clicking — load.bin then
+			// fails to process the click and the game never launches. Just click.
 			procSendMessage.Call(btn, bmClick, 0, 0)
 			return
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
