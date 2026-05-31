@@ -23,7 +23,7 @@ import (
 )
 
 // appVersion is shown in the UI so we can confirm which build is running.
-const appVersion = "v11 · cwd-client"
+const appVersion = "v12 · rakion.bin"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -77,7 +77,7 @@ type launchSpec struct {
 var launchSpecs = map[string]launchSpec{
 	"rakion": {
 		clientDir:   "client",
-		gameExe:     `Bin\load.bin`, // o NyxLauncher lança o load.bin (PE), não o rakion.exe
+		gameExe:     `Bin\rakion.bin`, // o jogo real; o load.bin é só o wrapper de proteção
 		settingsINI: `Scripts\PersistentSymbols.ini`,
 		regHKCU:     `Software\Softnyx\Rakion`,
 		regHKLM:     `SOFTWARE\Softnyx\Rakion`,
@@ -314,12 +314,13 @@ func (a *App) Play(card GameCard, user, pass string) error {
 
 	passHex := hex.EncodeToString([]byte(pass))
 
-	// Working dir = the CLIENT ROOT (like NyxLauncher), not Bin/. The game reads
-	// config.xfs from the cwd; with cwd=Bin it picks the stale Bin/config.xfs and
-	// rejects it ("Config.xfs File not found or changed").
-	// Command line: the game parser expects the QUOTED exe path as the first token,
-	// then user, hex-pass and a numeric ticket (NyxLauncher format: "%s" %s %s %d).
-	cmdLine := fmt.Sprintf(`"%s" %s %s %s`, exePath, user, passHex, authTicket)
+	// Working dir = the CLIENT ROOT (like NyxLauncher), not Bin/ — the game reads
+	// config.xfs from the cwd.
+	// We launch rakion.bin directly with the EXACT command line that load.bin (the
+	// protection wrapper) gives it: "<user> <hex-pass> <ticket>" with NO exe path
+	// as the first token. (Captured via Process Monitor: load.bin -> rakion.bin
+	// "test 74657374 1".) This skips load.bin's GameGuard/handle handshake.
+	cmdLine := fmt.Sprintf(`%s %s %s`, user, passHex, authTicket)
 	a.logLaunch(exePath, cmdLine)
 	cmd, err := startGameCmd(exePath, cmdLine, clientDir)
 	if err != nil {
