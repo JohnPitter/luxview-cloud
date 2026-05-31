@@ -3,6 +3,9 @@
 package main
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -11,6 +14,22 @@ import (
 
 	"golang.org/x/sys/windows"
 )
+
+// dbgLog appends a diagnostic line to %APPDATA%/LuxViewLauncher/dialog-debug.log
+// so we can confirm the dialog suppressor fired and see window sizes.
+func dbgLog(format string, a ...any) {
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return
+	}
+	p := filepath.Join(base, "LuxViewLauncher", "dialog-debug.log")
+	f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, format+"\n", a...)
+}
 
 // Win32 helpers for two things the original launcher did:
 //   1. Auto-pick the load.bin "Window Mode / FullScreen" dialog (so it doesn't
@@ -108,13 +127,18 @@ func suppressLoadBinDialog(pid uint32) {
 		w, h := rc.Right-rc.Left, rc.Bottom-rc.Top
 		// dialog-sized AND currently on-screen -> shove it off-screen (the > -10000
 		// check avoids re-moving (looping) a window we already moved away).
-		if w > 120 && w < 520 && h > 70 && h < 360 && rc.Left > -10000 {
+		dialogish := w > 120 && w < 520 && h > 70 && h < 360
+		if dialogish && rc.Left > -10000 {
 			procSetWindowPos.Call(hwnd, 0, offScreenXY, offScreenXY, 0, 0, swpNoSize|swpNoZOrder|swpNoActivate)
+			dbgLog("ev=0x%X hwnd=0x%X %dx%d at (%d,%d) -> MOVED off-screen", event, hwnd, w, h, rc.Left, rc.Top)
+		} else if w > 60 && w < 900 && h > 50 && h < 700 && rc.Left > -10000 {
+			dbgLog("ev=0x%X hwnd=0x%X %dx%d at (%d,%d) -> seen (no match)", event, hwnd, w, h, rc.Left, rc.Top)
 		}
 		return 0
 	})
 	hook, _, _ := procSetWinEventHook.Call(
 		eventObjectCreate, eventObjectLocationChng, 0, cb, uintptr(pid), 0, wineventOutOfContext)
+	dbgLog("--- launch pid=%d hook=0x%X ---", pid, hook)
 	if hook == 0 {
 		return
 	}
