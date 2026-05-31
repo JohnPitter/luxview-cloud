@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.32"
+var appVersion = "v1.33"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }

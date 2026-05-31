@@ -2,9 +2,13 @@
 
 package main
 
-// In windowed mode the Serious Engine pins the game window to the top-left corner
-// with no frame. We give it a caption + resizable frame and center it (re-centering
-// while the engine keeps pinning it during init).
+// In windowed mode the Serious Engine creates its game window pinned to the
+// top-left corner. We deliberately do NOT re-style it: adding a caption/border
+// shifts the client area and desyncs the engine's fixed-size backbuffer, so the
+// game renders OUTSIDE a black frame. Instead we only *move* the window to the
+// screen center (no resize, no style change), which keeps the D3D device intact.
+// The engine keeps re-pinning the window to the corner during init, so we
+// re-center whenever it drifts back there.
 
 import (
 	"runtime"
@@ -22,29 +26,16 @@ var (
 	procIsWindowVisible          = user32.NewProc("IsWindowVisible")
 	procGetClientRect            = user32.NewProc("GetClientRect")
 	procGetWindowRect            = user32.NewProc("GetWindowRect")
-	procGetWindowLongPtr         = user32.NewProc("GetWindowLongPtrW")
-	procSetWindowLongPtr         = user32.NewProc("SetWindowLongPtrW")
 	procSetWindowPos             = user32.NewProc("SetWindowPos")
-	procAdjustWindowRect         = user32.NewProc("AdjustWindowRect")
 	procGetSystemMetrics         = user32.NewProc("GetSystemMetrics")
-	procSetWindowText            = user32.NewProc("SetWindowTextW")
 )
 
 const (
-	gwlStyle       = ^uintptr(15) // -16
-	wsPopup        = 0x80000000
-	wsBorder       = 0x00800000
-	wsDlgFrame     = 0x00400000
-	wsCaption      = wsBorder | wsDlgFrame // 0x00C00000
-	wsSysMenu      = 0x00080000
-	wsMinimizeBox  = 0x00020000
-	wsThickFrame   = 0x00040000
-	swpNoZOrder    = 0x0004
-	swpNoActivate  = 0x0010
-	swpFrameChange = 0x0020
-	swpShowWindow  = 0x0040
-	smCXScreen     = 0
-	smCYScreen     = 1
+	swpNoSize     = 0x0001
+	swpNoZOrder   = 0x0004
+	swpNoActivate = 0x0010
+	smCXScreen    = 0
+	smCYScreen    = 1
 )
 
 type winRect struct{ Left, Top, Right, Bottom int32 }
@@ -93,9 +84,9 @@ func findGameWindow(wantW, wantH int32) uintptr {
 }
 
 // frameGameWindow waits for the game's main window (matching wantW×wantH) and
-// turns it into a centered, draggable titled window. No-op for fullscreen. The
-// Serious Engine keeps pinning the window to the top-left corner during init, so
-// we re-center whenever it drifts there for a few seconds.
+// centers it on screen. No-op for fullscreen. The Serious Engine keeps pinning the
+// window to the top-left corner during init, so we re-center whenever it drifts
+// back there for a few seconds.
 func frameGameWindow(wantW, wantH int32) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -110,45 +101,31 @@ func frameGameWindow(wantW, wantH int32) {
 	if hwnd == 0 {
 		return
 	}
-	applyWindowedFrame(hwnd, wantW, wantH)
+	centerWindow(hwnd)
 	for range 24 { // ~12s of adaptive re-centering
 		time.Sleep(500 * time.Millisecond)
 		var rc winRect
 		procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
 		if rc.Left < 40 && rc.Top < 40 { // engine pinned it to the corner
-			centerWindow(hwnd, wantW, wantH)
+			centerWindow(hwnd)
 		}
 	}
 }
 
-// applyWindowedFrame gives the window a caption + resizable frame, sets its title,
-// and centers it.
-func applyWindowedFrame(hwnd uintptr, clientW, clientH int32) {
-	style, _, _ := procGetWindowLongPtr.Call(hwnd, gwlStyle)
-	style &^= wsPopup
-	style |= wsCaption | wsSysMenu | wsMinimizeBox | wsThickFrame
-	procSetWindowLongPtr.Call(hwnd, gwlStyle, style)
-
-	title, _ := windows.UTF16PtrFromString("Rakion — LuxView Cloud Games")
-	procSetWindowText.Call(hwnd, uintptr(unsafe.Pointer(title)))
-
-	centerWindow(hwnd, clientW, clientH)
-}
-
-// centerWindow positions the window (current style) centered on the primary
-// screen, sized to fit a clientW×clientH client area.
-func centerWindow(hwnd uintptr, clientW, clientH int32) {
-	style, _, _ := procGetWindowLongPtr.Call(hwnd, gwlStyle)
-	rc := winRect{0, 0, clientW, clientH}
-	procAdjustWindowRect.Call(uintptr(unsafe.Pointer(&rc)), style, 0)
+// centerWindow moves the window to the center of the primary screen WITHOUT
+// resizing or re-styling it. Move-only is what keeps the engine's render surface
+// in sync — changing size/style desyncs the fixed-size backbuffer (black frame).
+func centerWindow(hwnd uintptr) {
+	var rc winRect
+	procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
 	winW := rc.Right - rc.Left
 	winH := rc.Bottom - rc.Top
 
 	scrW, _, _ := procGetSystemMetrics.Call(smCXScreen)
 	scrH, _, _ := procGetSystemMetrics.Call(smCYScreen)
-	x := (int32(scrW) - winW) / 2
+	x := max((int32(scrW)-winW)/2, 0)
 	y := max((int32(scrH)-winH)/2, 0)
 
-	procSetWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), uintptr(winW), uintptr(winH),
-		swpNoZOrder|swpFrameChange|swpShowWindow|swpNoActivate)
+	procSetWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), 0, 0,
+		swpNoSize|swpNoZOrder|swpNoActivate)
 }
