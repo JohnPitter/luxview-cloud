@@ -273,10 +273,15 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	if !ok {
 		return fmt.Errorf("jogo não suportado: %s", card.Game)
 	}
-	token, err := a.Login(card, user, pass)
-	if err != nil {
+	// Login() validates the credentials against the web auth (launcherlogin.php).
+	// We don't forward the long web token to the game: the 3rd arg is a short auth
+	// ticket and a 40-char token corrupts the client's login packet, making the
+	// world report "ID doesn't exist". A short ticket works (broker is a stub; the
+	// world only checks the user/hex-pass we pass as args 1 and 2).
+	if _, err := a.Login(card, user, pass); err != nil {
 		return err
 	}
+	const authTicket = "1A"
 	dir, err := installDir(card.AppID)
 	if err != nil {
 		return err
@@ -290,7 +295,7 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	a.ensureRegistry(spec, clientDir)
 
 	passHex := hex.EncodeToString([]byte(pass))
-	args := []string{user, passHex, token}
+	args := []string{user, passHex, authTicket}
 	binDir := filepath.Dir(exePath)
 
 	// Try a plain launch first; if the game demands elevation, relaunch via UAC.
