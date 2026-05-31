@@ -318,15 +318,10 @@ func (a *App) Play(card GameCard, user, pass string) error {
 // when missing/wrong — on a machine that already ran the game it's a no-op.
 func (a *App) ensureRegistry(spec launchSpec, clientDir string) {
 	if spec.regHKCU != "" {
-		_ = exec.Command("reg", "add", `HKCU\`+spec.regHKCU,
-			"/v", "RootDir", "/t", "REG_SZ", "/d", clientDir+`\`, "/f").Run()
+		setHKCURootDir(spec.regHKCU, clientDir+`\`) // silencioso, sem admin
 	}
 	if spec.regHKLM != "" && !hklmLocationOK(spec.regHKLM, clientDir) {
-		// Elevated one-shot: set Location + Version together (single UAC).
-		cmdline := fmt.Sprintf(
-			`reg add "HKLM\%s" /v Location /t REG_SZ /d "%s\" /f & reg add "HKLM\%s" /v Version /t REG_DWORD /d 1 /f`,
-			spec.regHKLM, clientDir, spec.regHKLM)
-		_ = runGame("cmd.exe", "/c "+cmdline, clientDir)
+		_ = setHKLMElevated(spec.regHKLM, clientDir) // reg import oculto, sem prompt
 	}
 }
 

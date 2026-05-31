@@ -3,22 +3,37 @@
 package main
 
 import (
+	"os"
+	"strings"
+
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
-// runGame launches exePath with the given args (space-joined) elevated via
-// ShellExecute "runas" — honors a requireAdministrator manifest and triggers the
-// UAC consent prompt. Used as a fallback and for the one-shot HKLM registry write.
-func runGame(exePath, args, cwd string) error {
-	verb, _ := windows.UTF16PtrFromString("runas")
-	file, _ := windows.UTF16PtrFromString(exePath)
-	dir, _ := windows.UTF16PtrFromString(cwd)
-	var argp *uint16
+func shellExec(verb, exe, args, cwd string, show int32) error {
+	v, _ := windows.UTF16PtrFromString(verb)
+	f, _ := windows.UTF16PtrFromString(exe)
+	d, _ := windows.UTF16PtrFromString(cwd)
+	var a *uint16
 	if args != "" {
-		argp, _ = windows.UTF16PtrFromString(args)
+		a, _ = windows.UTF16PtrFromString(args)
 	}
-	return windows.ShellExecute(0, verb, file, argp, dir, windows.SW_SHOWNORMAL)
+	return windows.ShellExecute(0, v, f, a, d, show)
+}
+
+// runGame launches the game (elevated if its manifest demands it, visible).
+func runGame(exePath, args, cwd string) error {
+	return shellExec("runas", exePath, args, cwd, windows.SW_SHOWNORMAL)
+}
+
+// setHKCURootDir sets HKCU\<key>\RootDir (no admin, no window).
+func setHKCURootDir(key, value string) {
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, key, registry.SET_VALUE)
+	if err != nil {
+		return
+	}
+	defer k.Close()
+	_ = k.SetStringValue("RootDir", value)
 }
 
 // hklmLocationOK reports whether HKLM\<key>\Location already points at clientDir.
@@ -32,5 +47,26 @@ func hklmLocationOK(key, clientDir string) bool {
 	if err != nil {
 		return false
 	}
-	return got == clientDir || got == clientDir+`\`
+	return strings.EqualFold(strings.TrimRight(got, `\`), strings.TrimRight(clientDir, `\`))
 }
+
+// setHKLMElevated writes Location+Version to HKLM via an elevated, HIDDEN
+// `reg import` (no cmd window, no overwrite prompt). One UAC consent; a no-op on
+// the next launch since hklmLocationOK() will then match.
+func setHKLMElevated(key, clientDir string) error {
+	content := "Windows Registry Editor Version 5.00\r\n\r\n" +
+		"[HKEY_LOCAL_MACHINE\\" + key + "]\r\n" +
+		`"Location"="` + escapeReg(clientDir+`\`) + "\"\r\n" +
+		"\"Version\"=dword:00000001\r\n"
+	f, err := os.CreateTemp("", "luxview-*.reg")
+	if err != nil {
+		return err
+	}
+	path := f.Name()
+	_, _ = f.WriteString(content)
+	_ = f.Close()
+	// Left for OS temp cleanup: the elevated reg.exe reads it asynchronously.
+	return shellExec("runas", "reg.exe", `import "`+path+`"`, "", windows.SW_HIDE)
+}
+
+func escapeReg(s string) string { return strings.ReplaceAll(s, `\`, `\\`) }
