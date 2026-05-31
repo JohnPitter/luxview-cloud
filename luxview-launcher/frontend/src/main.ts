@@ -1,6 +1,6 @@
 import './style.css';
 import './app.css';
-import { GetGames, InstallGame, Play, GetSettings, SaveSettings, OpenInstallFolder } from '../wailsjs/go/main/App';
+import { GetGames, InstallGame, Play, GetSettings, SaveSettings, OpenInstallFolder, Version } from '../wailsjs/go/main/App';
 import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
 import rakionImg from './assets/games/rakion.jpg';
 import muImg from './assets/games/mu.jpg';
@@ -75,10 +75,12 @@ let games: Card[] = [];
 let selected = 0;
 let installing = false;
 let online = false;
+let version = '';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
 async function load() {
+  try { version = await Version(); } catch { /* binding nova */ }
   try {
     const real = (await GetGames()) as unknown as Card[];
     online = true;
@@ -107,6 +109,7 @@ function mount() {
         <div class="brand-text"><b>LuxView Cloud</b><span>Games</span></div>
         <div class="spacer"></div>
         <div class="status ${online ? '' : 'off'}"><span class="dot"></span>${online ? 'Conectado' : 'Offline'}</div>
+        ${version ? `<span class="ver">${esc(version)}</span>` : ''}
         <div class="wctrls" style="--wails-draggable:no-drag">
           <button class="wbtn" id="winMin" title="Minimizar" aria-label="Minimizar"></button>
           <button class="wbtn" id="winMax" title="Maximizar" aria-label="Maximizar"></button>

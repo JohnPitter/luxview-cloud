@@ -22,6 +22,24 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+// appVersion is shown in the UI so we can confirm which build is running.
+const appVersion = "v8 · cmdline"
+
+// Version exposes the build tag to the frontend.
+func (a *App) Version() string { return appVersion }
+
+// logLaunch records the exact command line used to start the game, for
+// diagnostics (%APPDATA%/LuxViewLauncher/last-launch.log).
+func (a *App) logLaunch(exePath, cmdLine string) {
+	root, err := installsRoot()
+	if err != nil {
+		return
+	}
+	line := time.Now().Format(time.RFC3339) + "\n" + appVersion +
+		"\nexe: " + exePath + "\ncmdline: " + cmdLine + "\n"
+	_ = os.WriteFile(filepath.Join(filepath.Dir(root), "last-launch.log"), []byte(line), 0o644)
+}
+
 // baseURL is the LuxView platform origin the launcher talks to. Overridable via
 // the LUXVIEW_BASE_URL env var (handy for testing against the VPS directly).
 func baseURL() string {
@@ -303,6 +321,7 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	// otherwise the world reads the path as the username ("ID doesn't exist").
 	// SysProcAttr.CmdLine sets the exact command line (this is what NyxLauncher does).
 	cmdLine := strings.Join(args, " ")
+	a.logLaunch(exePath, cmdLine)
 	cmd, err := startGameCmd(exePath, cmdLine, binDir)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "elevation") {

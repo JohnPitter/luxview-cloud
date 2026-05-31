@@ -94,6 +94,7 @@ html, body {
 .brand-text b { font-size: 15px; letter-spacing: .2px; }
 .brand-text span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 3px; }
 .topbar .spacer { flex: 1; }
+.topbar .ver { font-size: 10px; color: var(--muted); margin-left: 12px; opacity: .7; }
 
 /* window controls (frameless) */
 .wctrls { display: flex; gap: 4px; margin-left: 14px; }
