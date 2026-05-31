@@ -132,7 +132,8 @@ async function load() {
   paintChips();
   paintHero();
   paintFooter();
-  void checkUpdate(); // checa atualização em background (não bloqueia a UI)
+  void checkUpdate(true); // checa atualização em background (não bloqueia a UI)
+  startUpdateWatcher();   // re-checa periodicamente e ao focar a janela
 }
 
 function mount() {
@@ -182,7 +183,15 @@ function paintUpdate() {
   }
 }
 
-async function checkUpdate() {
+let lastUpdateCheck = 0;
+
+async function checkUpdate(force = false) {
+  if (updating) return;
+  // Debounce: no máx. uma checagem a cada 60s (evita spam em foco/intervalo),
+  // a não ser que seja forçada.
+  const now = Date.now();
+  if (!force && now - lastUpdateCheck < 60_000) return;
+  lastUpdateCheck = now;
   try {
     const info = await CheckForUpdate();
     if (info && info.available) {
@@ -190,6 +199,16 @@ async function checkUpdate() {
       paintUpdate();
     }
   } catch { /* offline ou sem release — ignora */ }
+}
+
+// Não depende só do startup: re-checa periodicamente e quando a janela volta ao
+// foco, pra que uma release nova seja notada sem precisar reabrir o launcher.
+let updateWatcherStarted = false;
+function startUpdateWatcher() {
+  if (updateWatcherStarted) return;
+  updateWatcherStarted = true;
+  setInterval(() => { void checkUpdate(); }, 10 * 60_000); // a cada 10 min
+  window.addEventListener('focus', () => { void checkUpdate(); });
 }
 
 async function applyUpdate() {
