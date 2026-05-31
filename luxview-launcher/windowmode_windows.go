@@ -3,6 +3,7 @@
 package main
 
 import (
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -33,6 +34,15 @@ var (
 	procSetWindowText            = user32.NewProc("SetWindowTextW")
 	procGetWindowText            = user32.NewProc("GetWindowTextW")
 	procSendMessage              = user32.NewProc("SendMessageW")
+	procSetWinEventHook          = user32.NewProc("SetWinEventHook")
+	procUnhookWinEvent           = user32.NewProc("UnhookWinEvent")
+	procGetMessage               = user32.NewProc("GetMessageW")
+	procTranslateMessage         = user32.NewProc("TranslateMessage")
+	procDispatchMessage          = user32.NewProc("DispatchMessageW")
+	procPostThreadMessage        = user32.NewProc("PostThreadMessageW")
+
+	kernel32               = windows.NewLazySystemDLL("kernel32.dll")
+	procGetCurrentThreadId = kernel32.NewProc("GetCurrentThreadId")
 )
 
 const (
@@ -51,7 +61,73 @@ const (
 	smCXScreen     = 0
 	smCYScreen     = 1
 	bmClick        = 0x00F5
+	swpNoSize      = 0x0001
+
+	eventObjectCreate    = 0x8000
+	eventObjectShow      = 0x8002
+	objidWindow          = 0
+	wineventOutOfContext = 0x0000
+	wmQuit               = 0x0012
+	offScreenXY          = uintptr(0xFFFF8300) // -32000 (low 32 bits)
 )
+
+type win32msg struct {
+	hwnd           uintptr
+	message        uint32
+	_              uint32
+	wParam, lParam uintptr
+	time           uint32
+	ptX, ptY       int32
+}
+
+// suppressLoadBinDialog moves load.bin's "Window Mode / FullScreen" dialog
+// OFF-SCREEN the instant it's created/shown — before it paints — so it never
+// appears. The button is still clicked (off-screen) by autoSelectDisplayMode, so
+// load.bin processes the choice and launches the game. Scoped to load.bin's
+// process; runs ~25s then unhooks. (Hiding the window breaks the click; moving
+// it off-screen keeps it "visible" so the click still works.)
+func suppressLoadBinDialog(pid uint32) {
+	if pid == 0 {
+		return
+	}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	cb := syscall.NewCallback(func(_, event, hwnd, idObject, _, _, _ uintptr) uintptr {
+		if (event != eventObjectCreate && event != eventObjectShow) || idObject != objidWindow || hwnd == 0 {
+			return 0
+		}
+		var rc winRect
+		procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
+		w, h := rc.Right-rc.Left, rc.Bottom-rc.Top
+		if w > 120 && w < 520 && h > 70 && h < 360 { // dialog-sized
+			procSetWindowPos.Call(hwnd, 0, offScreenXY, offScreenXY, 0, 0, swpNoSize|swpNoZOrder|swpNoActivate)
+		}
+		return 0
+	})
+	hook, _, _ := procSetWinEventHook.Call(
+		eventObjectCreate, eventObjectShow, 0, cb, uintptr(pid), 0, wineventOutOfContext)
+	if hook == 0 {
+		return
+	}
+	defer procUnhookWinEvent.Call(hook)
+
+	tid, _, _ := procGetCurrentThreadId.Call()
+	go func() {
+		time.Sleep(25 * time.Second)
+		procPostThreadMessage.Call(tid, wmQuit, 0, 0)
+	}()
+
+	var msg win32msg
+	for {
+		r, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+		if int32(r) <= 0 {
+			break
+		}
+		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
+		procDispatchMessage.Call(uintptr(unsafe.Pointer(&msg)))
+	}
+}
 
 type winRect struct{ Left, Top, Right, Bottom int32 }
 
