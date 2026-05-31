@@ -1,7 +1,7 @@
 import './style.css';
 import './app.css';
 import { GetGames, InstallGame, LaunchGame, OpenInstallFolder } from '../wailsjs/go/main/App';
-import { EventsOn } from '../wailsjs/runtime/runtime';
+import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
 import rakionImg from './assets/games/rakion.jpg';
 
 // Arte de fundo do hero por jogo (quando houver; senão usa o gradiente do tema).
@@ -90,11 +90,16 @@ async function load() {
 function mount() {
   app.innerHTML = `
     <div class="shell">
-      <div class="topbar">
+      <div class="topbar" style="--wails-draggable:drag">
         <div class="brand-mark">L</div>
         <div class="brand-text"><b>LuxView Cloud</b><span>Games</span></div>
         <div class="spacer"></div>
         <div class="status ${online ? '' : 'off'}"><span class="dot"></span>${online ? 'Conectado' : 'Offline'}</div>
+        <div class="wctrls" style="--wails-draggable:no-drag">
+          <button class="wbtn" id="winMin" title="Minimizar" aria-label="Minimizar"></button>
+          <button class="wbtn" id="winMax" title="Maximizar" aria-label="Maximizar"></button>
+          <button class="wbtn close" id="winClose" title="Fechar" aria-label="Fechar"></button>
+        </div>
       </div>
       <div class="strip" id="strip"></div>
       <div class="hero-wrap" id="hero"></div>
@@ -106,6 +111,10 @@ function mount() {
         <div class="actions" id="actions"></div>
       </div>
     </div>`;
+
+  document.getElementById('winMin')?.addEventListener('click', () => WindowMinimise());
+  document.getElementById('winMax')?.addEventListener('click', () => WindowToggleMaximise());
+  document.getElementById('winClose')?.addEventListener('click', () => Quit());
 }
 
 function paintChips() {
@@ -156,7 +165,7 @@ function paintHero() {
       <div class="glint"></div>
       <div class="c">
         <span class="tag">${esc(t.tag)}</span>
-        <h1>${esc(g.display_name)}</h1>
+        <h1>${esc(niceName(g))}</h1>
         <div class="desc">${esc(blurb(g))}</div>
         ${status}
       </div>

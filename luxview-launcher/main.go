@@ -21,9 +21,7 @@ func main() {
 		Height:           600,
 		MinWidth:         900,
 		MinHeight:        600,
-		MaxWidth:         900,
-		MaxHeight:        600,
-		DisableResize:    true,
+		Frameless:        true, // sem moldura nativa; controles próprios no titlebar
 		AssetServer:      &assetserver.Options{Assets: assets},
 		BackgroundColour: &options.RGBA{R: 9, G: 9, B: 11, A: 1}, // zinc-950
 		OnStartup:        app.startup,

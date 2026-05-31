@@ -94,6 +94,22 @@ html, body {
 .brand-text b { font-size: 15px; letter-spacing: .2px; }
 .brand-text span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 3px; }
 .topbar .spacer { flex: 1; }
+
+/* window controls (frameless) */
+.wctrls { display: flex; gap: 4px; margin-left: 14px; }
+.wbtn {
+  width: 40px; height: 30px; border: none; border-radius: 8px; cursor: pointer;
+  background: transparent; color: var(--muted); display: grid; place-items: center;
+  position: relative; transition: background .18s, color .18s;
+}
+.wbtn:hover { background: var(--surface-2); color: var(--text); }
+.wbtn.close:hover { background: #dc2626; color: #fff; }
+.wbtn::before, .wbtn::after { content: ""; position: absolute; background: currentColor; }
+#winMin::before { width: 11px; height: 1.5px; border-radius: 2px; }
+#winMax::before { width: 10px; height: 10px; background: transparent; border: 1.5px solid currentColor; border-radius: 2px; }
+.wbtn.close::before, .wbtn.close::after { width: 13px; height: 1.5px; border-radius: 2px; }
+.wbtn.close::before { transform: rotate(45deg); }
+.wbtn.close::after { transform: rotate(-45deg); }
 .topbar .status { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 7px; }
 .topbar .status .dot { width: 8px; height: 8px; border-radius: 999px; background: #22c55e; animation: pulseDot 2s infinite; }
 .topbar .status.off .dot { background: #ef4444; animation: none; box-shadow: 0 0 8px #ef4444; }
