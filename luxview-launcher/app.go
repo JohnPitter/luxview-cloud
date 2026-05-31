@@ -298,9 +298,11 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	args := []string{user, passHex, authTicket}
 	binDir := filepath.Dir(exePath)
 
-	// Try a plain launch first; if the game demands elevation, relaunch via UAC.
-	cmd := exec.Command(exePath, args...)
-	cmd.Dir = binDir
+	// The game reads its login (user/hex-pass/token) from the START of the command
+	// line — NOT via standard argv. So the exe path must NOT be the first token,
+	// otherwise the world reads the path as the username ("ID doesn't exist").
+	// We build argv WITHOUT the exe path prepended (this is what NyxLauncher does).
+	cmd := &exec.Cmd{Path: exePath, Args: args, Dir: binDir}
 	if err := cmd.Start(); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "elevation") {
 			if e2 := runGame(exePath, strings.Join(args, " "), binDir); e2 != nil {
