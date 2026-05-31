@@ -23,7 +23,7 @@ import (
 )
 
 // appVersion is shown in the UI so we can confirm which build is running.
-const appVersion = "v10 · load.bin"
+const appVersion = "v11 · cwd-client"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -313,19 +313,18 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	a.ensureRegistry(spec, clientDir)
 
 	passHex := hex.EncodeToString([]byte(pass))
-	binDir := filepath.Dir(exePath)
 
-	// Replicate the original launcher's command line EXACTLY. The game uses a custom
-	// parser: it expects the exe path QUOTED as the first token, then user, hex-pass
-	// and a numeric ticket. Without the quotes (Go's default) the parser reads the
-	// unquoted path as the username -> world "ID doesn't exist".
-	// NyxLauncher format string: "%s" %s %s %d
+	// Working dir = the CLIENT ROOT (like NyxLauncher), not Bin/. The game reads
+	// config.xfs from the cwd; with cwd=Bin it picks the stale Bin/config.xfs and
+	// rejects it ("Config.xfs File not found or changed").
+	// Command line: the game parser expects the QUOTED exe path as the first token,
+	// then user, hex-pass and a numeric ticket (NyxLauncher format: "%s" %s %s %d).
 	cmdLine := fmt.Sprintf(`"%s" %s %s %s`, exePath, user, passHex, authTicket)
 	a.logLaunch(exePath, cmdLine)
-	cmd, err := startGameCmd(exePath, cmdLine, binDir)
+	cmd, err := startGameCmd(exePath, cmdLine, clientDir)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "elevation") {
-			if e2 := runGame(exePath, cmdLine, binDir); e2 != nil {
+			if e2 := runGame(exePath, cmdLine, clientDir); e2 != nil {
 				return fmt.Errorf("falha ao iniciar o jogo: %w", e2)
 			}
 			return nil
