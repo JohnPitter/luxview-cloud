@@ -8,12 +8,17 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
+
+// gameDialogPID is the game process (rakion.bin) whose dialog we move off-screen
+// at CREATE time (before it paints) for a zero-flash suppression.
+var gameDialogPID atomic.Uint32
 
 // dbgLog appends a diagnostic line to %APPDATA%/LuxViewLauncher/dialog-debug.log
 // so we can confirm the dialog suppressor fired and see window sizes.
@@ -130,18 +135,45 @@ var smKeyword string // which button to click ("windowmode" / "fullscreen")
 // display-mode dialog — a small window owning BOTH a "Window Mode" and a
 // "FullScreen" button (unique enough to be safe globally) — it moves it
 // off-screen and clicks the chosen-mode button, so it never blocks or stays.
+func dialogSized(w, h int32) bool {
+	return w > 100 && w < 640 && h > 60 && h < 440
+}
+
 var smEventCb = syscall.NewCallback(func(_, event, hwnd, idObject, _, _, _ uintptr) uintptr {
-	if (event != eventObjectShow && event != eventObjectLocationChng) || idObject != objidWindow || hwnd == 0 {
+	if idObject != objidWindow || hwnd == 0 {
 		return 0
 	}
 	var rc winRect
 	procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
 	w, h := rc.Right-rc.Left, rc.Bottom-rc.Top
-	if w <= 100 || w >= 640 || h <= 60 || h >= 440 || rc.Left <= -10000 {
+
+	// Zero-flash path: at CREATE, move the GAME process's dialog-sized window
+	// off-screen before it paints. Scoped to rakion.bin's PID so we never touch
+	// other apps' windows (we can't button-verify yet — children don't exist).
+	if event == eventObjectCreate {
+		gp := gameDialogPID.Load()
+		if gp == 0 || !dialogSized(w, h) || rc.Left <= -10000 {
+			return 0
+		}
+		var wpid uint32
+		procGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&wpid)))
+		if wpid == gp {
+			procSetWindowPos.Call(hwnd, 0, offScreenXY, offScreenXY, 0, 0, swpNoSize|swpNoZOrder|swpNoActivate)
+			dbgLog("CREATE pid=%d hwnd=0x%X %dx%d -> moved (zero-flash)", wpid, hwnd, w, h)
+		}
+		return 0
+	}
+
+	// Fallback (any process): at SHOW/move, identify THE dialog by its two
+	// buttons, move it off-screen and click the chosen mode.
+	if event != eventObjectShow && event != eventObjectLocationChng {
+		return 0
+	}
+	if !dialogSized(w, h) || rc.Left <= -10000 {
 		return 0
 	}
 	if findChild(hwnd, "windowmode") == 0 || findChild(hwnd, "fullscreen") == 0 {
-		return 0 // not the display-mode dialog
+		return 0
 	}
 	procSetWindowPos.Call(hwnd, 0, offScreenXY, offScreenXY, 0, 0, swpNoSize|swpNoZOrder|swpNoActivate)
 	if btn := findChild(hwnd, smKeyword); btn != 0 {
@@ -160,11 +192,24 @@ func suppressDisplayModeDialog(fullscreen bool) {
 	if fullscreen {
 		smKeyword = "fullscreen"
 	}
+	// Watch for rakion.bin so the CREATE handler can move its dialog off-screen
+	// before it paints (zero flash).
+	gameDialogPID.Store(0)
+	go func() {
+		for range 400 { // ~20s
+			if pid := gameProcessPID("rakion.bin"); pid != 0 {
+				gameDialogPID.Store(pid)
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}()
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
 	hook, _, _ := procSetWinEventHook.Call(
-		eventObjectShow, eventObjectLocationChng, 0, smEventCb, 0, 0, wineventOutOfContext)
+		eventObjectCreate, eventObjectLocationChng, 0, smEventCb, 0, 0, wineventOutOfContext)
 	dbgLog("--- launch suppress hook=0x%X mode=%s ---", hook, smKeyword)
 	if hook == 0 {
 		return

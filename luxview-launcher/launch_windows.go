@@ -15,23 +15,27 @@ import (
 
 // gameProcessRunning reports whether a process with the given image name (e.g.
 // "rakion.bin") is currently running.
-func gameProcessRunning(name string) bool {
+func gameProcessRunning(name string) bool { return gameProcessPID(name) != 0 }
+
+// gameProcessPID returns the PID of the first process with the given image name,
+// or 0 if not running.
+func gameProcessPID(name string) uint32 {
 	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
-		return false
+		return 0
 	}
 	defer windows.CloseHandle(snap)
 	var pe windows.ProcessEntry32
 	pe.Size = uint32(unsafe.Sizeof(pe))
 	if windows.Process32First(snap, &pe) != nil {
-		return false
+		return 0
 	}
 	for {
 		if strings.EqualFold(windows.UTF16ToString(pe.ExeFile[:]), name) {
-			return true
+			return pe.ProcessID
 		}
 		if windows.Process32Next(snap, &pe) != nil {
-			return false
+			return 0
 		}
 	}
 }
