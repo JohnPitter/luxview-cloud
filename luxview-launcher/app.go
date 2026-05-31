@@ -23,7 +23,7 @@ import (
 )
 
 // appVersion is shown in the UI.
-const appVersion = "v1.9"
+const appVersion = "v1.10"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -324,18 +324,16 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	// The launcher runs elevated (manifest), so CreateProcess can start load.bin/
 	// rakion.bin (requireAdministrator) with the exact command line. ShellExecute
 	// can't run a ".bin" (no file association), so CreateProcess is the only path.
-	cmd, err := startGameCmd(exePath, cmdLine, clientDir)
-	if err != nil {
+	if _, err := startGameCmd(exePath, cmdLine, clientDir); err != nil {
 		return fmt.Errorf("falha ao iniciar o jogo: %w", err)
 	}
-	pid := uint32(cmd.Process.Pid) // load.bin
 
-	// O load.bin mostra um diálogo "Window Mode / FullScreen". Escondemos ele
-	// (movendo pra fora da tela no instante em que é criado) e clicamos o botão do
-	// modo escolhido nas Opções. Em modo janela, ainda centralizamos a janela do
-	// jogo (a engine a prende no canto).
+	// O jogo mostra um diálogo "Window Mode / FullScreen" no startup. Escondemos
+	// ele (movendo pra fora da tela) e clicamos o botão do modo escolhido nas
+	// Opções. Em modo janela, ainda centralizamos a janela do jogo (a engine a
+	// prende no canto).
 	if s, err := a.GetSettings(card); err == nil {
-		go suppressLoadBinDialog(pid)
+		go suppressDisplayModeDialog(s.Fullscreen)
 		go autoSelectDisplayMode(s.Fullscreen)
 		if !s.Fullscreen {
 			go frameGameWindow(int32(s.ScreenWidth), int32(s.ScreenHeight))

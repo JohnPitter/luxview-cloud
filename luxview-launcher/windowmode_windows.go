@@ -100,45 +100,72 @@ type win32msg struct {
 	ptX, ptY       int32
 }
 
-// suppressLoadBinDialog moves load.bin's "Window Mode / FullScreen" dialog
-// OFF-SCREEN the instant it's created/shown — before it paints — so it never
-// appears. The button is still clicked (off-screen) by autoSelectDisplayMode, so
-// load.bin processes the choice and launches the game. Scoped to load.bin's
-// process; runs ~25s then unhooks. (Hiding the window breaks the click; moving
-// it off-screen keeps it "visible" so the click still works.)
-func suppressLoadBinDialog(pid uint32) {
-	if pid == 0 {
-		return
+// --- find a child window of `parent` by caption keyword (package-level state
+// so we don't leak a syscall callback) ---
+
+var (
+	fcKeyword string
+	fcFound   uintptr
+)
+
+var fcChildCb = syscall.NewCallback(func(ch, _ uintptr) uintptr {
+	t := strings.ToLower(strings.ReplaceAll(windowText(ch), " ", ""))
+	if t != "" && strings.Contains(t, fcKeyword) {
+		fcFound = ch
+		return 0
+	}
+	return 1
+})
+
+func findChild(parent uintptr, keyword string) uintptr {
+	fcKeyword = keyword
+	fcFound = 0
+	procEnumChildWindows.Call(parent, fcChildCb, 0)
+	return fcFound
+}
+
+var smKeyword string // which button to click ("windowmode" / "fullscreen")
+
+// smEventCb fires on any window SHOW/move (system-wide). When it sees THE
+// display-mode dialog — a small window owning BOTH a "Window Mode" and a
+// "FullScreen" button (unique enough to be safe globally) — it moves it
+// off-screen and clicks the chosen-mode button, so it never blocks or stays.
+var smEventCb = syscall.NewCallback(func(_, event, hwnd, idObject, _, _, _ uintptr) uintptr {
+	if (event != eventObjectShow && event != eventObjectLocationChng) || idObject != objidWindow || hwnd == 0 {
+		return 0
+	}
+	var rc winRect
+	procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
+	w, h := rc.Right-rc.Left, rc.Bottom-rc.Top
+	if w <= 100 || w >= 640 || h <= 60 || h >= 440 || rc.Left <= -10000 {
+		return 0
+	}
+	if findChild(hwnd, "windowmode") == 0 || findChild(hwnd, "fullscreen") == 0 {
+		return 0 // not the display-mode dialog
+	}
+	procSetWindowPos.Call(hwnd, 0, offScreenXY, offScreenXY, 0, 0, swpNoSize|swpNoZOrder|swpNoActivate)
+	if btn := findChild(hwnd, smKeyword); btn != 0 {
+		procSendMessage.Call(btn, bmClick, 0, 0)
+	}
+	dbgLog("ev=0x%X hwnd=0x%X %dx%d -> dialog moved+clicked (%s)", event, hwnd, w, h, smKeyword)
+	return 0
+})
+
+// suppressDisplayModeDialog installs a system-wide WinEvent hook that whisks the
+// "Window Mode / FullScreen" dialog off-screen (whatever process shows it) and
+// clicks the chosen mode. Scoping by buttons (not PID) makes it robust even
+// though the dialog may belong to rakion.bin (load.bin exits early). ~25s.
+func suppressDisplayModeDialog(fullscreen bool) {
+	smKeyword = "windowmode"
+	if fullscreen {
+		smKeyword = "fullscreen"
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	cb := syscall.NewCallback(func(_, event, hwnd, idObject, _, _, _ uintptr) uintptr {
-		switch event {
-		case eventObjectCreate, eventObjectShow, eventObjectLocationChng:
-		default:
-			return 0
-		}
-		if idObject != objidWindow || hwnd == 0 {
-			return 0
-		}
-		var rc winRect
-		procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
-		w, h := rc.Right-rc.Left, rc.Bottom-rc.Top
-		// dialog-sized AND currently on-screen -> shove it off-screen (the > -10000
-		// check avoids re-moving (looping) a window we already moved away).
-		dialogish := w > 120 && w < 520 && h > 70 && h < 360
-		if dialogish && rc.Left > -10000 {
-			procSetWindowPos.Call(hwnd, 0, offScreenXY, offScreenXY, 0, 0, swpNoSize|swpNoZOrder|swpNoActivate)
-			dbgLog("ev=0x%X hwnd=0x%X %dx%d at (%d,%d) -> MOVED off-screen", event, hwnd, w, h, rc.Left, rc.Top)
-		} else if w > 60 && w < 900 && h > 50 && h < 700 && rc.Left > -10000 {
-			dbgLog("ev=0x%X hwnd=0x%X %dx%d at (%d,%d) -> seen (no match)", event, hwnd, w, h, rc.Left, rc.Top)
-		}
-		return 0
-	})
 	hook, _, _ := procSetWinEventHook.Call(
-		eventObjectCreate, eventObjectLocationChng, 0, cb, uintptr(pid), 0, wineventOutOfContext)
-	dbgLog("--- launch pid=%d hook=0x%X ---", pid, hook)
+		eventObjectShow, eventObjectLocationChng, 0, smEventCb, 0, 0, wineventOutOfContext)
+	dbgLog("--- launch suppress hook=0x%X mode=%s ---", hook, smKeyword)
 	if hook == 0 {
 		return
 	}
