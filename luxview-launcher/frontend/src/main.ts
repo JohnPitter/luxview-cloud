@@ -3,10 +3,15 @@ import './app.css';
 import { GetGames, InstallGame, Play, GetSettings, SaveSettings, OpenInstallFolder } from '../wailsjs/go/main/App';
 import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
 import rakionImg from './assets/games/rakion.jpg';
+import muImg from './assets/games/mu.jpg';
+import metin2Img from './assets/games/metin2.jpg';
 
-// Arte de fundo do hero por jogo (quando houver; senão usa o gradiente do tema).
+// Arte por jogo, usada no hero E no ícone do chip (quando houver; senão gradiente).
 const IMAGES: Record<string, string> = {
   rakion: rakionImg,
+  openmu: muImg,
+  muemu: muImg,
+  metin2: metin2Img,
 };
 
 type Card = {
@@ -146,10 +151,14 @@ function chip(g: Card, i: number): string {
   if (i === selected) cls.push('selected');
   if (!g.enabled) cls.push('disabled');
   const pill = g.enabled ? `<span class="pill on">online</span>` : `<span class="pill soon">em breve</span>`;
+  const img = IMAGES[g.game];
+  const ico = img
+    ? `<div class="ico img" style="background-image:url('${img}');box-shadow:0 0 16px ${t.accent}66"></div>`
+    : `<div class="ico" style="background:${t.grad};box-shadow:0 0 16px ${t.accent}66">${t.initials}</div>`;
   return `
     <div class="${cls.join(' ')}" id="chip-${i}">
       ${pill}
-      <div class="ico" style="background:${t.grad};box-shadow:0 0 16px ${t.accent}66">${t.initials}</div>
+      ${ico}
       <div class="meta">
         <div class="nm">${esc(niceName(g))}</div>
         <div class="tg">${esc(t.tag)}</div>
