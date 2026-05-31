@@ -215,6 +215,9 @@ html, body {
   transition: width .25s ease;
 }
 .bar.active > i { animation: barShimmer .6s linear infinite; }
+.bar.indet { position: relative; }
+.bar.indet > i { width: 34% !important; animation: indet 1.2s ease-in-out infinite; }
+@keyframes indet { 0% { transform: translateX(-110%); } 100% { transform: translateX(330%); } }
 
 .actions { display: flex; gap: 10px; }
 .btn {

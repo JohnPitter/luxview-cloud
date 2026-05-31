@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -53,11 +54,25 @@ var launchSpecs = map[string]launchSpec{
 // App is the Wails backend.
 type App struct {
 	ctx    context.Context
-	client *http.Client
+	client *http.Client // catálogo (JSON pequeno)
+	dl     *http.Client // download do client (centenas de MB — sem deadline total)
 }
 
 func NewApp() *App {
-	return &App{client: &http.Client{Timeout: 30 * time.Second}}
+	return &App{
+		client: &http.Client{Timeout: 30 * time.Second},
+		// Sem Timeout total (300MB+ pode levar minutos); ainda falha rápido se a
+		// conexão/handshake/headers travarem.
+		dl: &http.Client{
+			Timeout: 0,
+			Transport: &http.Transport{
+				DialContext:           (&net.Dialer{Timeout: 20 * time.Second}).DialContext,
+				TLSHandshakeTimeout:   20 * time.Second,
+				ResponseHeaderTimeout: 60 * time.Second,
+				ExpectContinueTimeout: 5 * time.Second,
+			},
+		},
+	}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -144,7 +159,7 @@ func (a *App) InstallGame(card GameCard) error {
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath)
 
-	resp, err := a.client.Get(card.DownloadURL)
+	resp, err := a.dl.Get(card.DownloadURL)
 	if err != nil {
 		tmp.Close()
 		return fmt.Errorf("falha no download: %w", err)
@@ -222,20 +237,26 @@ func (a *App) OpenInstallFolder(appID string) error {
 }
 
 func (a *App) progress(game, phase string, percent int) {
+	a.progressMsg(game, phase, percent, "")
+}
+
+func (a *App) progressMsg(game, phase string, percent int, detail string) {
 	wruntime.EventsEmit(a.ctx, "install:progress", map[string]any{
 		"game":    game,
 		"phase":   phase,
 		"percent": percent,
+		"detail":  detail,
 	})
 }
 
 // progressWriter emits download progress as bytes flow through it.
 type progressWriter struct {
-	a       *App
-	game    string
-	total   int64
-	written int64
-	lastPct int
+	a        *App
+	game     string
+	total    int64
+	written  int64
+	lastPct  int
+	lastTick int64 // bytes at last MB-based emit (when total unknown)
 }
 
 func (p *progressWriter) Write(b []byte) (int, error) {
@@ -247,6 +268,10 @@ func (p *progressWriter) Write(b []byte) (int, error) {
 			p.lastPct = pct
 			p.a.progress(p.game, "download", pct)
 		}
+	} else if p.written-p.lastTick >= 1<<20 { // sem Content-Length: emite a cada ~1MB
+		p.lastTick = p.written
+		mb := float64(p.written) / (1 << 20)
+		p.a.progressMsg(p.game, "download", -1, fmt.Sprintf("%.0f MB", mb))
 	}
 	return n, nil
 }

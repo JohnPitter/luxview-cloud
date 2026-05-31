@@ -177,7 +177,7 @@ function paintFooter() {
   document.getElementById('pline')!.textContent = footerLine(g);
   const bar = document.getElementById('pbarwrap')!;
   const fill = document.getElementById('pbar') as HTMLElement;
-  if (!installing) { bar.classList.remove('active'); fill.style.width = '0%'; }
+  if (!installing) { bar.classList.remove('active', 'indet'); fill.style.width = '0%'; }
   const actions = document.getElementById('actions')!;
   actions.innerHTML = `
     <button class="btn icon" id="folderBtn" title="Abrir pasta de instalação" ${g && g.installed ? '' : 'disabled'}>📁</button>
@@ -227,13 +227,20 @@ async function doAction() {
   }
 }
 
-EventsOn('install:progress', (p: { game: string; phase: string; percent: number }) => {
+EventsOn('install:progress', (p: { game: string; phase: string; percent: number; detail?: string }) => {
   const bar = document.getElementById('pbar') as HTMLElement | null;
+  const wrap = document.getElementById('pbarwrap');
   const line = document.getElementById('pline');
-  if (bar) bar.style.width = `${Math.max(2, p.percent)}%`;
+  if (p.percent < 0) {
+    wrap?.classList.add('indet');
+    if (bar) bar.style.width = '';
+  } else {
+    wrap?.classList.remove('indet');
+    if (bar) bar.style.width = `${Math.max(2, p.percent)}%`;
+  }
   if (line) {
     line.textContent =
-      p.phase === 'download' ? (p.percent > 0 ? `Baixando… ${p.percent}%` : 'Baixando client…') :
+      p.phase === 'download' ? (p.detail ? `Baixando… ${p.detail}` : 'Baixando client…') :
       p.phase === 'extract' ? `Extraindo… ${p.percent}%` :
       p.phase === 'done' ? 'Concluído!' : '';
   }
