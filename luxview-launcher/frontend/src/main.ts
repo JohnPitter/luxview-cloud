@@ -1,6 +1,6 @@
 import './style.css';
 import './app.css';
-import { GetGames, InstallGame, Play, GetSettings, SaveSettings, OpenInstallFolder, Version } from '../wailsjs/go/main/App';
+import { GetGames, InstallGame, Play, GetSettings, SaveSettings, OpenInstallFolder, Version, IsGameRunning } from '../wailsjs/go/main/App';
 import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
 import rakionImg from './assets/games/rakion.jpg';
 import muImg from './assets/games/mu.jpg';
@@ -76,6 +76,21 @@ let selected = 0;
 let installing = false;
 let online = false;
 let version = '';
+let runningGame = ''; // game id atualmente em execução (botão fica "Em execução")
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// monitorGame mantém o botão "Em execução" enquanto o jogo está aberto.
+async function monitorGame(g: Card) {
+  runningGame = g.game;
+  paintFooter();
+  await sleep(8000); // dá tempo do jogo + GameGuard subirem
+  try {
+    while (await IsGameRunning(g.game)) await sleep(3000);
+  } catch { /* ignore */ }
+  runningGame = '';
+  paintFooter();
+}
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -210,6 +225,7 @@ function paintFooter() {
 function actionBtn(g?: Card): string {
   if (!g) return '';
   if (!g.enabled) return `<button class="btn" disabled>Indisponível</button>`;
+  if (g.game === runningGame) return `<button class="btn primary" disabled>● Em execução</button>`;
   if (installing) return `<button class="btn primary" disabled><span class="spinner"></span> Instalando…</button>`;
   if (g.installed) return `<button class="btn primary" id="actionBtn">▶ JOGAR</button>`;
   return `<button class="btn primary" id="actionBtn">⬇ INSTALAR</button>`;
@@ -218,6 +234,7 @@ function actionBtn(g?: Card): string {
 function footerLine(g?: Card): string {
   if (!g) return '';
   if (!g.enabled) return 'Este jogo ainda não está disponível.';
+  if (g.game === runningGame) return 'Jogo em execução — feche-o para abrir de novo.';
   if (g.installed) return 'Instalado — pronto para jogar.';
   return 'Clique em INSTALAR para baixar o client.';
 }
@@ -291,6 +308,7 @@ function openLogin(g: Card) {
       localStorage.setItem('luxview:user:' + g.game, user);
       closeModal();
       toast('Iniciando o jogo…');
+      monitorGame(g); // botão fica "Em execução" enquanto o jogo está aberto
     } catch (e) {
       errEl.textContent = String(e).replace(/^Error:\s*/, '');
       goBtn.disabled = false; goBtn.innerHTML = '▶ Entrar e Jogar';

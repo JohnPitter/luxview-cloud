@@ -23,7 +23,7 @@ import (
 )
 
 // appVersion is shown in the UI.
-const appVersion = "v1.3"
+const appVersion = "v1.4"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -60,6 +60,7 @@ type launchSpec struct {
 	regHKCU     string // HKCU key whose RootDir points at the client dir
 	regHKLM     string // HKLM key whose Location/Version the game reads (needs admin)
 	loginPath   string // web auth path (GET user + hex-pass -> token)
+	processName string // running game process image name (for "is running" checks)
 }
 
 var launchSpecs = map[string]launchSpec{
@@ -70,7 +71,18 @@ var launchSpecs = map[string]launchSpec{
 		regHKCU:     `Software\Softnyx\Rakion`,
 		regHKLM:     `SOFTWARE\Softnyx\Rakion`,
 		loginPath:   "/launcherlogin.php",
+		processName: "rakion.bin",
 	},
+}
+
+// IsGameRunning reports whether the game's process is currently running, so the
+// UI can keep the Play button disabled while you're in-game.
+func (a *App) IsGameRunning(game string) bool {
+	spec, ok := launchSpecs[game]
+	if !ok || spec.processName == "" {
+		return false
+	}
+	return gameProcessRunning(spec.processName)
 }
 
 // App is the Wails backend.

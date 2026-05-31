@@ -7,10 +7,34 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
+
+// gameProcessRunning reports whether a process with the given image name (e.g.
+// "rakion.bin") is currently running.
+func gameProcessRunning(name string) bool {
+	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return false
+	}
+	defer windows.CloseHandle(snap)
+	var pe windows.ProcessEntry32
+	pe.Size = uint32(unsafe.Sizeof(pe))
+	if windows.Process32First(snap, &pe) != nil {
+		return false
+	}
+	for {
+		if strings.EqualFold(windows.UTF16ToString(pe.ExeFile[:]), name) {
+			return true
+		}
+		if windows.Process32Next(snap, &pe) != nil {
+			return false
+		}
+	}
+}
 
 // startGameCmd launches the game with an EXACT command line (no exe path as the
 // first token). The game reads its login from the start of the command line, so

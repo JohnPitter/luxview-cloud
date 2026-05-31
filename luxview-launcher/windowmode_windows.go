@@ -33,6 +33,8 @@ var (
 	procSetWindowText            = user32.NewProc("SetWindowTextW")
 	procGetWindowText            = user32.NewProc("GetWindowTextW")
 	procSendMessage              = user32.NewProc("SendMessageW")
+	procGetParent                = user32.NewProc("GetParent")
+	procShowWindow               = user32.NewProc("ShowWindow")
 )
 
 const (
@@ -51,6 +53,7 @@ const (
 	smCXScreen     = 0
 	smCYScreen     = 1
 	bmClick        = 0x00F5
+	swHide         = 0
 )
 
 type winRect struct{ Left, Top, Right, Bottom int32 }
@@ -145,12 +148,16 @@ func autoSelectDisplayMode(fullscreen bool) {
 	if fullscreen {
 		keyword = "fullscreen"
 	}
-	for range 200 { // ~30s, polled fast so the dialog barely flashes
+	for range 300 { // ~30s, polled fast so the dialog never visibly renders
 		if btn := findButton(keyword); btn != 0 {
+			// Hide the dialog window before clicking so it never flashes.
+			if parent, _, _ := procGetParent.Call(btn); parent != 0 {
+				procShowWindow.Call(parent, swHide)
+			}
 			procSendMessage.Call(btn, bmClick, 0, 0)
 			return
 		}
-		time.Sleep(150 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
