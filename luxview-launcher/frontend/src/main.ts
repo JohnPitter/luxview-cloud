@@ -1,6 +1,6 @@
 import './style.css';
 import './app.css';
-import { GetGames, InstallGame, LaunchGame, OpenInstallFolder } from '../wailsjs/go/main/App';
+import { GetGames, InstallGame, Play, GetSettings, SaveSettings, OpenInstallFolder } from '../wailsjs/go/main/App';
 import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
 import rakionImg from './assets/games/rakion.jpg';
 
@@ -18,7 +18,14 @@ type Card = {
   enabled: boolean;
   download_url: string;
   server_ip: string;
+  auth_host: string;
   installed: boolean;
+};
+
+type Settings = {
+  screen_width: number; screen_height: number; fullscreen: boolean;
+  mouse_sensitivity: number; invert_mouse: boolean; mouse_accel: boolean;
+  sound_volume: number; music_volume: number; gamma: number;
 };
 
 type Theme = { grad: string; accent: string; tag: string; initials: string };
@@ -50,7 +57,7 @@ const NAMES: Record<string, string> = {
 const niceName = (g: Card): string => NAMES[g.game] || g.display_name;
 
 function ph(game: string, name: string, desc: string): Card {
-  return { app_id: '', name, game, display_name: name, description: desc, enabled: false, download_url: '', server_ip: '', installed: false };
+  return { app_id: '', name, game, display_name: name, description: desc, enabled: false, download_url: '', server_ip: '', auth_host: '', installed: false };
 }
 // Próximos jogos da LuxView Cloud (cinza até ter servidor deployado + listado).
 const PLACEHOLDERS: Card[] = [
@@ -180,9 +187,11 @@ function paintFooter() {
   if (!installing) { bar.classList.remove('active', 'indet'); fill.style.width = '0%'; }
   const actions = document.getElementById('actions')!;
   actions.innerHTML = `
+    ${g && g.installed ? `<button class="btn icon" id="optionsBtn" title="Opções (mouse, resolução, som)">⚙</button>` : ''}
     <button class="btn icon" id="folderBtn" title="Abrir pasta de instalação" ${g && g.installed ? '' : 'disabled'}>📁</button>
     ${actionBtn(g)}`;
   document.getElementById('actionBtn')?.addEventListener('click', doAction);
+  document.getElementById('optionsBtn')?.addEventListener('click', () => { if (g) openOptions(g); });
   document.getElementById('folderBtn')?.addEventListener('click', () => { if (g && g.app_id) OpenInstallFolder(g.app_id); });
 }
 
@@ -206,8 +215,7 @@ async function doAction() {
   if (!g || !g.enabled || installing) return;
 
   if (g.installed) {
-    try { await LaunchGame(g as any); toast('Abrindo o jogo…'); }
-    catch (e) { toast(String(e), true); }
+    openLogin(g);
     return;
   }
 
@@ -225,6 +233,128 @@ async function doAction() {
     paintFooter();
     paintChips();
   }
+}
+
+// ---------- modais (login + opções) ----------
+function showModal(inner: string): HTMLElement {
+  closeModal();
+  const ov = document.createElement('div');
+  ov.id = 'modal';
+  ov.className = 'modal-overlay';
+  ov.innerHTML = `<div class="modal">${inner}</div>`;
+  ov.addEventListener('mousedown', (e) => { if (e.target === ov) closeModal(); });
+  document.body.appendChild(ov);
+  requestAnimationFrame(() => ov.classList.add('show'));
+  return ov;
+}
+function closeModal() { document.getElementById('modal')?.remove(); }
+
+function openLogin(g: Card) {
+  const lastUser = localStorage.getItem('luxview:user:' + g.game) || '';
+  showModal(`
+    <h3>Entrar — ${esc(niceName(g))}</h3>
+    <div class="field"><label>Usuário</label><input id="loginUser" type="text" autocomplete="username" value="${esc(lastUser)}" maxlength="32"></div>
+    <div class="field"><label>Senha</label><input id="loginPass" type="password" autocomplete="current-password" maxlength="32"></div>
+    <div class="modal-err" id="loginErr"></div>
+    <div class="modal-actions">
+      <button class="btn" id="loginCancel">Cancelar</button>
+      <button class="btn primary" id="loginGo">▶ Entrar e Jogar</button>
+    </div>
+    <div class="modal-hint">Não tem conta? Crie no painel admin do servidor.</div>
+  `);
+  const userEl = document.getElementById('loginUser') as HTMLInputElement;
+  const passEl = document.getElementById('loginPass') as HTMLInputElement;
+  const errEl = document.getElementById('loginErr')!;
+  const goBtn = document.getElementById('loginGo') as HTMLButtonElement;
+  (lastUser ? passEl : userEl).focus();
+
+  const go = async () => {
+    const user = userEl.value.trim();
+    const pass = passEl.value;
+    if (!user || !pass) { errEl.textContent = 'Informe usuário e senha.'; return; }
+    goBtn.disabled = true; goBtn.innerHTML = '<span class="spinner"></span> Entrando…';
+    errEl.textContent = '';
+    try {
+      await Play(g as any, user, pass);
+      localStorage.setItem('luxview:user:' + g.game, user);
+      closeModal();
+      toast('Iniciando o jogo…');
+    } catch (e) {
+      errEl.textContent = String(e).replace(/^Error:\s*/, '');
+      goBtn.disabled = false; goBtn.innerHTML = '▶ Entrar e Jogar';
+    }
+  };
+  goBtn.onclick = go;
+  passEl.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  document.getElementById('loginCancel')!.onclick = closeModal;
+}
+
+const RESOLUTIONS = [[1280,720],[1366,768],[1600,900],[1920,1080],[2560,1440],[3840,2160]];
+
+async function openOptions(g: Card) {
+  let s: Settings;
+  try { s = (await GetSettings(g as any)) as unknown as Settings; }
+  catch (e) { toast(String(e), true); return; }
+  const pct = (v: number) => Math.round(v * 100) + '%';
+  const inRes = RESOLUTIONS.some(([w,h]) => w === s.screen_width && h === s.screen_height);
+  showModal(`
+    <h3>Opções — ${esc(niceName(g))}</h3>
+    <div class="opt-grid">
+      <label>Resolução</label>
+      <select id="optRes">
+        ${RESOLUTIONS.map(([w,h]) => `<option value="${w}x${h}" ${s.screen_width===w&&s.screen_height===h?'selected':''}>${w} × ${h}</option>`).join('')}
+        ${inRes ? '' : `<option value="${s.screen_width}x${s.screen_height}" selected>${s.screen_width} × ${s.screen_height} (atual)</option>`}
+      </select>
+      <label>Tela cheia</label><label class="sw"><input type="checkbox" id="optFull" ${s.fullscreen?'checked':''}><span></span></label>
+      <label>Sensibilidade do mouse <b id="lSens">${s.mouse_sensitivity}</b></label>
+      <input type="range" id="optSens" min="0.1" max="5" step="0.1" value="${s.mouse_sensitivity}">
+      <label>Inverter mouse</label><label class="sw"><input type="checkbox" id="optInv" ${s.invert_mouse?'checked':''}><span></span></label>
+      <label>Aceleração do mouse</label><label class="sw"><input type="checkbox" id="optAcc" ${s.mouse_accel?'checked':''}><span></span></label>
+      <label>Volume — som <b id="lSnd">${pct(s.sound_volume)}</b></label>
+      <input type="range" id="optSnd" min="0" max="1" step="0.01" value="${s.sound_volume}">
+      <label>Volume — música <b id="lMus">${pct(s.music_volume)}</b></label>
+      <input type="range" id="optMus" min="0" max="1" step="0.01" value="${s.music_volume}">
+      <label>Brilho (gamma) <b id="lGam">${s.gamma}</b></label>
+      <input type="range" id="optGam" min="0.5" max="2" step="0.05" value="${s.gamma}">
+    </div>
+    <div class="modal-err" id="optErr"></div>
+    <div class="modal-actions">
+      <button class="btn" id="optCancel">Cancelar</button>
+      <button class="btn primary" id="optSave">Salvar</button>
+    </div>
+  `);
+  const live = (id: string, lbl: string, fmt: (v: number) => string) => {
+    const el = document.getElementById(id) as HTMLInputElement;
+    const lb = document.getElementById(lbl)!;
+    el.oninput = () => { lb.textContent = fmt(parseFloat(el.value)); };
+  };
+  live('optSens', 'lSens', (v) => String(v));
+  live('optSnd', 'lSnd', (v) => Math.round(v*100) + '%');
+  live('optMus', 'lMus', (v) => Math.round(v*100) + '%');
+  live('optGam', 'lGam', (v) => String(v));
+
+  document.getElementById('optCancel')!.onclick = closeModal;
+  document.getElementById('optSave')!.onclick = async () => {
+    const val = (id: string) => (document.getElementById(id) as HTMLInputElement);
+    const [w, h] = val('optRes').value.split('x').map(Number);
+    const out: Settings = {
+      screen_width: w, screen_height: h,
+      fullscreen: val('optFull').checked,
+      mouse_sensitivity: parseFloat(val('optSens').value),
+      invert_mouse: val('optInv').checked,
+      mouse_accel: val('optAcc').checked,
+      sound_volume: parseFloat(val('optSnd').value),
+      music_volume: parseFloat(val('optMus').value),
+      gamma: parseFloat(val('optGam').value),
+    };
+    try {
+      await SaveSettings(g as any, out as any);
+      closeModal();
+      toast('Opções salvas!');
+    } catch (e) {
+      document.getElementById('optErr')!.textContent = String(e).replace(/^Error:\s*/, '');
+    }
+  };
 }
 
 EventsOn('install:progress', (p: { game: string; phase: string; percent: number; detail?: string }) => {

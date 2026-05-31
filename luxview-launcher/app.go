@@ -3,15 +3,19 @@ package main
 import (
 	"archive/zip"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,18 +41,30 @@ type GameCard struct {
 	Enabled     bool   `json:"enabled"`
 	DownloadURL string `json:"download_url"`
 	ServerIP    string `json:"server_ip"`
+	AuthHost    string `json:"auth_host"`
 	Installed   bool   `json:"installed"` // computed locally
 }
 
-// launchSpec tells the launcher how to start an installed game.
+// launchSpec tells the launcher how to authenticate and start an installed game,
+// replacing the original (SoftNyx) launcher entirely.
 type launchSpec struct {
-	subdir  string // playable client dir, relative to the install root (zip layout)
-	exe     string // launcher executable, relative to subdir
-	regRoot string // optional HKCU registry key whose RootDir must point at the client dir
+	clientDir   string // playable client dir, relative to install root (zip layout)
+	gameExe     string // game executable, relative to clientDir
+	settingsINI string // Serious Engine settings file, relative to clientDir
+	regHKCU     string // HKCU key whose RootDir points at the client dir
+	regHKLM     string // HKLM key whose Location/Version the game reads (needs admin)
+	loginPath   string // web auth path (GET user + hex-pass -> token)
 }
 
 var launchSpecs = map[string]launchSpec{
-	"rakion": {subdir: "client", exe: "NyxLauncher.exe", regRoot: `Software\Softnyx\Rakion`},
+	"rakion": {
+		clientDir:   "client",
+		gameExe:     `Bin\rakion.exe`,
+		settingsINI: `Scripts\PersistentSymbols.ini`,
+		regHKCU:     `Software\Softnyx\Rakion`,
+		regHKLM:     `SOFTWARE\Softnyx\Rakion`,
+		loginPath:   "/launcherlogin.php",
+	},
 }
 
 // App is the Wails backend.
@@ -128,7 +144,7 @@ func (a *App) isInstalled(c GameCard) bool {
 		entries, _ := os.ReadDir(dir)
 		return len(entries) > 0
 	}
-	_, err = os.Stat(filepath.Join(dir, spec.subdir, spec.exe))
+	_, err = os.Stat(filepath.Join(dir, spec.clientDir, spec.gameExe))
 	return err == nil
 }
 
@@ -211,39 +227,105 @@ func (a *App) downloadZip(card GameCard, path string) error {
 	return nil
 }
 
-// LaunchGame starts the installed game's launcher (Windows only for now).
-func (a *App) LaunchGame(card GameCard) error {
-	if runtime.GOOS != "windows" {
-		return fmt.Errorf("o launcher dos jogos só roda no Windows")
+// Login authenticates against the game's web auth (replacing the original
+// launcher's login). Returns the auth token on success.
+func (a *App) Login(card GameCard, user, pass string) (string, error) {
+	spec, ok := launchSpecs[card.Game]
+	if !ok {
+		return "", fmt.Errorf("jogo não suportado: %s", card.Game)
 	}
-	dir, err := installDir(card.AppID)
+	if user == "" || pass == "" {
+		return "", fmt.Errorf("informe usuário e senha")
+	}
+	if card.AuthHost == "" {
+		return "", fmt.Errorf("servidor sem host de login configurado")
+	}
+	// Web auth expects the password hex-encoded (matches the game's own scheme).
+	passHex := hex.EncodeToString([]byte(pass))
+	u := fmt.Sprintf("https://%s%s?user=%s&pass=%s", card.AuthHost, spec.loginPath,
+		url.QueryEscape(user), passHex)
+	resp, err := a.client.Get(u)
 	if err != nil {
-		return err
+		return "", fmt.Errorf("não consegui contatar o servidor: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	out := strings.TrimSpace(string(body))
+	if out == "" {
+		return "", fmt.Errorf("resposta vazia do servidor")
+	}
+	if strings.HasPrefix(out, "[Error]") {
+		return "", fmt.Errorf("usuário ou senha incorretos")
+	}
+	if strings.Contains(strings.ToLower(out), "offline") {
+		return "", fmt.Errorf("servidor offline")
+	}
+	return out, nil // token (sha1)
+}
+
+// Play authenticates then launches the game directly (no original launcher),
+// passing the SoftNyx-style args: <user> <hex-pass> <token>.
+func (a *App) Play(card GameCard, user, pass string) error {
+	if runtime.GOOS != "windows" {
+		return fmt.Errorf("o jogo só roda no Windows")
 	}
 	spec, ok := launchSpecs[card.Game]
 	if !ok {
 		return fmt.Errorf("jogo não suportado: %s", card.Game)
 	}
-	clientDir := filepath.Join(dir, spec.subdir)
-	exePath := filepath.Join(clientDir, spec.exe)
+	token, err := a.Login(card, user, pass)
+	if err != nil {
+		return err
+	}
+	dir, err := installDir(card.AppID)
+	if err != nil {
+		return err
+	}
+	clientDir := filepath.Join(dir, spec.clientDir)
+	exePath := filepath.Join(clientDir, spec.gameExe)
 	if _, err := os.Stat(exePath); err != nil {
-		return fmt.Errorf("client não encontrado — instale primeiro")
+		return fmt.Errorf("jogo não encontrado — instale primeiro")
 	}
 
-	// Some legacy clients (Rakion) read their root from the registry.
-	if spec.regRoot != "" {
-		// reg add "HKCU\<key>" /v RootDir /t REG_SZ /d "<clientDir>\" /f
-		_ = exec.Command("reg", "add", `HKCU\`+spec.regRoot,
-			"/v", "RootDir", "/t", "REG_SZ", "/d", clientDir+`\`, "/f").Run()
-	}
+	a.ensureRegistry(spec, clientDir)
 
-	// NyxLauncher requer elevação (manifesto requireAdministrator); lança via
-	// ShellExecute "runas" (UAC), senão dá "requires elevation".
-	if err := runGame(exePath, clientDir); err != nil {
+	passHex := hex.EncodeToString([]byte(pass))
+	args := []string{user, passHex, token}
+	binDir := filepath.Dir(exePath)
+
+	// Try a plain launch first; if the game demands elevation, relaunch via UAC.
+	cmd := exec.Command(exePath, args...)
+	cmd.Dir = binDir
+	if err := cmd.Start(); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "elevation") {
+			if e2 := runGame(exePath, strings.Join(args, " "), binDir); e2 != nil {
+				return fmt.Errorf("falha ao iniciar o jogo: %w", e2)
+			}
+			return nil
+		}
 		return fmt.Errorf("falha ao iniciar o jogo: %w", err)
 	}
 	return nil
 }
+
+// ensureRegistry points the SoftNyx registry keys at the install dir. HKCU never
+// needs admin; HKLM (Location/Version) does, so it's only attempted (best effort)
+// when missing/wrong — on a machine that already ran the game it's a no-op.
+func (a *App) ensureRegistry(spec launchSpec, clientDir string) {
+	if spec.regHKCU != "" {
+		_ = exec.Command("reg", "add", `HKCU\`+spec.regHKCU,
+			"/v", "RootDir", "/t", "REG_SZ", "/d", clientDir+`\`, "/f").Run()
+	}
+	if spec.regHKLM != "" && !hklmLocationOK(spec.regHKLM, clientDir) {
+		// Elevated one-shot: set Location + Version together (single UAC).
+		cmdline := fmt.Sprintf(
+			`reg add "HKLM\%s" /v Location /t REG_SZ /d "%s\" /f & reg add "HKLM\%s" /v Version /t REG_DWORD /d 1 /f`,
+			spec.regHKLM, clientDir, spec.regHKLM)
+		_ = runGame("cmd.exe", "/c "+cmdline, clientDir)
+	}
+}
+
+// OpenInstallFolder reveals the install dir in the OS file manager.
 
 // OpenInstallFolder reveals the install dir in the OS file manager.
 func (a *App) OpenInstallFolder(appID string) error {
@@ -255,6 +337,146 @@ func (a *App) OpenInstallFolder(appID string) error {
 		return exec.Command("explorer", dir).Start()
 	}
 	return nil
+}
+
+// GameSettings are the player-facing options edited in PersistentSymbols.ini.
+type GameSettings struct {
+	ScreenWidth      int     `json:"screen_width"`
+	ScreenHeight     int     `json:"screen_height"`
+	Fullscreen       bool    `json:"fullscreen"`
+	MouseSensitivity float64 `json:"mouse_sensitivity"`
+	InvertMouse      bool    `json:"invert_mouse"`
+	MouseAccel       bool    `json:"mouse_accel"`
+	SoundVolume      float64 `json:"sound_volume"`
+	MusicVolume      float64 `json:"music_volume"`
+	Gamma            float64 `json:"gamma"`
+}
+
+func defaultSettings() GameSettings {
+	return GameSettings{
+		ScreenWidth: 1920, ScreenHeight: 1080, Fullscreen: false,
+		MouseSensitivity: 1.5, InvertMouse: false, MouseAccel: true,
+		SoundVolume: 0.8, MusicVolume: 0.6, Gamma: 1,
+	}
+}
+
+func (a *App) iniPath(card GameCard) (string, error) {
+	spec, ok := launchSpecs[card.Game]
+	if !ok {
+		return "", fmt.Errorf("jogo não suportado: %s", card.Game)
+	}
+	if spec.settingsINI == "" {
+		return "", fmt.Errorf("este jogo não tem opções editáveis")
+	}
+	dir, err := installDir(card.AppID)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, spec.clientDir, spec.settingsINI), nil
+}
+
+// GetSettings reads the current options from the game's settings file.
+func (a *App) GetSettings(card GameCard) (GameSettings, error) {
+	s := defaultSettings()
+	p, err := a.iniPath(card)
+	if err != nil {
+		return s, err
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return s, fmt.Errorf("instale o jogo primeiro")
+	}
+	c := string(b)
+	if v, ok := symbolValue(c, "m_pixScreenWidth"); ok {
+		s.ScreenWidth = atoiOr(v, s.ScreenWidth)
+	}
+	if v, ok := symbolValue(c, "m_pixScreenHeight"); ok {
+		s.ScreenHeight = atoiOr(v, s.ScreenHeight)
+	}
+	if v, ok := symbolValue(c, "m_bActiveFullScreen"); ok {
+		s.Fullscreen = v == "1"
+	}
+	if v, ok := symbolValue(c, "inp_fMouseSensitivity"); ok {
+		s.MouseSensitivity = floatOr(v, s.MouseSensitivity)
+	}
+	if v, ok := symbolValue(c, "inp_bInvertMouse"); ok {
+		s.InvertMouse = v == "1"
+	}
+	if v, ok := symbolValue(c, "inp_bAllowMouseAcceleration"); ok {
+		s.MouseAccel = v == "1"
+	}
+	if v, ok := symbolValue(c, "snd_fSoundVolume"); ok {
+		s.SoundVolume = floatOr(v, s.SoundVolume)
+	}
+	if v, ok := symbolValue(c, "snd_fMusicVolume"); ok {
+		s.MusicVolume = floatOr(v, s.MusicVolume)
+	}
+	if v, ok := symbolValue(c, "gfx_fGamma"); ok {
+		s.Gamma = floatOr(v, s.Gamma)
+	}
+	return s, nil
+}
+
+// SaveSettings writes the options back into the game's settings file.
+func (a *App) SaveSettings(card GameCard, s GameSettings) error {
+	p, err := a.iniPath(card)
+	if err != nil {
+		return err
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return fmt.Errorf("instale o jogo primeiro")
+	}
+	c := string(b)
+	c = setSymbol(c, "m_pixScreenWidth", strconv.Itoa(s.ScreenWidth))
+	c = setSymbol(c, "m_pixScreenHeight", strconv.Itoa(s.ScreenHeight))
+	c = setSymbol(c, "m_bActiveFullScreen", boolIdx(s.Fullscreen))
+	c = setSymbol(c, "inp_fMouseSensitivity", ftoa(s.MouseSensitivity))
+	c = setSymbol(c, "inp_bInvertMouse", boolIdx(s.InvertMouse))
+	c = setSymbol(c, "inp_bAllowMouseAcceleration", boolIdx(s.MouseAccel))
+	c = setSymbol(c, "snd_fSoundVolume", ftoa(s.SoundVolume))
+	c = setSymbol(c, "snd_fMusicVolume", ftoa(s.MusicVolume))
+	c = setSymbol(c, "gfx_fGamma", ftoa(s.Gamma))
+	// The client may ship the file read-only (locked); make it writable.
+	_ = os.Chmod(p, 0o644)
+	if err := os.WriteFile(p, []byte(c), 0o644); err != nil {
+		return fmt.Errorf("falha ao salvar as opções: %w", err)
+	}
+	return nil
+}
+
+func symbolValue(content, name string) (string, bool) {
+	re := regexp.MustCompile(regexp.QuoteMeta(name) + `=\((?:INDEX|FLOAT)\)([-0-9.eE]+)`)
+	m := re.FindStringSubmatch(content)
+	if len(m) < 2 {
+		return "", false
+	}
+	return m[1], true
+}
+
+func setSymbol(content, name, value string) string {
+	re := regexp.MustCompile(`(` + regexp.QuoteMeta(name) + `=\((?:INDEX|FLOAT)\))[-0-9.eE]+`)
+	return re.ReplaceAllString(content, `${1}`+value)
+}
+
+func atoiOr(s string, def int) int {
+	if n, err := strconv.Atoi(s); err == nil {
+		return n
+	}
+	return def
+}
+func floatOr(s string, def float64) float64 {
+	if f, err := strconv.ParseFloat(s, 64); err == nil {
+		return f
+	}
+	return def
+}
+func ftoa(f float64) string { return strconv.FormatFloat(f, 'f', -1, 32) }
+func boolIdx(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
 }
 
 func (a *App) progress(game, phase string, percent int) {

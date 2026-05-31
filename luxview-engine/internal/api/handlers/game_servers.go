@@ -306,6 +306,7 @@ type PublicGameCard struct {
 	Enabled     bool   `json:"enabled"`      // running + has a downloadable client
 	DownloadURL string `json:"download_url"` // public, shareable client zip
 	ServerIP    string `json:"server_ip"`
+	AuthHost    string `json:"auth_host"`    // <subdomain>.<domain> — onde o launcher faz login
 }
 
 // ListPublicGames returns the public catalog consumed by the LuxView launcher.
@@ -346,6 +347,7 @@ func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Reque
 			Enabled:     app.Status == model.AppStatusRunning && gameClientWithDownload[cfg.TemplateID],
 			DownloadURL: gameClientPublicURL("https://"+h.domain, app.ID.String(), cfg.TemplateID),
 			ServerIP:    h.serverIP,
+			AuthHost:    fmt.Sprintf("%s.%s", app.Subdomain, h.domain),
 		})
 	}
 	writeJSON(w, http.StatusOK, cards)
