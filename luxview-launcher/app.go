@@ -237,9 +237,9 @@ func (a *App) LaunchGame(card GameCard) error {
 			"/v", "RootDir", "/t", "REG_SZ", "/d", clientDir+`\`, "/f").Run()
 	}
 
-	cmd := exec.Command(exePath)
-	cmd.Dir = clientDir
-	if err := cmd.Start(); err != nil {
+	// NyxLauncher requer elevação (manifesto requireAdministrator); lança via
+	// ShellExecute "runas" (UAC), senão dá "requires elevation".
+	if err := runGame(exePath, clientDir); err != nil {
 		return fmt.Errorf("falha ao iniciar o jogo: %w", err)
 	}
 	return nil
