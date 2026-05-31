@@ -154,6 +154,9 @@ func NewRouter(deps Deps) *chi.Mux {
 		// Public game client download — shareable link for players (no auth).
 		r.Get("/public/game-client/{id}", gameServerHandler.DownloadClientPublic)
 
+		// Public game catalog — consumed by the LuxView launcher (no auth).
+		r.Get("/public/games", gameServerHandler.ListPublicGames)
+
 		// Internal (Traefik)
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.InternalAuth(deps.Config.InternalToken))

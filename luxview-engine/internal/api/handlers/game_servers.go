@@ -295,6 +295,61 @@ func (h *GameServerHandler) DownloadClientPublic(w http.ResponseWriter, r *http.
 	h.serveGameClient(w, r, app)
 }
 
+// PublicGameCard is one entry in the public launcher catalog.
+type PublicGameCard struct {
+	AppID       string `json:"app_id"`
+	Name        string `json:"name"`         // server name (app.Name)
+	Game        string `json:"game"`         // template id (e.g. "rakion")
+	DisplayName string `json:"display_name"` // template display name
+	Description string `json:"description"`
+	Enabled     bool   `json:"enabled"`      // running + has a downloadable client
+	DownloadURL string `json:"download_url"` // public, shareable client zip
+	ServerIP    string `json:"server_ip"`
+}
+
+// ListPublicGames returns the public catalog consumed by the LuxView launcher.
+// Only game apps whose owner opted in (config_fields LUXVIEW_LISTED=true) are
+// listed; no auth required. Disabled cards (not running / no client) render
+// greyed-out in the launcher.
+func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	apps, err := h.appRepo.ListAllRunningOrError(ctx)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list games")
+		return
+	}
+	cards := []PublicGameCard{}
+	for i := range apps {
+		app := apps[i]
+		if app.AppType != model.AppTypeGame {
+			continue
+		}
+		cfg, err := h.gameConfigRepo.GetByAppID(ctx, app.ID)
+		if err != nil || cfg == nil {
+			continue
+		}
+		if strings.ToLower(cfg.ConfigFields["LUXVIEW_LISTED"]) != "true" {
+			continue
+		}
+		display, desc := cfg.TemplateID, ""
+		if tmpl := service.GetGameTemplate(cfg.TemplateID); tmpl != nil {
+			display = tmpl.DisplayName
+			desc = tmpl.Description
+		}
+		cards = append(cards, PublicGameCard{
+			AppID:       app.ID.String(),
+			Name:        app.Name,
+			Game:        cfg.TemplateID,
+			DisplayName: display,
+			Description: desc,
+			Enabled:     app.Status == model.AppStatusRunning && gameClientWithDownload[cfg.TemplateID],
+			DownloadURL: gameClientPublicURL("https://"+h.domain, app.ID.String(), cfg.TemplateID),
+			ServerIP:    h.serverIP,
+		})
+	}
+	writeJSON(w, http.StatusOK, cards)
+}
+
 // serveGameClient generates and streams the configured client zip for app.
 func (h *GameServerHandler) serveGameClient(w http.ResponseWriter, r *http.Request, app *model.App) {
 	ctx := r.Context()
