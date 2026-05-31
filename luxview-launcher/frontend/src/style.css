@@ -150,6 +150,22 @@ html, body {
   content: ""; position: absolute; inset: 0; z-index: 1;
   background: linear-gradient(to top, rgba(9,9,11,.94) 8%, rgba(9,9,11,.35) 55%, transparent 100%);
 }
+.hero-bg {
+  position: absolute; inset: 0; z-index: 0;
+  background-size: cover; background-position: center top;
+  transform: scale(1.06); transform-origin: center;
+  animation: kenburns 16s ease-in-out infinite alternate;
+}
+.hero.has-img::after {
+  /* mais contraste embaixo, e laterais escuras pra arte de baixa-res integrar */
+  background:
+    linear-gradient(to top, rgba(9,9,11,.96) 6%, rgba(9,9,11,.45) 50%, rgba(9,9,11,.18) 100%),
+    linear-gradient(to right, rgba(9,9,11,.55), transparent 30%, transparent 70%, rgba(9,9,11,.55));
+}
+@keyframes kenburns {
+  0%   { transform: scale(1.05) translate(0, 0); }
+  100% { transform: scale(1.14) translate(-1.5%, -2%); }
+}
 .hero .glint { /* diagonal light sweep across the banner */
   position: absolute; top: -20%; left: 0; width: 30%; height: 140%; z-index: 1;
   background: linear-gradient(90deg, transparent, rgba(255,255,255,.10), transparent);

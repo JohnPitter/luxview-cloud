@@ -2,6 +2,12 @@ import './style.css';
 import './app.css';
 import { GetGames, InstallGame, LaunchGame, OpenInstallFolder } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
+import rakionImg from './assets/games/rakion.jpg';
+
+// Arte de fundo do hero por jogo (quando houver; senão usa o gradiente do tema).
+const IMAGES: Record<string, string> = {
+  rakion: rakionImg,
+};
 
 type Card = {
   app_id: string;
@@ -143,8 +149,10 @@ function paintHero() {
   const status = g.enabled
     ? `<div class="server"><span class="live">Online</span></div>`
     : `<div class="server"><span>Em breve</span></div>`;
+  const img = IMAGES[g.game];
   host.innerHTML = `
-    <div class="hero" style="--hero-grad:${t.grad}">
+    <div class="hero ${img ? 'has-img' : ''}" style="--hero-grad:${t.grad}">
+      ${img ? `<div class="hero-bg" style="background-image:url('${img}')"></div>` : ''}
       <div class="glint"></div>
       <div class="c">
         <span class="tag">${esc(t.tag)}</span>
