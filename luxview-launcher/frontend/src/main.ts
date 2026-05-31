@@ -27,6 +27,22 @@ const THEMES: Record<string, Theme> = {
 const FALLBACK: Theme = { grad: 'linear-gradient(135deg,#3f3f46 0%,#18181b 100%)', accent: '#71717a', tag: 'Em breve', initials: '?' };
 const theme = (g: string): Theme => THEMES[g] || FALLBACK;
 
+// Frases amigáveis (substituem a descrição técnica do servidor no hero).
+const BLURBS: Record<string, string> = {
+  rakion:  'Ação 3D em arenas frenéticas. Escolha seu mercenário e domine a batalha.',
+  openmu:  'O MMORPG de ação clássico. Evolua seu herói, cace e enfrente chefes épicos.',
+  muemu:   'O MMORPG de ação clássico. Evolua seu herói, cace e enfrente chefes épicos.',
+  metin2:  'MMORPG de ação oriental com três reinos em guerra constante.',
+  priston: 'MMORPG isométrico clássico, com caçadas intensas e bosses lendários.',
+};
+const blurb = (g: Card): string => BLURBS[g.game] || g.description || '';
+
+// Nome amigável (sem sufixos técnicos tipo "(SoftNyx v258)").
+const NAMES: Record<string, string> = {
+  rakion: 'Rakion', openmu: 'Mu Online', muemu: 'Mu Online', metin2: 'Metin2', priston: 'Priston Tale',
+};
+const niceName = (g: Card): string => NAMES[g.game] || g.display_name;
+
 function ph(game: string, name: string, desc: string): Card {
   return { app_id: '', name, game, display_name: name, description: desc, enabled: false, download_url: '', server_ip: '', installed: false };
 }
@@ -113,7 +129,7 @@ function chip(g: Card, i: number): string {
       ${pill}
       <div class="ico" style="background:${t.grad};box-shadow:0 0 16px ${t.accent}66">${t.initials}</div>
       <div class="meta">
-        <div class="nm">${esc(g.display_name)}</div>
+        <div class="nm">${esc(niceName(g))}</div>
         <div class="tg">${esc(t.tag)}</div>
       </div>
     </div>`;
@@ -124,21 +140,17 @@ function paintHero() {
   const host = document.getElementById('hero')!;
   if (!g) { host.innerHTML = '<div class="hero hero-empty">Nenhum jogo disponível</div>'; return; }
   const t = theme(g.game);
-  const server = g.enabled
-    ? `<div class="server">
-         <span>Servidor: <b>${esc(g.name)}</b></span>
-         ${g.server_ip ? `<span>IP: <b>${esc(g.server_ip)}</b></span>` : ''}
-         <span class="live">Online</span>
-       </div>`
-    : `<div class="server"><span>Status: <b>Em breve</b></span></div>`;
+  const status = g.enabled
+    ? `<div class="server"><span class="live">Online</span></div>`
+    : `<div class="server"><span>Em breve</span></div>`;
   host.innerHTML = `
     <div class="hero" style="--hero-grad:${t.grad}">
       <div class="glint"></div>
       <div class="c">
         <span class="tag">${esc(t.tag)}</span>
         <h1>${esc(g.display_name)}</h1>
-        <div class="desc">${esc(g.description || '')}</div>
-        ${server}
+        <div class="desc">${esc(blurb(g))}</div>
+        ${status}
       </div>
     </div>`;
 }
