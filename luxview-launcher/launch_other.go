@@ -2,14 +2,7 @@
 
 package main
 
-import (
-	"fmt"
-	"os/exec"
-)
-
-func runGame(_, _, _ string) error {
-	return fmt.Errorf("o jogo só roda no Windows")
-}
+import "os/exec"
 
 func startGameCmd(exePath, _, cwd string) (*exec.Cmd, error) {
 	cmd := exec.Command(exePath)

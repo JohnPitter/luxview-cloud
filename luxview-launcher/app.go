@@ -23,7 +23,7 @@ import (
 )
 
 // appVersion is shown in the UI so we can confirm which build is running.
-const appVersion = "v12 · rakion.bin"
+const appVersion = "v13 · elevated"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -322,14 +322,11 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	// "test 74657374 1".) This skips load.bin's GameGuard/handle handshake.
 	cmdLine := fmt.Sprintf(`%s %s %s`, user, passHex, authTicket)
 	a.logLaunch(exePath, cmdLine)
+	// The launcher runs elevated (manifest), so CreateProcess can start rakion.bin
+	// (requireAdministrator) directly with the exact command line. ShellExecute
+	// can't run a ".bin" (no file association), so CreateProcess is the only path.
 	cmd, err := startGameCmd(exePath, cmdLine, clientDir)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "elevation") {
-			if e2 := runGame(exePath, cmdLine, clientDir); e2 != nil {
-				return fmt.Errorf("falha ao iniciar o jogo: %w", e2)
-			}
-			return nil
-		}
 		return fmt.Errorf("falha ao iniciar o jogo: %w", err)
 	}
 

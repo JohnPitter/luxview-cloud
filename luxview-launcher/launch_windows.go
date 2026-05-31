@@ -37,11 +37,6 @@ func shellExec(verb, exe, args, cwd string, show int32) error {
 	return windows.ShellExecute(0, v, f, a, d, show)
 }
 
-// runGame launches the game (elevated if its manifest demands it, visible).
-func runGame(exePath, args, cwd string) error {
-	return shellExec("runas", exePath, args, cwd, windows.SW_SHOWNORMAL)
-}
-
 // setHKCURootDir sets HKCU\<key>\RootDir (no admin, no window).
 func setHKCURootDir(key, value string) {
 	k, _, err := registry.CreateKey(registry.CURRENT_USER, key, registry.SET_VALUE)
