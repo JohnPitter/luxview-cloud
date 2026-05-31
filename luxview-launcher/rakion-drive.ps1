@@ -39,6 +39,14 @@ $form.Opacity = 0
 $form.ShowInTaskbar = $false
 $form.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
 
+# Esconde os balões "Loading.."/"Checking.." do NotifyIcon (apareciam atribuídos ao
+# "Windows PowerShell"). O loading é mostrado pelo próprio launcher, branded. ShowBalloonTip
+# num NotifyIcon invisível é no-op (não quebra a pipeline).
+try {
+  $ni = $ft.GetField("noticon", $bf).GetValue($form)
+  if ($ni) { $ni.Visible = $false }
+} catch {}
+
 $startLogin = $ft.GetMethod("StartLogin", $bf)
 $form.Add_Shown({ try { $startLogin.Invoke($form, @()) | Out-Null } catch {} })
 

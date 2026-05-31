@@ -76,31 +76,34 @@ let selected = 0;
 let installing = false;
 let online = false;
 let version = '';
-let runningGame = ''; // game id atualmente em execução (botão fica "Em execução")
+let runningGame = ''; // game id em execução (botão "● Em execução")
+let loadingGame = ''; // game id carregando (botão "Carregando Rakion…")
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// monitorGame mantém o botão "Em execução" desde o clique em Jogar até o jogo
-// FECHAR. O driver desempacota o load.bin + faz checks de MD5 antes de lançar o
-// rakion.bin (~15-25s), então primeiro esperamos o processo APARECER (fase 1) e
-// só então rastreamos até ele sumir (fase 2) — assim o botão não re-habilita no
+// monitorGame mantém o botão ocupado do clique em Jogar até o jogo FECHAR, em 2
+// fases: o driver desempacota o load.bin + faz checks de MD5 antes de lançar o
+// rakion.bin (~15-25s), então (1) mostramos "Carregando Rakion…" até o processo
+// APARECER, e (2) "● Em execução" até ele SUMIR. Assim o botão não re-habilita no
 // meio do startup.
 async function monitorGame(g: Card) {
-  runningGame = g.game;
+  loadingGame = g.game; // fase 1: carregando
+  runningGame = '';
   paintFooter();
   try {
-    // Fase 1: esperar o rakion.bin aparecer (timeout generoso p/ não travar o
-    // botão pra sempre caso o launch falhe).
     let appeared = false;
     for (let i = 0; i < 90; i++) {
       if (await IsGameRunning(g.game)) { appeared = true; break; }
       await sleep(1000);
     }
-    // Fase 2: enquanto estiver rodando, mantém "Em execução".
     if (appeared) {
+      loadingGame = '';
+      runningGame = g.game; // fase 2: em execução
+      paintFooter();
       while (await IsGameRunning(g.game)) await sleep(3000);
     }
   } catch { /* ignore */ }
+  loadingGame = '';
   runningGame = '';
   paintFooter();
 }
@@ -238,6 +241,7 @@ function paintFooter() {
 function actionBtn(g?: Card): string {
   if (!g) return '';
   if (!g.enabled) return `<button class="btn" disabled>Indisponível</button>`;
+  if (g.game === loadingGame) return `<button class="btn primary" disabled><span class="spinner"></span> Carregando Rakion…</button>`;
   if (g.game === runningGame) return `<button class="btn primary" disabled>● Em execução</button>`;
   if (installing) return `<button class="btn primary" disabled><span class="spinner"></span> Instalando…</button>`;
   if (g.installed) return `<button class="btn primary" id="actionBtn">▶ JOGAR</button>`;
@@ -247,6 +251,7 @@ function actionBtn(g?: Card): string {
 function footerLine(g?: Card): string {
   if (!g) return '';
   if (!g.enabled) return 'Este jogo ainda não está disponível.';
+  if (g.game === loadingGame) return 'Carregando Rakion… (verificando arquivos e iniciando o jogo).';
   if (g.game === runningGame) return 'Jogo em execução — feche-o para abrir de novo.';
   if (g.installed) return 'Instalado — pronto para jogar.';
   return 'Clique em INSTALAR para baixar o client.';
