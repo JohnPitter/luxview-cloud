@@ -305,7 +305,11 @@ async function openOptions(g: Card) {
         ${RESOLUTIONS.map(([w,h]) => `<option value="${w}x${h}" ${s.screen_width===w&&s.screen_height===h?'selected':''}>${w} × ${h}</option>`).join('')}
         ${inRes ? '' : `<option value="${s.screen_width}x${s.screen_height}" selected>${s.screen_width} × ${s.screen_height} (atual)</option>`}
       </select>
-      <label>Tela cheia</label><label class="sw"><input type="checkbox" id="optFull" ${s.fullscreen?'checked':''}><span></span></label>
+      <label>Modo de exibição</label>
+      <select id="optDisp">
+        <option value="full" ${s.fullscreen?'selected':''}>Tela cheia</option>
+        <option value="window" ${!s.fullscreen?'selected':''}>Janela</option>
+      </select>
       <label>Sensibilidade do mouse <b id="lSens">${s.mouse_sensitivity}</b></label>
       <input type="range" id="optSens" min="0.1" max="5" step="0.1" value="${s.mouse_sensitivity}">
       <label>Inverter mouse</label><label class="sw"><input type="checkbox" id="optInv" ${s.invert_mouse?'checked':''}><span></span></label>
@@ -339,7 +343,7 @@ async function openOptions(g: Card) {
     const [w, h] = val('optRes').value.split('x').map(Number);
     const out: Settings = {
       screen_width: w, screen_height: h,
-      fullscreen: val('optFull').checked,
+      fullscreen: val('optDisp').value === 'full',
       mouse_sensitivity: parseFloat(val('optSens').value),
       invert_mouse: val('optInv').checked,
       mouse_accel: val('optAcc').checked,
