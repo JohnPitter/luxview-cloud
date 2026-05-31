@@ -23,7 +23,7 @@ import (
 )
 
 // appVersion is shown in the UI so we can confirm which build is running.
-const appVersion = "v8 · cmdline"
+const appVersion = "v9 · quoted-cmd"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -299,7 +299,7 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	if _, err := a.Login(card, user, pass); err != nil {
 		return err
 	}
-	const authTicket = "1A"
+	const authTicket = "1" // 4º arg (%d) — o world valida user+senha, não o ticket
 	dir, err := installDir(card.AppID)
 	if err != nil {
 		return err
@@ -313,14 +313,14 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	a.ensureRegistry(spec, clientDir)
 
 	passHex := hex.EncodeToString([]byte(pass))
-	args := []string{user, passHex, authTicket}
 	binDir := filepath.Dir(exePath)
 
-	// The game reads its login (user/hex-pass/token) from the START of the command
-	// line — NOT via standard argv. So the exe path must NOT be the first token,
-	// otherwise the world reads the path as the username ("ID doesn't exist").
-	// SysProcAttr.CmdLine sets the exact command line (this is what NyxLauncher does).
-	cmdLine := strings.Join(args, " ")
+	// Replicate the original launcher's command line EXACTLY. The game uses a custom
+	// parser: it expects the exe path QUOTED as the first token, then user, hex-pass
+	// and a numeric ticket. Without the quotes (Go's default) the parser reads the
+	// unquoted path as the username -> world "ID doesn't exist".
+	// NyxLauncher format string: "%s" %s %s %d
+	cmdLine := fmt.Sprintf(`"%s" %s %s %s`, exePath, user, passHex, authTicket)
 	a.logLaunch(exePath, cmdLine)
 	cmd, err := startGameCmd(exePath, cmdLine, binDir)
 	if err != nil {
