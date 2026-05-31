@@ -16,9 +16,13 @@ import (
 // first token). The game reads its login from the start of the command line, so
 // SysProcAttr.CmdLine guarantees it sees "user hexpass ticket" verbatim.
 func startGameCmd(exePath, cmdLine, cwd string) (*exec.Cmd, error) {
-	cmd := exec.Command(exePath)
-	cmd.Dir = cwd
-	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: cmdLine}
+	// Construct Cmd directly (not exec.Command) so we bypass LookPath — the game
+	// executable is "load.bin" (a PE without a .exe extension).
+	cmd := &exec.Cmd{
+		Path:        exePath,
+		Dir:         cwd,
+		SysProcAttr: &syscall.SysProcAttr{CmdLine: cmdLine},
+	}
 	return cmd, cmd.Start()
 }
 

@@ -23,7 +23,7 @@ import (
 )
 
 // appVersion is shown in the UI so we can confirm which build is running.
-const appVersion = "v9 · quoted-cmd"
+const appVersion = "v10 · load.bin"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -77,7 +77,7 @@ type launchSpec struct {
 var launchSpecs = map[string]launchSpec{
 	"rakion": {
 		clientDir:   "client",
-		gameExe:     `Bin\rakion.exe`,
+		gameExe:     `Bin\load.bin`, // o NyxLauncher lança o load.bin (PE), não o rakion.exe
 		settingsINI: `Scripts\PersistentSymbols.ini`,
 		regHKCU:     `Software\Softnyx\Rakion`,
 		regHKLM:     `SOFTWARE\Softnyx\Rakion`,
