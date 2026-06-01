@@ -90,8 +90,8 @@ function planToForm(plan: Plan): CreatePlanPayload {
   };
 }
 
-const CPU_OPTIONS = ['0.25', '0.5', '1.0', '1.5', '2.0', '3.0', '4.0'];
-const MEMORY_OPTIONS = ['256m', '512m', '1g', '1.5g', '2g', '3g', '4g', '6g', '8g'];
+const CPU_OPTIONS = ['0.125', '0.25', '0.5', '1.0', '1.5', '2.0', '3.0', '4.0'];
+const MEMORY_OPTIONS = ['128m', '256m', '512m', '1g', '1.5g', '2g', '3g', '4g', '6g', '8g'];
 const DISK_OPTIONS = ['1g', '2g', '5g', '10g', '20g', '50g'];
 
 export function Admin() {
