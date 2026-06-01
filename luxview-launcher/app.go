@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.36"
+var appVersion = "v1.37"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -221,8 +221,29 @@ func (a *App) InstallGame(card GameCard) error {
 	}); err != nil {
 		return fmt.Errorf("falha ao extrair: %w", err)
 	}
+	a.defaultDisplayFullscreen(card)
 	a.progress(card.Game, "done", 100)
 	return nil
+}
+
+// defaultDisplayFullscreen makes a fresh install default to exclusive fullscreen
+// at a safe resolution. The shipped Rakion client defaults to windowed @ desktop
+// res, which both hides the windowed/fullscreen distinction and breaks game
+// overlays (Discord/NVIDIA only work in exclusive fullscreen on this engine).
+// Players can still switch to windowed in the options.
+func (a *App) defaultDisplayFullscreen(card GameCard) {
+	if card.Game != "rakion" {
+		return
+	}
+	s, err := a.GetSettings(card)
+	if err != nil {
+		return
+	}
+	s.Fullscreen = true
+	if s.ScreenWidth > 1920 || s.ScreenHeight > 1080 {
+		s.ScreenWidth, s.ScreenHeight = 1920, 1080
+	}
+	_ = a.SaveSettings(card, s)
 }
 
 // downloadZip streams the client zip to path (one attempt), emitting progress.
