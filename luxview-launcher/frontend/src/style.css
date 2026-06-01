@@ -328,3 +328,16 @@ html, body {
 }
 .update-bar .ubtn:hover { filter: brightness(1.07); transform: translateY(-1px); }
 .update-bar .spinner { margin-left: 2px; }
+
+/* hint de opção (aviso de overlay no modo janela) */
+.opt-grid .opt-hint {
+  margin-top: -4px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+  background: rgba(245,158,11,.08);
+  border: 1px solid rgba(245,158,11,.20);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+.opt-grid .opt-hint b { color: var(--accent-2); }

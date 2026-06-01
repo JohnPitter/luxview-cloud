@@ -2,4 +2,4 @@
 
 package main
 
-func frameGameWindow(_, _ int32) {}
+func frameGameWindow(_ string) {}

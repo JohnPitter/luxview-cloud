@@ -416,9 +416,10 @@ async function openOptions(g: Card) {
       </select>
       <label>Modo de exibição</label>
       <select id="optDisp">
-        <option value="full" ${s.fullscreen?'selected':''}>Tela cheia</option>
+        <option value="full" ${s.fullscreen?'selected':''}>Tela cheia (recomendado)</option>
         <option value="window" ${!s.fullscreen?'selected':''}>Janela</option>
       </select>
+      <small class="opt-hint">Use <b>tela cheia</b> se usar overlay (Discord/NVIDIA) — no modo janela a sobreposição cobre o jogo com uma camada preta (limitação do overlay com este jogo).</small>
       <label>Sensibilidade do mouse <b id="lSens">${s.mouse_sensitivity}</b></label>
       <input type="range" id="optSens" min="0.1" max="5" step="0.1" value="${s.mouse_sensitivity}">
       <label>Inverter mouse</label><label class="sw"><input type="checkbox" id="optInv" ${s.invert_mouse?'checked':''}><span></span></label>

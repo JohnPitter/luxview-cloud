@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.34"
+var appVersion = "v1.35"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -324,7 +324,7 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	if s, err := a.GetSettings(card); err == nil {
 		windowed = !s.Fullscreen
 		if windowed {
-			go frameGameWindow(int32(s.ScreenWidth), int32(s.ScreenHeight))
+			go frameGameWindow(spec.processName)
 		}
 	}
 	if err := invokeRakionDriver(clientDir, user, passHex, windowed); err != nil {
@@ -374,7 +374,7 @@ type GameSettings struct {
 
 func defaultSettings() GameSettings {
 	return GameSettings{
-		ScreenWidth: 1920, ScreenHeight: 1080, Fullscreen: false,
+		ScreenWidth: 1920, ScreenHeight: 1080, Fullscreen: true,
 		MouseSensitivity: 1.5, InvertMouse: false, MouseAccel: true,
 		SoundVolume: 0.8, MusicVolume: 0.6, Gamma: 1,
 	}
