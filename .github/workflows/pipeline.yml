@@ -113,13 +113,18 @@ jobs:
             cd /opt/luxview-cloud
             git fetch origin main
             git reset --hard origin/main
-            docker compose rm -sf engine dashboard || true
-            docker compose up -d --build engine dashboard
+            # Build FIRST: if a build fails, the running containers are left
+            # untouched (the server stays up). Only then recreate. With layer
+            # caching, an unchanged engine/dashboard produces the same image and
+            # `up -d` is a no-op — so launcher-only pushes cause zero downtime.
+            docker compose build engine dashboard
+            docker compose up -d engine dashboard
             # Build game-template images consumed by the engine (not in compose).
-            # The engine references these by tag when creating game-server containers.
+            # Best-effort: a failing game build keeps the previous image and must
+            # not fail the deploy (engine/dashboard are already healthy).
             for game in luxview-games/games/*/; do
               tag="luxview-cloud-$(basename "$game")"
               echo "Building $tag from $game"
-              docker build -t "$tag" "$game"
+              docker build -t "$tag" "$game" || echo "WARN: build of $tag failed; keeping previous image"
             done
             docker image prune -f
