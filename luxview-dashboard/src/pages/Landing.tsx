@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   Sparkles,
   Sun,
+  UserPlus,
   Zap,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
@@ -418,9 +419,11 @@ export function Landing() {
 
   const launcherFeatures = [
     { icon: MousePointerClick, title: t('landing.launcher.feat1.title'), description: t('landing.launcher.feat1.desc') },
+    { icon: UserPlus, title: t('landing.launcher.feat5.title'), description: t('landing.launcher.feat5.desc') },
     { icon: Zap, title: t('landing.launcher.feat2.title'), description: t('landing.launcher.feat2.desc') },
-    { icon: Gamepad2, title: t('landing.launcher.feat3.title'), description: t('landing.launcher.feat3.desc') },
     { icon: Monitor, title: t('landing.launcher.feat4.title'), description: t('landing.launcher.feat4.desc') },
+    { icon: Gamepad2, title: t('landing.launcher.feat3.title'), description: t('landing.launcher.feat3.desc') },
+    { icon: RefreshCcw, title: t('landing.launcher.feat6.title'), description: t('landing.launcher.feat6.desc') },
   ];
 
   const stacks = [
@@ -858,7 +861,7 @@ export function Landing() {
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       {t('landing.launcher.mock.status')}
                     </span>
-                    <span className="ml-3 text-[9px] text-zinc-600">v1.32</span>
+                    <span className="ml-3 text-[9px] text-zinc-600">v1.39</span>
                   </div>
 
                   {/* Game chips strip */}
