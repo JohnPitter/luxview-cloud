@@ -22,6 +22,8 @@ export function OpenInstallFolder(arg1:string):Promise<void>;
 
 export function Play(arg1:main.GameCard,arg2:string,arg3:string):Promise<void>;
 
+export function Register(arg1:main.GameCard,arg2:string,arg3:string,arg4:string):Promise<void>;
+
 export function SaveSettings(arg1:main.GameCard,arg2:main.GameSettings):Promise<void>;
 
 export function Version():Promise<string>;

@@ -42,6 +42,10 @@ export function Play(arg1, arg2, arg3) {
   return window['go']['main']['App']['Play'](arg1, arg2, arg3);
 }
 
+export function Register(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['Register'](arg1, arg2, arg3, arg4);
+}
+
 export function SaveSettings(arg1, arg2) {
   return window['go']['main']['App']['SaveSettings'](arg1, arg2);
 }

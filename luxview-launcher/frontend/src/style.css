@@ -341,3 +341,13 @@ html, body {
   padding: 7px 10px;
 }
 .opt-grid .opt-hint b { color: var(--accent-2); }
+
+/* link de "Criar conta" no modal de login + label opcional */
+.modal-link {
+  color: var(--accent-2);
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+.modal-link:hover { text-decoration: underline; }
+.field .muted { color: var(--muted); font-weight: 400; font-size: 10px; }

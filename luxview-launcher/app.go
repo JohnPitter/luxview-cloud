@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.35"
+var appVersion = "v1.36"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -56,24 +56,26 @@ type GameCard struct {
 // launchSpec tells the launcher how to authenticate and start an installed game,
 // replacing the original (SoftNyx) launcher entirely.
 type launchSpec struct {
-	clientDir   string // playable client dir, relative to install root (zip layout)
-	gameExe     string // game executable, relative to clientDir
-	settingsINI string // Serious Engine settings file, relative to clientDir
-	regHKCU     string // HKCU key whose RootDir points at the client dir
-	regHKLM     string // HKLM key whose Location/Version the game reads (needs admin)
-	loginPath   string // web auth path (GET user + hex-pass -> token)
-	processName string // running game process image name (for "is running" checks)
+	clientDir    string // playable client dir, relative to install root (zip layout)
+	gameExe      string // game executable, relative to clientDir
+	settingsINI  string // Serious Engine settings file, relative to clientDir
+	regHKCU      string // HKCU key whose RootDir points at the client dir
+	regHKLM      string // HKLM key whose Location/Version the game reads (needs admin)
+	loginPath    string // web auth path (GET user + hex-pass -> token)
+	registerPath string // web auth path for self-registration (POST user/pass/email)
+	processName  string // running game process image name (for "is running" checks)
 }
 
 var launchSpecs = map[string]launchSpec{
 	"rakion": {
-		clientDir:   "client",
-		gameExe:     `Bin\load.bin`, // RakionLauncher (.NET): o driver invisível o desempacota e roda sem o diálogo
-		settingsINI: `Scripts\PersistentSymbols.ini`,
-		regHKCU:     `Software\Softnyx\Rakion`,
-		regHKLM:     `SOFTWARE\Softnyx\Rakion`,
-		loginPath:   "/launcherlogin.php",
-		processName: "rakion.bin",
+		clientDir:    "client",
+		gameExe:      `Bin\load.bin`, // RakionLauncher (.NET): o driver invisível o desempacota e roda sem o diálogo
+		settingsINI:  `Scripts\PersistentSymbols.ini`,
+		regHKCU:      `Software\Softnyx\Rakion`,
+		regHKLM:      `SOFTWARE\Softnyx\Rakion`,
+		loginPath:    "/launcherlogin.php",
+		registerPath: "/register.php",
+		processName:  "rakion.bin",
 	},
 }
 
@@ -281,6 +283,48 @@ func (a *App) Login(card GameCard, user, pass string) (string, error) {
 		return "", fmt.Errorf("servidor offline")
 	}
 	return out, nil // token (sha1)
+}
+
+// Register creates a new account on the game's web auth (self-service), so the
+// server owner doesn't have to create accounts by hand. The password is sent
+// hex-encoded (same scheme as Login) — the server decodes + normalizes it so the
+// account works on the next login.
+func (a *App) Register(card GameCard, user, pass, email string) error {
+	spec, ok := launchSpecs[card.Game]
+	if !ok {
+		return fmt.Errorf("jogo não suportado: %s", card.Game)
+	}
+	if spec.registerPath == "" {
+		return fmt.Errorf("este servidor não permite cadastro pelo launcher")
+	}
+	if card.AuthHost == "" {
+		return fmt.Errorf("servidor sem host de login configurado")
+	}
+	user = strings.TrimSpace(user)
+	if user == "" || pass == "" {
+		return fmt.Errorf("informe usuário e senha")
+	}
+
+	form := url.Values{}
+	form.Set("user", user)
+	form.Set("pass", hex.EncodeToString([]byte(pass)))
+	form.Set("email", strings.TrimSpace(email))
+
+	resp, err := a.client.PostForm(fmt.Sprintf("https://%s%s", card.AuthHost, spec.registerPath), form)
+	if err != nil {
+		return fmt.Errorf("não consegui contatar o servidor: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	out := strings.TrimSpace(string(body))
+
+	if out == "[OK]" {
+		return nil
+	}
+	if msg := strings.TrimSpace(strings.TrimPrefix(out, "[Error]:")); msg != "" && msg != out {
+		return fmt.Errorf("%s", msg)
+	}
+	return fmt.Errorf("falha ao criar conta")
 }
 
 // Play authenticates then launches the game directly (no original launcher),

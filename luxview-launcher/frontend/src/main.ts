@@ -1,6 +1,6 @@
 import './style.css';
 import './app.css';
-import { GetGames, InstallGame, Play, GetSettings, SaveSettings, OpenInstallFolder, Version, IsGameRunning, CheckForUpdate, ApplyUpdate } from '../wailsjs/go/main/App';
+import { GetGames, InstallGame, Play, GetSettings, SaveSettings, OpenInstallFolder, Version, IsGameRunning, CheckForUpdate, ApplyUpdate, Register } from '../wailsjs/go/main/App';
 import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
 import rakionImg from './assets/games/rakion.jpg';
 import muImg from './assets/games/mu.jpg';
@@ -368,7 +368,7 @@ function openLogin(g: Card) {
       <button class="btn" id="loginCancel">Cancelar</button>
       <button class="btn primary" id="loginGo">▶ Entrar e Jogar</button>
     </div>
-    <div class="modal-hint">Não tem conta? Crie no painel admin do servidor.</div>
+    <div class="modal-hint">Não tem conta? <a id="loginRegister" class="modal-link">Criar conta</a></div>
   `);
   const userEl = document.getElementById('loginUser') as HTMLInputElement;
   const passEl = document.getElementById('loginPass') as HTMLInputElement;
@@ -396,6 +396,56 @@ function openLogin(g: Card) {
   goBtn.onclick = go;
   passEl.onkeydown = (e) => { if (e.key === 'Enter') go(); };
   document.getElementById('loginCancel')!.onclick = closeModal;
+  document.getElementById('loginRegister')!.onclick = () => openRegister(g);
+}
+
+function openRegister(g: Card) {
+  showModal(`
+    <h3>Criar conta — ${esc(niceName(g))}</h3>
+    <div class="field"><label>Usuário</label><input id="regUser" type="text" autocomplete="off" maxlength="11" placeholder="até 11 letras/números"></div>
+    <div class="field"><label>Senha</label><input id="regPass" type="password" autocomplete="new-password" maxlength="11"></div>
+    <div class="field"><label>Confirmar senha</label><input id="regPass2" type="password" autocomplete="new-password" maxlength="11"></div>
+    <div class="field"><label>E-mail <span class="muted">(opcional)</span></label><input id="regEmail" type="email" autocomplete="off" maxlength="50"></div>
+    <div class="modal-err" id="regErr"></div>
+    <div class="modal-actions">
+      <button class="btn" id="regBack">Voltar</button>
+      <button class="btn primary" id="regGo">Criar conta</button>
+    </div>
+    <div class="modal-hint">Usuário e senha: até 11 caracteres. A senha não diferencia maiúsculas.</div>
+  `);
+  const userEl = document.getElementById('regUser') as HTMLInputElement;
+  const passEl = document.getElementById('regPass') as HTMLInputElement;
+  const pass2El = document.getElementById('regPass2') as HTMLInputElement;
+  const emailEl = document.getElementById('regEmail') as HTMLInputElement;
+  const errEl = document.getElementById('regErr')!;
+  const goBtn = document.getElementById('regGo') as HTMLButtonElement;
+  userEl.focus();
+
+  const go = async () => {
+    const user = userEl.value.trim();
+    const pass = passEl.value;
+    const pass2 = pass2El.value;
+    const email = emailEl.value.trim();
+    if (!user || !pass) { errEl.textContent = 'Informe usuário e senha.'; return; }
+    if (!/^[A-Za-z0-9]{1,11}$/.test(user)) { errEl.textContent = 'Usuário: 1 a 11 letras/números, sem espaço ou símbolo.'; return; }
+    if (pass.length < 3) { errEl.textContent = 'A senha precisa de pelo menos 3 caracteres.'; return; }
+    if (pass !== pass2) { errEl.textContent = 'As senhas não conferem.'; return; }
+    goBtn.disabled = true; goBtn.innerHTML = '<span class="spinner"></span> Criando…';
+    errEl.textContent = '';
+    try {
+      await Register(g as any, user, pass, email);
+      // Sucesso: pré-preenche o login com o usuário criado e volta pra ele.
+      localStorage.setItem('luxview:user:' + g.game, user);
+      toast('Conta criada! Agora é só entrar.');
+      openLogin(g);
+    } catch (e) {
+      errEl.textContent = String(e).replace(/^Error:\s*/, '');
+      goBtn.disabled = false; goBtn.innerHTML = 'Criar conta';
+    }
+  };
+  goBtn.onclick = go;
+  pass2El.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  document.getElementById('regBack')!.onclick = () => openLogin(g);
 }
 
 const RESOLUTIONS = [[1280,720],[1366,768],[1600,900],[1920,1080],[2560,1440],[3840,2160]];
