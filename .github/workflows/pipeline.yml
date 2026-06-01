@@ -107,7 +107,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
-          timeout: 300s
+          timeout: 600s
           script: |
             set -e
             cd /opt/luxview-cloud
@@ -119,12 +119,9 @@ jobs:
             # `up -d` is a no-op — so launcher-only pushes cause zero downtime.
             docker compose build engine dashboard
             docker compose up -d engine dashboard
-            # Build game-template images consumed by the engine (not in compose).
-            # Best-effort: a failing game build keeps the previous image and must
-            # not fail the deploy (engine/dashboard are already healthy).
-            for game in luxview-games/games/*/; do
-              tag="luxview-cloud-$(basename "$game")"
-              echo "Building $tag from $game"
-              docker build -t "$tag" "$game" || echo "WARN: build of $tag failed; keeping previous image"
-            done
             docker image prune -f
+            # NOTE: game-template images (luxview-cloud-<game>) are NOT rebuilt here.
+            # They are independent, proprietary, and slow to build (Wine/.NET/steamcmd),
+            # and rebuilding them every push blew past the SSH timeout. Build them
+            # manually on the VPS when a game's Dockerfile/assets change:
+            #   docker build -t luxview-cloud-rakion luxview-games/games/rakion
