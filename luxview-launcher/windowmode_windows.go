@@ -2,19 +2,18 @@
 
 package main
 
-// In windowed mode we center the game's render window on the primary screen.
-// We identify it by the game process (rakion.bin) AND window class "Rakion" — the
-// Serious Engine render window — so we never grab its "Loading..." splash or any
-// unrelated app window. We only MOVE it (no resize/restyle): changing size/style
-// desyncs the engine's fixed-size backbuffer (black frame). The game is a legacy
-// DPI-UNAWARE process while this launcher is per-monitor DPI-AWARE, so we run the
-// window math on a thread set to DPI-UNAWARE to share the game's coordinate space
-// on scaled displays.
+// Windowed mode: give the game's render window a real title bar (so it can be
+// dragged) and center it on the primary screen. We keep the CLIENT area equal to
+// the engine's backbuffer size — AdjustWindowRect grows the window to fit the
+// title bar/border around the unchanged client, and we then measure the real
+// client and correct for the DWM/theme border so the backbuffer fills the client
+// exactly (no black gap). The render window is matched by process (rakion.bin) +
+// window class "Rakion", never the "Loading..." splash or other apps' windows.
 //
-// Note: third-party game overlays (Discord/NVIDIA) only render correctly over this
-// game in EXCLUSIVE FULLSCREEN — in windowed/borderless they fall back to a black
-// top-most layer. That's an overlay limitation with this legacy DX9 title, outside
-// the launcher's control; fullscreen is the default for that reason.
+// Note: third-party overlays (Discord/NVIDIA) only render correctly over this game
+// in EXCLUSIVE FULLSCREEN; in windowed they paint a black top-most layer. That's
+// an overlay limitation outside the launcher's control — fullscreen is the default
+// for that reason; windowed is for players who don't use overlays.
 
 import (
 	"runtime"
@@ -31,16 +30,29 @@ var (
 	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
 	procIsWindowVisible          = user32.NewProc("IsWindowVisible")
 	procGetWindowRect            = user32.NewProc("GetWindowRect")
+	procGetClientRect            = user32.NewProc("GetClientRect")
 	procGetClassName             = user32.NewProc("GetClassNameW")
 	procSetWindowPos             = user32.NewProc("SetWindowPos")
+	procGetWindowLongPtr         = user32.NewProc("GetWindowLongPtrW")
+	procSetWindowLongPtr         = user32.NewProc("SetWindowLongPtrW")
+	procAdjustWindowRect         = user32.NewProc("AdjustWindowRect")
+	procSetWindowText            = user32.NewProc("SetWindowTextW")
 	procGetSystemMetrics         = user32.NewProc("GetSystemMetrics")
 	procSetThreadDpiAwarenessCtx = user32.NewProc("SetThreadDpiAwarenessContext")
 )
 
 const (
-	swpNoSize     = 0x0001
-	swpNoZOrder   = 0x0004
-	swpNoActivate = 0x0010
+	gwlStyle      = ^uintptr(15) // GWL_STYLE = -16
+	wsPopup       = 0x80000000
+	wsCaption     = 0x00C00000
+	wsSysMenu     = 0x00080000
+	wsMinimizeBox = 0x00020000
+
+	swpNoZOrder    = 0x0004
+	swpNoActivate  = 0x0010
+	swpFrameChange = 0x0020
+	swpShowWindow  = 0x0040
+
 	smCXScreen    = 0
 	smCYScreen    = 1
 	dpiCtxUnaware = ^uintptr(0) // DPI_AWARENESS_CONTEXT_UNAWARE = (HANDLE)-1
@@ -53,6 +65,12 @@ func classNameOf(hwnd uintptr) string {
 	buf := make([]uint16, 64)
 	procGetClassName.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
 	return windows.UTF16ToString(buf)
+}
+
+func clientSize(hwnd uintptr) (int32, int32) {
+	var rc winRect
+	procGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
+	return rc.Right - rc.Left, rc.Bottom - rc.Top
 }
 
 // gwEnumCb finds the game's render window: visible, owned by the game process and
@@ -85,9 +103,9 @@ func findGameWindow(pid uint32) uintptr {
 	return gwFound
 }
 
-// frameGameWindow waits for the game's render window and centers it on the primary
-// screen. No-op for fullscreen. The engine keeps re-pinning the window to the
-// top-left corner during init, so we re-center while it drifts back there.
+// frameGameWindow waits for the game's render window, gives it a centered title
+// bar and keeps re-applying while the engine re-pins/restyles it during init.
+// No-op for fullscreen.
 func frameGameWindow(processName string) {
 	if processName == "" {
 		return
@@ -114,41 +132,60 @@ func frameGameWindow(processName string) {
 	if hwnd == 0 {
 		return
 	}
-	// The render window starts at 1x1; wait for its final size before centering.
-	for range 40 {
-		if w, h := windowSize(hwnd); w >= 320 && h >= 240 {
+	// The render window starts at 1x1; wait for its final client size.
+	var cw, ch int32
+	for range 60 {
+		if cw, ch = clientSize(hwnd); cw >= 320 && ch >= 240 {
 			break
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	centerWindow(hwnd)
-	for range 24 { // re-center while the engine pins it to the corner during init
+	applyTitledFrame(hwnd, cw, ch)
+	for range 24 { // re-apply while the engine re-pins/restyles during init
 		time.Sleep(500 * time.Millisecond)
+		style, _, _ := procGetWindowLongPtr.Call(hwnd, gwlStyle)
 		var rc winRect
 		procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
-		if rc.Left < 40 && rc.Top < 40 {
-			centerWindow(hwnd)
+		if style&wsCaption == 0 || (rc.Left < 40 && rc.Top < 40) {
+			applyTitledFrame(hwnd, cw, ch)
 		}
 	}
 }
 
-func windowSize(hwnd uintptr) (int32, int32) {
-	var rc winRect
-	procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
-	return rc.Right - rc.Left, rc.Bottom - rc.Top
+// applyTitledFrame turns the borderless render window into a titled (draggable)
+// window centered on screen, with the client area snapped to clientW x clientH so
+// the engine's backbuffer fills it exactly (no black gap).
+func applyTitledFrame(hwnd uintptr, clientW, clientH int32) {
+	style, _, _ := procGetWindowLongPtr.Call(hwnd, gwlStyle)
+	style &^= wsPopup
+	style |= wsCaption | wsSysMenu | wsMinimizeBox
+	procSetWindowLongPtr.Call(hwnd, gwlStyle, style)
+
+	title, _ := windows.UTF16PtrFromString("Rakion — LuxView Cloud")
+	procSetWindowText.Call(hwnd, uintptr(unsafe.Pointer(title)))
+
+	// Estimate the window size for a clientW x clientH client with this frame.
+	rc := winRect{0, 0, clientW, clientH}
+	procAdjustWindowRect.Call(uintptr(unsafe.Pointer(&rc)), style, 0)
+	winW := rc.Right - rc.Left
+	winH := rc.Bottom - rc.Top
+	placeCentered(hwnd, winW, winH)
+
+	// AdjustWindowRect doesn't know the real DWM/theme border, so the actual client
+	// can be a couple px off (a black gap in the corner). Measure and correct.
+	if acw, ach := clientSize(hwnd); acw > 0 && ach > 0 && (acw != clientW || ach != clientH) {
+		winW += clientW - acw
+		winH += clientH - ach
+		placeCentered(hwnd, winW, winH)
+	}
 }
 
-// centerWindow moves the window to the center of the primary screen WITHOUT
-// resizing or re-styling it (move-only keeps the engine's render surface in sync).
-func centerWindow(hwnd uintptr) {
-	winW, winH := windowSize(hwnd)
-	if winW <= 0 || winH <= 0 {
-		return
-	}
+// placeCentered sizes the window to winW x winH and centers it on the primary screen.
+func placeCentered(hwnd uintptr, winW, winH int32) {
 	scrW, _, _ := procGetSystemMetrics.Call(smCXScreen)
 	scrH, _, _ := procGetSystemMetrics.Call(smCYScreen)
 	x := max((int32(scrW)-winW)/2, 0)
 	y := max((int32(scrH)-winH)/2, 0)
-	procSetWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), 0, 0,
-		swpNoSize|swpNoZOrder|swpNoActivate)
+	procSetWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), uintptr(winW), uintptr(winH),
+		swpFrameChange|swpNoZOrder|swpShowWindow|swpNoActivate)
 }
