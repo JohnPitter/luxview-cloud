@@ -25,10 +25,29 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.38"
+var appVersion = "v1.44"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
+
+// Display modes. The engine settings only store a fullscreen bit, so the launcher
+// remembers the windowed/borderless distinction itself (see displayModeFile) and
+// applies the right window framing at launch.
+const (
+	displayFullscreen = "fullscreen" // exclusive fullscreen (overlay-friendly, default)
+	displayBorderless = "borderless" // windowed fullscreen: frameless, covers the screen
+	displayWindowed   = "windowed"   // titled, draggable, centered window
+)
+
+// validDisplayMode normalizes any input to one of the three known modes.
+func validDisplayMode(m string) string {
+	switch m {
+	case displayFullscreen, displayBorderless, displayWindowed:
+		return m
+	default:
+		return displayFullscreen
+	}
+}
 
 // baseURL is the LuxView platform origin the launcher talks to. Overridable via
 // the LUXVIEW_BASE_URL env var (handy for testing against the VPS directly).
@@ -221,17 +240,17 @@ func (a *App) InstallGame(card GameCard) error {
 	}); err != nil {
 		return fmt.Errorf("falha ao extrair: %w", err)
 	}
-	a.defaultDisplayFullscreen(card)
+	a.applyDefaultDisplay(card)
 	a.progress(card.Game, "done", 100)
 	return nil
 }
 
-// defaultDisplayFullscreen makes a fresh install default to exclusive fullscreen
-// at a safe resolution. The shipped Rakion client defaults to windowed @ desktop
-// res, which both hides the windowed/fullscreen distinction and breaks game
-// overlays (Discord/NVIDIA only work in exclusive fullscreen on this engine).
-// Players can still switch to windowed in the options.
-func (a *App) defaultDisplayFullscreen(card GameCard) {
+// applyDefaultDisplay makes a fresh install default to exclusive fullscreen at a
+// safe resolution. The shipped Rakion client defaults to windowed @ desktop res,
+// which both hides the display-mode distinction and breaks game overlays
+// (Discord/NVIDIA only work in exclusive fullscreen on this engine). Players can
+// still switch to borderless or windowed in the options.
+func (a *App) applyDefaultDisplay(card GameCard) {
 	if card.Game != "rakion" {
 		return
 	}
@@ -239,7 +258,7 @@ func (a *App) defaultDisplayFullscreen(card GameCard) {
 	if err != nil {
 		return
 	}
-	s.Fullscreen = true
+	s.DisplayMode = displayFullscreen
 	if s.ScreenWidth > 1920 || s.ScreenHeight > 1080 {
 		s.ScreenWidth, s.ScreenHeight = 1920, 1080
 	}
@@ -385,13 +404,25 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	// (PowerShell 32-bit) desempacota o load.bin, instancia o Form1 dele INVISÍVEL
 	// com o modo escolhido pré-selecionado, e roda a pipeline ORIGINAL (login +
 	// decrypt config.xfs + lança rakion.bin + patches do GameGuard) — sem o diálogo.
-	windowed := true
+	//
+	// O engine roda WINDOWED tanto para "windowed" quanto para "borderless"; a
+	// diferença (janela com título vs. janela sem borda cobrindo a tela) é o
+	// enquadramento que o frameGameWindow aplica. Só "fullscreen" roda exclusivo.
+	mode := displayFullscreen
 	if s, err := a.GetSettings(card); err == nil {
-		windowed = !s.Fullscreen
-		if windowed {
-			go frameGameWindow(spec.processName)
-		}
+		mode = s.DisplayMode
 	}
+	windowed := mode != displayFullscreen
+	if windowed {
+		go frameGameWindow(spec.processName, mode)
+	}
+	// Atalho global Ctrl+Alt+M pra minimizar/restaurar o jogo (qualquer modo) — útil
+	// principalmente em fullscreen exclusivo, onde o Alt+Tab faz device-reset.
+	go runMinimizeHotkey(spec.processName)
+	// Remove a trava do Alt+Tab/tecla Windows: o keyhook.dll do cliente instala hooks
+	// WH_KEYBOARD_LL que engolem essas teclas; com o GameGuard morto, patchamos os
+	// hook procs em memória (mov eax,1 -> mov eax,0) e o Alt+Tab volta a funcionar.
+	go patchKeyHook(spec.processName)
 	if err := invokeRakionDriver(clientDir, user, passHex, windowed); err != nil {
 		return err
 	}
@@ -425,10 +456,13 @@ func (a *App) OpenInstallFolder(appID string) error {
 }
 
 // GameSettings are the player-facing options edited in PersistentSymbols.ini.
+// DisplayMode ("fullscreen"|"borderless"|"windowed") maps to the engine's
+// m_bActiveFullScreen bit (fullscreen=1, the other two=0) plus launcher-side window
+// framing — the windowed/borderless distinction is persisted by the launcher.
 type GameSettings struct {
 	ScreenWidth      int     `json:"screen_width"`
 	ScreenHeight     int     `json:"screen_height"`
-	Fullscreen       bool    `json:"fullscreen"`
+	DisplayMode      string  `json:"display_mode"`
 	MouseSensitivity float64 `json:"mouse_sensitivity"`
 	InvertMouse      bool    `json:"invert_mouse"`
 	MouseAccel       bool    `json:"mouse_accel"`
@@ -439,10 +473,44 @@ type GameSettings struct {
 
 func defaultSettings() GameSettings {
 	return GameSettings{
-		ScreenWidth: 1920, ScreenHeight: 1080, Fullscreen: true,
+		ScreenWidth: 1920, ScreenHeight: 1080, DisplayMode: displayFullscreen,
 		MouseSensitivity: 1.5, InvertMouse: false, MouseAccel: true,
 		SoundVolume: 0.8, MusicVolume: 0.6, Gamma: 1,
 	}
+}
+
+// displayModeFile is where the launcher remembers the chosen display mode (the INI
+// only has a fullscreen bit, which can't tell windowed from borderless).
+func displayModeFile(appID string) (string, error) {
+	dir, err := installDir(appID)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "display.mode"), nil
+}
+
+func readDisplayMode(appID string) string {
+	p, err := displayModeFile(appID)
+	if err != nil {
+		return ""
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return ""
+	}
+	switch m := strings.TrimSpace(string(b)); m {
+	case displayFullscreen, displayBorderless, displayWindowed:
+		return m
+	}
+	return ""
+}
+
+func writeDisplayMode(appID, mode string) {
+	p, err := displayModeFile(appID)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(p, []byte(validDisplayMode(mode)), 0o644)
 }
 
 func (a *App) iniPath(card GameCard) (string, error) {
@@ -478,8 +546,18 @@ func (a *App) GetSettings(card GameCard) (GameSettings, error) {
 	if v, ok := symbolValue(c, "m_pixScreenHeight"); ok {
 		s.ScreenHeight = atoiOr(v, s.ScreenHeight)
 	}
+	// Display mode: the INI only carries the fullscreen bit. Prefer the launcher's
+	// own record (which knows windowed vs. borderless); fall back to the INI bit.
+	fs := true
 	if v, ok := symbolValue(c, "m_bActiveFullScreen"); ok {
-		s.Fullscreen = v == "1"
+		fs = v == "1"
+	}
+	if m := readDisplayMode(card.AppID); m != "" {
+		s.DisplayMode = m
+	} else if fs {
+		s.DisplayMode = displayFullscreen
+	} else {
+		s.DisplayMode = displayWindowed
 	}
 	if v, ok := symbolValue(c, "inp_fMouseSensitivity"); ok {
 		s.MouseSensitivity = floatOr(v, s.MouseSensitivity)
@@ -513,9 +591,20 @@ func (a *App) SaveSettings(card GameCard, s GameSettings) error {
 		return fmt.Errorf("instale o jogo primeiro")
 	}
 	c := string(b)
+	mode := validDisplayMode(s.DisplayMode)
+	// "Janela em tela cheia" (borderless): a Serious Engine desenha o backbuffer 1:1
+	// no canto da janela (NÃO estica), então pra preencher a tela sem margens pretas a
+	// resolução precisa ser a do cliente de uma janela full-screen. Forçamos isso.
+	if mode == displayBorderless {
+		if w, h := fillScreenResolution(); w > 0 && h > 0 {
+			s.ScreenWidth, s.ScreenHeight = w, h
+		}
+	}
 	c = setSymbol(c, "m_pixScreenWidth", strconv.Itoa(s.ScreenWidth))
 	c = setSymbol(c, "m_pixScreenHeight", strconv.Itoa(s.ScreenHeight))
-	c = setSymbol(c, "m_bActiveFullScreen", boolIdx(s.Fullscreen))
+	// Both windowed and borderless run the engine windowed (fullscreen bit = 0);
+	// the launcher remembers which one and frames the window accordingly.
+	c = setSymbol(c, "m_bActiveFullScreen", boolIdx(mode == displayFullscreen))
 	c = setSymbol(c, "inp_fMouseSensitivity", ftoa(s.MouseSensitivity))
 	c = setSymbol(c, "inp_bInvertMouse", boolIdx(s.InvertMouse))
 	c = setSymbol(c, "inp_bAllowMouseAcceleration", boolIdx(s.MouseAccel))
@@ -530,6 +619,8 @@ func (a *App) SaveSettings(card GameCard, s GameSettings) error {
 	// Lock it read-only so the game can't overwrite our settings on exit (the
 	// Serious Engine persists its own display mode otherwise — losing our choice).
 	_ = os.Chmod(p, 0o444)
+	// Remember the windowed/borderless choice the INI can't represent.
+	writeDisplayMode(card.AppID, mode)
 	return nil
 }
 

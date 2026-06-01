@@ -33,7 +33,7 @@ export namespace main {
 	export class GameSettings {
 	    screen_width: number;
 	    screen_height: number;
-	    fullscreen: boolean;
+	    display_mode: string;
 	    mouse_sensitivity: number;
 	    invert_mouse: boolean;
 	    mouse_accel: boolean;
@@ -49,7 +49,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.screen_width = source["screen_width"];
 	        this.screen_height = source["screen_height"];
-	        this.fullscreen = source["fullscreen"];
+	        this.display_mode = source["display_mode"];
 	        this.mouse_sensitivity = source["mouse_sensitivity"];
 	        this.invert_mouse = source["invert_mouse"];
 	        this.mouse_accel = source["mouse_accel"];

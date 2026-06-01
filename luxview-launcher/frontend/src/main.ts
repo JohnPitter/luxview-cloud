@@ -28,7 +28,7 @@ type Card = {
 };
 
 type Settings = {
-  screen_width: number; screen_height: number; fullscreen: boolean;
+  screen_width: number; screen_height: number; display_mode: string;
   mouse_sensitivity: number; invert_mouse: boolean; mouse_accel: boolean;
   sound_volume: number; music_volume: number; gamma: number;
 };
@@ -313,7 +313,7 @@ function footerLine(g?: Card): string {
   if (!g) return '';
   if (!g.enabled) return 'Este jogo ainda não está disponível.';
   if (g.game === loadingGame) return 'Carregando Rakion… (verificando arquivos e iniciando o jogo).';
-  if (g.game === runningGame) return 'Jogo em execução — feche-o para abrir de novo.';
+  if (g.game === runningGame) return 'Jogo em execução — Alt+Tab liberado (ou Ctrl+Alt+M para minimizar).';
   if (g.installed) return 'Instalado — pronto para jogar.';
   return 'Clique em INSTALAR para baixar o client.';
 }
@@ -466,10 +466,11 @@ async function openOptions(g: Card) {
       </select>
       <label>Modo de exibição</label>
       <select id="optDisp">
-        <option value="full" ${s.fullscreen?'selected':''}>Tela cheia (recomendado)</option>
-        <option value="window" ${!s.fullscreen?'selected':''}>Janela</option>
+        <option value="fullscreen" ${s.display_mode==='fullscreen'?'selected':''}>Tela cheia (recomendado)</option>
+        <option value="borderless" ${s.display_mode==='borderless'?'selected':''}>Janela em tela cheia</option>
+        <option value="windowed" ${s.display_mode==='windowed'?'selected':''}>Janela</option>
       </select>
-      <small class="opt-hint">Use <b>tela cheia</b> se usar overlay (Discord/NVIDIA) — no modo janela a sobreposição cobre o jogo com uma camada preta (limitação do overlay com este jogo).</small>
+      <small class="opt-hint"><b>Tela cheia</b>: melhor desempenho e única que funciona com overlay (Discord/NVIDIA). <b>Janela em tela cheia</b>: janela do Windows preenchendo a tela toda (resolução automática), com Alt+Tab. <b>Janela</b>: janela movível. Nos modos em janela o overlay cobre o jogo com uma camada preta (limitação do overlay com este jogo).</small>
       <label>Sensibilidade do mouse <b id="lSens">${s.mouse_sensitivity}</b></label>
       <input type="range" id="optSens" min="0.1" max="5" step="0.1" value="${s.mouse_sensitivity}">
       <label>Inverter mouse</label><label class="sw"><input type="checkbox" id="optInv" ${s.invert_mouse?'checked':''}><span></span></label>
@@ -497,13 +498,25 @@ async function openOptions(g: Card) {
   live('optMus', 'lMus', (v) => Math.round(v*100) + '%');
   live('optGam', 'lGam', (v) => String(v));
 
+  // No modo "Janela em tela cheia" a resolução é automática (preenche a tela), então
+  // o seletor de resolução fica desabilitado.
+  const dispEl = document.getElementById('optDisp') as HTMLSelectElement;
+  const resEl = document.getElementById('optRes') as HTMLSelectElement;
+  const syncRes = () => {
+    const auto = dispEl.value === 'borderless';
+    resEl.disabled = auto;
+    resEl.title = auto ? 'Resolução automática neste modo (preenche a tela).' : '';
+  };
+  dispEl.onchange = syncRes;
+  syncRes();
+
   document.getElementById('optCancel')!.onclick = closeModal;
   document.getElementById('optSave')!.onclick = async () => {
     const val = (id: string) => (document.getElementById(id) as HTMLInputElement);
     const [w, h] = val('optRes').value.split('x').map(Number);
     const out: Settings = {
       screen_width: w, screen_height: h,
-      fullscreen: val('optDisp').value === 'full',
+      display_mode: (document.getElementById('optDisp') as HTMLSelectElement).value,
       mouse_sensitivity: parseFloat(val('optSens').value),
       invert_mouse: val('optInv').checked,
       mouse_accel: val('optAcc').checked,

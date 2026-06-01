@@ -60,6 +60,11 @@ backups/
 *.archive.gz
 *.rdb
 
+# -- Proprietary (SoftNyx — NEVER commit) -------------------------------------
+# Decompiled RakionLauncher sources + the packed load.bin live here locally only.
+RakionLauncher/
+*.bin
+
 # -- Misc ----------------------------------------------------------------------
 CLAUDE.md
 .claude/
