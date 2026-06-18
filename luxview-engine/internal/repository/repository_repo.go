@@ -19,10 +19,10 @@ func NewRepositoryRepo(db *DB) *RepositoryRepo {
 
 func (r *RepositoryRepo) Create(ctx context.Context, repo *model.Repository) error {
 	err := r.db.Pool.QueryRow(ctx,
-		`INSERT INTO repositories (id, user_id, name, slug, default_branch, storage_path, visibility)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`INSERT INTO repositories (id, user_id, name, slug, description, default_branch, storage_path, visibility)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 RETURNING created_at, updated_at`,
-		repo.ID, repo.UserID, repo.Name, repo.Slug, repo.DefaultBranch, repo.StoragePath, repo.Visibility,
+		repo.ID, repo.UserID, repo.Name, repo.Slug, repo.Description, repo.DefaultBranch, repo.StoragePath, repo.Visibility,
 	).Scan(&repo.CreatedAt, &repo.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("create repository: %w", err)
@@ -33,9 +33,9 @@ func (r *RepositoryRepo) Create(ctx context.Context, repo *model.Repository) err
 func (r *RepositoryRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.Repository, error) {
 	var repo model.Repository
 	err := r.db.Pool.QueryRow(ctx,
-		`SELECT id, user_id, name, slug, default_branch, storage_path, visibility, created_at, updated_at
+		`SELECT id, user_id, name, slug, description, default_branch, storage_path, visibility, created_at, updated_at
 		 FROM repositories WHERE id = $1`, id,
-	).Scan(&repo.ID, &repo.UserID, &repo.Name, &repo.Slug, &repo.DefaultBranch, &repo.StoragePath, &repo.Visibility, &repo.CreatedAt, &repo.UpdatedAt)
+	).Scan(&repo.ID, &repo.UserID, &repo.Name, &repo.Slug, &repo.Description, &repo.DefaultBranch, &repo.StoragePath, &repo.Visibility, &repo.CreatedAt, &repo.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -48,9 +48,9 @@ func (r *RepositoryRepo) FindByID(ctx context.Context, id uuid.UUID) (*model.Rep
 func (r *RepositoryRepo) FindByUserAndSlug(ctx context.Context, userID uuid.UUID, slug string) (*model.Repository, error) {
 	var repo model.Repository
 	err := r.db.Pool.QueryRow(ctx,
-		`SELECT id, user_id, name, slug, default_branch, storage_path, visibility, created_at, updated_at
+		`SELECT id, user_id, name, slug, description, default_branch, storage_path, visibility, created_at, updated_at
 		 FROM repositories WHERE user_id = $1 AND slug = $2`, userID, slug,
-	).Scan(&repo.ID, &repo.UserID, &repo.Name, &repo.Slug, &repo.DefaultBranch, &repo.StoragePath, &repo.Visibility, &repo.CreatedAt, &repo.UpdatedAt)
+	).Scan(&repo.ID, &repo.UserID, &repo.Name, &repo.Slug, &repo.Description, &repo.DefaultBranch, &repo.StoragePath, &repo.Visibility, &repo.CreatedAt, &repo.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -67,7 +67,7 @@ func (r *RepositoryRepo) ListByUserID(ctx context.Context, userID uuid.UUID, lim
 	}
 
 	rows, err := r.db.Pool.Query(ctx,
-		`SELECT id, user_id, name, slug, default_branch, storage_path, visibility, created_at, updated_at
+		`SELECT id, user_id, name, slug, description, default_branch, storage_path, visibility, created_at, updated_at
 		 FROM repositories WHERE user_id = $1
 		 ORDER BY created_at DESC LIMIT $2 OFFSET $3`, userID, limit, offset)
 	if err != nil {
@@ -78,7 +78,7 @@ func (r *RepositoryRepo) ListByUserID(ctx context.Context, userID uuid.UUID, lim
 	var repos []model.Repository
 	for rows.Next() {
 		var repo model.Repository
-		if err := rows.Scan(&repo.ID, &repo.UserID, &repo.Name, &repo.Slug, &repo.DefaultBranch, &repo.StoragePath, &repo.Visibility, &repo.CreatedAt, &repo.UpdatedAt); err != nil {
+		if err := rows.Scan(&repo.ID, &repo.UserID, &repo.Name, &repo.Slug, &repo.Description, &repo.DefaultBranch, &repo.StoragePath, &repo.Visibility, &repo.CreatedAt, &repo.UpdatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan repository: %w", err)
 		}
 		repos = append(repos, repo)
@@ -100,14 +100,28 @@ func (r *RepositoryRepo) UpdateVisibility(ctx context.Context, id uuid.UUID, vis
 	return nil
 }
 
+func (r *RepositoryRepo) UpdateInfo(ctx context.Context, id uuid.UUID, name, description string) error {
+	tag, err := r.db.Pool.Exec(ctx,
+		`UPDATE repositories SET name = $1, description = $2, updated_at = NOW() WHERE id = $3`,
+		name, description, id,
+	)
+	if err != nil {
+		return fmt.Errorf("update repository info: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("repository not found")
+	}
+	return nil
+}
+
 func (r *RepositoryRepo) FindByUsernameAndSlug(ctx context.Context, username, slug string) (*model.Repository, error) {
 	var repo model.Repository
 	err := r.db.Pool.QueryRow(ctx,
-		`SELECT r.id, r.user_id, r.name, r.slug, r.default_branch, r.storage_path, r.visibility, r.created_at, r.updated_at
+		`SELECT r.id, r.user_id, r.name, r.slug, r.description, r.default_branch, r.storage_path, r.visibility, r.created_at, r.updated_at
 		 FROM repositories r
 		 JOIN users u ON u.id = r.user_id
 		 WHERE u.username = $1 AND r.slug = $2`, username, slug,
-	).Scan(&repo.ID, &repo.UserID, &repo.Name, &repo.Slug, &repo.DefaultBranch, &repo.StoragePath, &repo.Visibility, &repo.CreatedAt, &repo.UpdatedAt)
+	).Scan(&repo.ID, &repo.UserID, &repo.Name, &repo.Slug, &repo.Description, &repo.DefaultBranch, &repo.StoragePath, &repo.Visibility, &repo.CreatedAt, &repo.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}

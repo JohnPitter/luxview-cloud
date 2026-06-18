@@ -20,6 +20,7 @@ export function NewRepository() {
 
   // Create form
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [defaultBranch, setDefaultBranch] = useState('main');
   const [visibility, setVisibility] = useState<'private' | 'public'>('private');
   const [creating, setCreating] = useState(false);
@@ -45,7 +46,7 @@ export function NewRepository() {
     if (!name.trim()) return;
     setCreating(true);
     try {
-      const repo = await repositoriesApi.create({ name: name.trim(), defaultBranch, visibility });
+      const repo = await repositoriesApi.create({ name: name.trim(), description: description.trim(), defaultBranch, visibility });
       addNotification({ type: 'success', title: t('repo.new.created') });
       navigate(`/dashboard/new?source=luxview&repoId=${repo.id}`);
     } catch (e: unknown) {
@@ -128,6 +129,18 @@ export function NewRepository() {
                 onChange={(e) => setName(e.target.value)}
                 className={inputClass}
                 autoFocus
+              />
+            </div>
+            <div>
+              <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                {t('repo.new.description')}
+              </label>
+              <input
+                type="text"
+                placeholder={t('repo.new.descriptionPlaceholder')}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className={inputClass}
               />
             </div>
             <div>

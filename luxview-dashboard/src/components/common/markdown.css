@@ -1,0 +1,102 @@
+.lv-markdown {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: rgb(63 63 70); /* zinc-700 */
+  word-wrap: break-word;
+}
+.dark .lv-markdown {
+  color: rgb(212 212 216); /* zinc-300 */
+}
+
+.lv-markdown > *:first-child { margin-top: 0; }
+.lv-markdown > *:last-child { margin-bottom: 0; }
+
+.lv-markdown h1,
+.lv-markdown h2,
+.lv-markdown h3,
+.lv-markdown h4 {
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 1.25em 0 0.6em;
+  color: rgb(24 24 27); /* zinc-900 */
+}
+.dark .lv-markdown h1,
+.dark .lv-markdown h2,
+.dark .lv-markdown h3,
+.dark .lv-markdown h4 {
+  color: rgb(244 244 245); /* zinc-100 */
+}
+.lv-markdown h1 { font-size: 1.5rem; padding-bottom: 0.3em; border-bottom: 1px solid rgba(0,0,0,0.1); }
+.lv-markdown h2 { font-size: 1.25rem; padding-bottom: 0.3em; border-bottom: 1px solid rgba(0,0,0,0.08); }
+.lv-markdown h3 { font-size: 1.1rem; }
+.dark .lv-markdown h1 { border-color: rgba(255,255,255,0.1); }
+.dark .lv-markdown h2 { border-color: rgba(255,255,255,0.08); }
+
+.lv-markdown p,
+.lv-markdown ul,
+.lv-markdown ol,
+.lv-markdown blockquote,
+.lv-markdown table { margin: 0 0 0.85em; }
+
+.lv-markdown ul,
+.lv-markdown ol { padding-left: 1.5em; }
+.lv-markdown li { margin: 0.2em 0; }
+.lv-markdown li > ul,
+.lv-markdown li > ol { margin: 0.2em 0; }
+
+.lv-markdown a { color: rgb(251 191 36); text-decoration: none; }
+.lv-markdown a:hover { text-decoration: underline; }
+
+.lv-markdown blockquote {
+  padding: 0 1em;
+  border-left: 3px solid rgba(0,0,0,0.15);
+  color: rgb(113 113 122);
+}
+.dark .lv-markdown blockquote { border-left-color: rgba(255,255,255,0.15); }
+
+.lv-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  padding: 0.15em 0.4em;
+  border-radius: 0.3em;
+  background: rgba(0,0,0,0.06);
+}
+.dark .lv-markdown code { background: rgba(255,255,255,0.1); }
+
+.lv-markdown pre {
+  margin: 0 0 0.85em;
+  padding: 0.9em 1em;
+  border-radius: 0.5em;
+  overflow-x: auto;
+  background: rgb(13 17 23); /* github-dark bg */
+}
+.lv-markdown pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.lv-markdown table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+.lv-markdown th,
+.lv-markdown td {
+  border: 1px solid rgba(0,0,0,0.12);
+  padding: 0.4em 0.75em;
+}
+.dark .lv-markdown th,
+.dark .lv-markdown td { border-color: rgba(255,255,255,0.12); }
+.lv-markdown th { font-weight: 600; background: rgba(0,0,0,0.04); }
+.dark .lv-markdown th { background: rgba(255,255,255,0.05); }
+
+.lv-markdown img { max-width: 100%; border-radius: 0.4em; }
+
+.lv-markdown hr {
+  border: none;
+  border-top: 1px solid rgba(0,0,0,0.1);
+  margin: 1.25em 0;
+}
+.dark .lv-markdown hr { border-top-color: rgba(255,255,255,0.1); }

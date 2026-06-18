@@ -79,6 +79,11 @@ export function Repositories() {
                     <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-zinc-900'}`}>
                       {repo.name}
                     </p>
+                    {repo.description && (
+                      <p className={`text-xs mt-0.5 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                        {repo.description}
+                      </p>
+                    )}
                     <p className="text-xs text-zinc-500 font-mono mt-0.5">
                       {repo.slug} · {repo.defaultBranch}
                     </p>

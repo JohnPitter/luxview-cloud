@@ -105,7 +105,10 @@ func main() {
 	webhookSvc := service.NewWebhookService(appRepo, buildQueue, actionSvc)
 	pushEventSvc := service.NewPushEventService(appRepo, repositorySvc, actionSvc, buildQueue)
 	pullRequestRepo := repository.NewPullRequestRepo(db)
-	pullRequestSvc := service.NewPullRequestService(pullRequestRepo, repositorySvc)
+	branchProtectionRepo := repository.NewBranchProtectionRepo(db)
+	pullRequestSvc := service.NewPullRequestService(pullRequestRepo, repositorySvc, branchProtectionRepo)
+	issueRepo := repository.NewIssueRepo(db)
+	issueSvc := service.NewIssueService(issueRepo)
 
 	// GitHub App service (optional — only when GITHUB_APP_ID is set)
 	var githubAppSvc *service.GitHubAppService
@@ -196,6 +199,8 @@ func main() {
 		BackupSvc:       backupSvc,
 		PullRequestRepo: pullRequestRepo,
 		PullRequestSvc:  pullRequestSvc,
+		IssueSvc:             issueSvc,
+		BranchProtectionRepo: branchProtectionRepo,
 		GameConfigRepo:  gameConfigRepo,
 		GameServerSvc:   gameServerSvc,
 	})
