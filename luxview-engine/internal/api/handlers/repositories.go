@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -23,6 +24,7 @@ type RepositoryHandler struct {
 type createRepositoryRequest struct {
 	Name          string                     `json:"name"`
 	Slug          string                     `json:"slug"`
+	Description   string                     `json:"description"`
 	DefaultBranch string                     `json:"default_branch"`
 	Visibility    model.RepositoryVisibility `json:"visibility"`
 }
@@ -57,6 +59,7 @@ func (h *RepositoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 		UserID:        user.ID,
 		Name:          req.Name,
 		Slug:          req.Slug,
+		Description:   req.Description,
 		DefaultBranch: req.DefaultBranch,
 		Visibility:    req.Visibility,
 	})
@@ -162,6 +165,60 @@ func (h *RepositoryHandler) List(w http.ResponseWriter, r *http.Request) {
 		"repositories": repoResponses,
 		"total":        total,
 	})
+}
+
+func (h *RepositoryHandler) Get(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	repo, ok := h.authorizeRepo(w, r)
+	if !ok {
+		return
+	}
+	user := middleware.GetUser(ctx)
+	ownerUsername := ""
+	if user != nil {
+		ownerUsername = user.Username
+	}
+	writeJSON(w, http.StatusOK, repositoryResponse{Repository: *repo, OwnerUsername: ownerUsername})
+}
+
+func (h *RepositoryHandler) Update(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user := middleware.GetUser(ctx)
+	repo, ok := h.authorizeRepo(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = repo.Name
+	}
+
+	if err := h.repositoryRepo.UpdateInfo(ctx, repo.ID, name, strings.TrimSpace(req.Description)); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update repository")
+		return
+	}
+
+	if h.auditSvc != nil {
+		h.auditSvc.Log(ctx, service.AuditEntry{
+			ActorID: user.ID, ActorUsername: user.Username,
+			Action: "update", ResourceType: "repository",
+			ResourceID: repo.ID.String(), ResourceName: repo.Slug,
+			IPAddress: clientIP(r),
+		})
+	}
+
+	repo.Name = name
+	repo.Description = strings.TrimSpace(req.Description)
+	writeJSON(w, http.StatusOK, repo)
 }
 
 func (h *RepositoryHandler) ListRemotes(w http.ResponseWriter, r *http.Request) {

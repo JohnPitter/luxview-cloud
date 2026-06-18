@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Folder, FileCode, Loader2, ChevronRight, Copy, Check } from 'lucide-react';
 import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
+import { CodeView } from '../components/common/CodeView';
+import { Markdown } from '../components/common/Markdown';
 import { useThemeStore } from '../stores/theme.store';
 import { useNotificationsStore } from '../stores/notifications.store';
 import { gitApi, type TreeEntry } from '../api/git';
@@ -176,15 +178,12 @@ export function RepositoryCode() {
           </div>
           {isBinary(blobContent) ? (
             <p className="px-4 py-8 text-sm text-zinc-500 text-center">{t('code.binaryFile')}</p>
+          ) : fileName.toLowerCase().endsWith('.md') ? (
+            <div className="p-5">
+              <Markdown>{blobContent}</Markdown>
+            </div>
           ) : (
-            <pre className={`text-xs font-mono overflow-x-auto p-4 leading-5 ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>
-              {blobContent.split('\n').map((line, i) => (
-                <div key={i} className="flex gap-4">
-                  <span className="select-none w-8 text-right text-zinc-600 flex-shrink-0">{i + 1}</span>
-                  <span className="flex-1">{line}</span>
-                </div>
-              ))}
-            </pre>
+            <CodeView content={blobContent} fileName={fileName} />
           )}
         </GlassCard>
       ) : entries.length === 0 ? (

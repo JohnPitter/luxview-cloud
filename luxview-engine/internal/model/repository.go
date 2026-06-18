@@ -33,6 +33,7 @@ type Repository struct {
 	UserID        uuid.UUID            `json:"user_id"`
 	Name          string               `json:"name"`
 	Slug          string               `json:"slug"`
+	Description   string               `json:"description"`
 	DefaultBranch string               `json:"default_branch"`
 	StoragePath   string               `json:"-"`
 	Visibility    RepositoryVisibility `json:"visibility"`

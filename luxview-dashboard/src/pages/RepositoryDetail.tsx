@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Rocket, Copy, Check, Trash2, GitPullRequest, FileCode2, GitCommit, GitBranch, Tag, Globe, Lock } from 'lucide-react';
+import { ArrowLeft, Rocket, Copy, Check, Trash2, GitPullRequest, FileCode2, GitCommit, GitBranch, Tag, Globe, Lock, CircleDot, Settings, Pencil, BookText } from 'lucide-react';
 import { PillButton } from '../components/common/PillButton';
 import { GlassCard } from '../components/common/GlassCard';
+import { Markdown } from '../components/common/Markdown';
 import { RepositoryBackupPanel } from '../components/repositories/RepositoryBackupPanel';
 import { useThemeStore } from '../stores/theme.store';
 import { useNotificationsStore } from '../stores/notifications.store';
 import { repositoriesApi, type LuxViewRepository } from '../api/repositories';
+import { gitApi } from '../api/git';
 
 export function RepositoryDetail() {
   const { repoId } = useParams<{ repoId: string }>();
@@ -20,6 +22,26 @@ export function RepositoryDetail() {
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [togglingVisibility, setTogglingVisibility] = useState(false);
+  const [readme, setReadme] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [savingInfo, setSavingInfo] = useState(false);
+
+  async function handleSaveInfo() {
+    if (!repoId) return;
+    setSavingInfo(true);
+    try {
+      const updated = await repositoriesApi.update(repoId, { name: editName.trim(), description: editDescription.trim() });
+      setRepo((prev) => prev ? { ...prev, name: updated.name, description: updated.description } : prev);
+      setEditing(false);
+      addNotification({ type: 'success', title: t('repo.detail.infoSaved') });
+    } catch {
+      addNotification({ type: 'error', title: t('repo.detail.infoFailed') });
+    } finally {
+      setSavingInfo(false);
+    }
+  }
 
   async function handleToggleVisibility() {
     if (!repo || !repoId) return;
@@ -58,10 +80,14 @@ export function RepositoryDetail() {
 
   useEffect(() => {
     if (!repoId) return;
-    repositoriesApi.list(100).then((repos) => {
-      const found = repos.find((r) => r.id === repoId);
-      if (found) setRepo(found);
-    });
+    repositoriesApi.get(repoId).then((found) => {
+      setRepo(found);
+      setEditName(found.name);
+      setEditDescription(found.description ?? '');
+    }).catch(() => {});
+    gitApi.blob(repoId, 'README.md')
+      .then(({ content }) => setReadme(content))
+      .catch(() => setReadme(null));
   }, [repoId]);
 
   if (!repoId) return null;
@@ -103,6 +129,12 @@ export function RepositoryDetail() {
           </PillButton>
           <PillButton variant="ghost" size="sm" icon={<GitPullRequest size={14} />} onClick={() => navigate(`/dashboard/repositories/${repoId}/pulls`)}>
             {t('repo.detail.pullRequests')}
+          </PillButton>
+          <PillButton variant="ghost" size="sm" icon={<CircleDot size={14} />} onClick={() => navigate(`/dashboard/repositories/${repoId}/issues`)}>
+            {t('repo.detail.issues')}
+          </PillButton>
+          <PillButton variant="ghost" size="sm" icon={<Settings size={14} />} onClick={() => navigate(`/dashboard/repositories/${repoId}/settings`)}>
+            {t('repo.detail.settings')}
           </PillButton>
           <PillButton variant="primary" size="sm" icon={<Rocket size={14} />} onClick={() => navigate(`/dashboard/new?source=luxview&repoId=${repoId}`)}>
             {t('repo.detail.createApp')}
@@ -197,6 +229,70 @@ export function RepositoryDetail() {
               {togglingVisibility ? t('common.loading') : t('repo.detail.visibilityToggle')}
             </PillButton>
           </div>
+        </GlassCard>
+      )}
+
+      {repo && (
+        <GlassCard padding="md" className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+              {t('repo.detail.about')}
+            </p>
+            {!editing && (
+              <button
+                onClick={() => setEditing(true)}
+                className="flex items-center gap-1 text-xs text-zinc-500 hover:text-amber-400 transition-colors"
+              >
+                <Pencil size={12} /> {t('repo.detail.edit')}
+              </button>
+            )}
+          </div>
+          {editing ? (
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder={t('repo.new.name')}
+                className={`w-full px-3 py-2 text-sm rounded-lg border ${isDark ? 'bg-white/5 border-white/10 text-white' : 'bg-black/5 border-black/10 text-zinc-900'}`}
+              />
+              <textarea
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder={t('repo.detail.descriptionPlaceholder')}
+                rows={2}
+                className={`w-full px-3 py-2 text-sm rounded-lg border resize-none ${isDark ? 'bg-white/5 border-white/10 text-white' : 'bg-black/5 border-black/10 text-zinc-900'}`}
+              />
+              <div className="flex gap-2">
+                <PillButton variant="ghost" size="sm" onClick={() => { setEditing(false); setEditName(repo.name); setEditDescription(repo.description ?? ''); }}>
+                  {t('common.cancel')}
+                </PillButton>
+                <PillButton variant="primary" size="sm" onClick={handleSaveInfo} disabled={savingInfo || !editName.trim()}>
+                  {savingInfo ? t('common.saving') : t('common.save')}
+                </PillButton>
+              </div>
+            </div>
+          ) : (
+            <p className={`text-sm ${repo.description ? (isDark ? 'text-zinc-300' : 'text-zinc-700') : 'text-zinc-500 italic'}`}>
+              {repo.description || t('repo.detail.noDescription')}
+            </p>
+          )}
+        </GlassCard>
+      )}
+
+      {repo && (
+        <GlassCard padding="md" className="space-y-3">
+          <div className="flex items-center gap-2">
+            <BookText size={14} className="text-zinc-500" />
+            <p className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+              {t('repo.detail.readme')}
+            </p>
+          </div>
+          {readme ? (
+            <Markdown>{readme}</Markdown>
+          ) : (
+            <p className="text-sm text-zinc-500 italic">{t('repo.detail.noReadme')}</p>
+          )}
         </GlassCard>
       )}
 

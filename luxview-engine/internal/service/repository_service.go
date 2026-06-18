@@ -53,6 +53,7 @@ type CreateRepositoryRequest struct {
 	UserID        uuid.UUID
 	Name          string
 	Slug          string
+	Description   string
 	DefaultBranch string
 	Visibility    model.RepositoryVisibility
 }
@@ -104,6 +105,7 @@ func (s *RepositoryService) Create(ctx context.Context, req CreateRepositoryRequ
 		UserID:        req.UserID,
 		Name:          name,
 		Slug:          slug,
+		Description:   strings.TrimSpace(req.Description),
 		DefaultBranch: defaultBranch,
 		StoragePath:   storagePath,
 		Visibility:    visibility,

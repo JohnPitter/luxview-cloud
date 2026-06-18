@@ -8,6 +8,7 @@ export interface LuxViewRepository {
   userId: string;
   name: string;
   slug: string;
+  description: string;
   defaultBranch: string;
   visibility: RepositoryVisibility;
   ownerUsername: string;
@@ -30,6 +31,7 @@ export interface RepositoryRemote {
 export interface CreateRepositoryPayload {
   name: string;
   slug?: string;
+  description?: string;
   defaultBranch?: string;
   visibility?: RepositoryVisibility;
 }
@@ -42,8 +44,18 @@ export const repositoriesApi = {
     return data.repositories ?? [];
   },
 
+  async get(repositoryId: string): Promise<LuxViewRepository> {
+    const { data } = await api.get<LuxViewRepository>(`/repositories/${repositoryId}`);
+    return data;
+  },
+
   async create(payload: CreateRepositoryPayload): Promise<LuxViewRepository> {
     const { data } = await api.post<LuxViewRepository>('/repositories', payload);
+    return data;
+  },
+
+  async update(repositoryId: string, payload: { name?: string; description?: string }): Promise<LuxViewRepository> {
+    const { data } = await api.patch<LuxViewRepository>(`/repositories/${repositoryId}`, payload);
     return data;
   },
 
@@ -157,8 +169,8 @@ export const pullRequestsApi = {
     return data.files ?? [];
   },
 
-  async merge(repositoryId: string, number: number): Promise<PullRequest> {
-    const { data } = await api.post<PullRequest>(`/repositories/${repositoryId}/pulls/${number}/merge`);
+  async merge(repositoryId: string, number: number, strategy: MergeStrategy = 'merge'): Promise<PullRequest> {
+    const { data } = await api.post<PullRequest>(`/repositories/${repositoryId}/pulls/${number}/merge`, { strategy });
     return data;
   },
 
@@ -179,5 +191,105 @@ export const pullRequestsApi = {
 
   async deleteComment(repositoryId: string, number: number, commentId: string): Promise<void> {
     await api.delete(`/repositories/${repositoryId}/pulls/${number}/comments/${commentId}`);
+  },
+
+  async listReviews(repositoryId: string, number: number): Promise<PRReview[]> {
+    const { data } = await api.get<{ reviews: PRReview[] }>(`/repositories/${repositoryId}/pulls/${number}/reviews`);
+    return data.reviews ?? [];
+  },
+
+  async addReview(repositoryId: string, number: number, state: ReviewState, body = ''): Promise<PRReview> {
+    const { data } = await api.post<PRReview>(`/repositories/${repositoryId}/pulls/${number}/reviews`, { state, body });
+    return data;
+  },
+
+  async listReviewComments(repositoryId: string, number: number): Promise<ReviewComment[]> {
+    const { data } = await api.get<{ comments: ReviewComment[] }>(`/repositories/${repositoryId}/pulls/${number}/review-comments`);
+    return data.comments ?? [];
+  },
+
+  async addReviewComment(repositoryId: string, number: number, payload: { path: string; line: number; side?: ReviewSide; body: string }): Promise<ReviewComment> {
+    const { data } = await api.post<ReviewComment>(`/repositories/${repositoryId}/pulls/${number}/review-comments`, payload);
+    return data;
+  },
+
+  async resolveReviewComment(repositoryId: string, number: number, commentId: string, resolved: boolean): Promise<void> {
+    await api.patch(`/repositories/${repositoryId}/pulls/${number}/review-comments/${commentId}`, { resolved });
+  },
+
+  async deleteReviewComment(repositoryId: string, number: number, commentId: string): Promise<void> {
+    await api.delete(`/repositories/${repositoryId}/pulls/${number}/review-comments/${commentId}`);
+  },
+
+  async checks(repositoryId: string, number: number): Promise<StatusCheck[]> {
+    const { data } = await api.get<{ checks: StatusCheck[] }>(`/repositories/${repositoryId}/pulls/${number}/checks`);
+    return data.checks ?? [];
+  },
+};
+
+export type MergeStrategy = 'merge' | 'squash' | 'rebase';
+export type ReviewState = 'approved' | 'changes_requested' | 'commented';
+export type ReviewSide = 'old' | 'new';
+
+export interface PRReview {
+  id: string;
+  pullRequestId: string;
+  reviewerId: string;
+  state: ReviewState;
+  body: string;
+  commitSha: string;
+  createdAt: string;
+  reviewer?: { id: string; username: string; avatarUrl: string };
+}
+
+export interface ReviewComment {
+  id: string;
+  pullRequestId: string;
+  authorId: string;
+  path: string;
+  line: number;
+  side: ReviewSide;
+  body: string;
+  resolved: boolean;
+  createdAt: string;
+  updatedAt: string;
+  author?: { id: string; username: string; avatarUrl: string };
+}
+
+export interface StatusCheck {
+  name: string;
+  status: string;
+  runId: string;
+  commitSha: string;
+  createdAt: string;
+  finishedAt?: string;
+}
+
+export interface BranchProtectionRule {
+  id: string;
+  repositoryId: string;
+  branch: string;
+  requireReviews: boolean;
+  requiredApprovals: number;
+  dismissStaleReviews: boolean;
+  requireStatusChecks: boolean;
+  blockForcePush: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const branchProtectionApi = {
+  async list(repositoryId: string): Promise<BranchProtectionRule[]> {
+    const { data } = await api.get<{ rules: BranchProtectionRule[] }>(`/repositories/${repositoryId}/branch-protection`);
+    return data.rules ?? [];
+  },
+
+  async upsert(repositoryId: string, rule: Omit<BranchProtectionRule, 'id' | 'repositoryId' | 'createdAt' | 'updatedAt'>): Promise<BranchProtectionRule> {
+    const { data } = await api.put<BranchProtectionRule>(`/repositories/${repositoryId}/branch-protection`, rule);
+    return data;
+  },
+
+  async delete(repositoryId: string, branch: string): Promise<void> {
+    await api.delete(`/repositories/${repositoryId}/branch-protection/${encodeURIComponent(branch)}`);
   },
 };

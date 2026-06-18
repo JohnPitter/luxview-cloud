@@ -22,15 +22,29 @@ type PullRequestStore interface {
 	CreateComment(ctx context.Context, c *model.PullRequestComment) error
 	ListComments(ctx context.Context, prID uuid.UUID) ([]model.PullRequestComment, error)
 	DeleteComment(ctx context.Context, commentID uuid.UUID, authorID uuid.UUID) error
+	CreateReview(ctx context.Context, rv *model.PullRequestReview) error
+	ListReviews(ctx context.Context, prID uuid.UUID) ([]model.PullRequestReview, error)
+	LatestReviewStates(ctx context.Context, prID uuid.UUID) (map[uuid.UUID]model.ReviewState, error)
+	CreateReviewComment(ctx context.Context, c *model.ReviewComment) error
+	ListReviewComments(ctx context.Context, prID uuid.UUID) ([]model.ReviewComment, error)
+	SetReviewCommentResolved(ctx context.Context, commentID uuid.UUID, resolved bool) error
+	DeleteReviewComment(ctx context.Context, commentID, authorID uuid.UUID) error
+	ListStatusChecks(ctx context.Context, repositoryID uuid.UUID, commitSHA string) ([]model.StatusCheck, error)
+}
+
+// BranchProtectionLookup resolves the protection rule for a base branch (nil if none).
+type BranchProtectionLookup interface {
+	FindByBranch(ctx context.Context, repositoryID uuid.UUID, branch string) (*model.BranchProtectionRule, error)
 }
 
 type PullRequestService struct {
-	store   PullRequestStore
-	repoSvc *RepositoryService
+	store    PullRequestStore
+	repoSvc  *RepositoryService
+	bpLookup BranchProtectionLookup
 }
 
-func NewPullRequestService(store PullRequestStore, repoSvc *RepositoryService) *PullRequestService {
-	return &PullRequestService{store: store, repoSvc: repoSvc}
+func NewPullRequestService(store PullRequestStore, repoSvc *RepositoryService, bpLookup BranchProtectionLookup) *PullRequestService {
+	return &PullRequestService{store: store, repoSvc: repoSvc, bpLookup: bpLookup}
 }
 
 type CreatePRRequest struct {
@@ -227,13 +241,21 @@ func (s *PullRequestService) Diff(ctx context.Context, repositoryID uuid.UUID, n
 	return diffs, nil
 }
 
-func (s *PullRequestService) Merge(ctx context.Context, repositoryID uuid.UUID, number int, userID uuid.UUID) (*model.PullRequest, error) {
+func (s *PullRequestService) Merge(ctx context.Context, repositoryID uuid.UUID, number int, userID uuid.UUID, strategy model.MergeStrategy) (*model.PullRequest, error) {
 	pr, err := s.Get(ctx, repositoryID, number)
 	if err != nil {
 		return nil, err
 	}
 	if pr.Status != model.PullRequestStatusOpen {
 		return nil, fmt.Errorf("pull request is not open")
+	}
+	if strategy == "" {
+		strategy = model.MergeStrategyMerge
+	}
+
+	// Enforce branch protection on the base branch before touching git.
+	if err := s.enforceProtection(ctx, repositoryID, pr); err != nil {
+		return nil, err
 	}
 
 	repo, err := s.repoSvc.findRepository(ctx, repositoryID)
@@ -248,15 +270,12 @@ func (s *PullRequestService) Merge(ctx context.Context, repositoryID uuid.UUID, 
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Fetch head branch into worktree
 	if err := runGit(ctx, tmpDir, "fetch", "origin", pr.HeadBranch); err != nil {
 		return nil, fmt.Errorf("fetch head branch: %w", err)
 	}
 
-	// Merge --no-ff so there is always a merge commit
-	msg := fmt.Sprintf("Merge pull request #%d: %s\n\nMerge %s into %s", pr.Number, pr.Title, pr.HeadBranch, pr.BaseBranch)
-	if err := runGit(ctx, tmpDir, "merge", "--no-ff", "-m", msg, "origin/"+pr.HeadBranch); err != nil {
-		return nil, fmt.Errorf("merge conflict: please resolve conflicts before merging")
+	if err := applyMergeStrategy(ctx, tmpDir, pr, strategy); err != nil {
+		return nil, err
 	}
 
 	// Push result back to the bare repo
@@ -264,7 +283,6 @@ func (s *PullRequestService) Merge(ctx context.Context, repositoryID uuid.UUID, 
 		return nil, fmt.Errorf("push merge: %w", err)
 	}
 
-	// Read the merge commit SHA
 	mergeCommitSHA, err := gitOutput(ctx, tmpDir, "rev-parse", "HEAD")
 	if err != nil {
 		return nil, fmt.Errorf("read merge commit: %w", err)
@@ -277,6 +295,161 @@ func (s *PullRequestService) Merge(ctx context.Context, repositoryID uuid.UUID, 
 	pr.Status = model.PullRequestStatusMerged
 	pr.MergeCommit = &mergeCommitSHA
 	return pr, nil
+}
+
+// applyMergeStrategy integrates origin/head into the checked-out base branch in tmpDir.
+func applyMergeStrategy(ctx context.Context, tmpDir string, pr *model.PullRequest, strategy model.MergeStrategy) error {
+	head := "origin/" + pr.HeadBranch
+	switch strategy {
+	case model.MergeStrategySquash:
+		if err := runGit(ctx, tmpDir, "merge", "--squash", head); err != nil {
+			return fmt.Errorf("merge conflict: please resolve conflicts before merging")
+		}
+		msg := fmt.Sprintf("%s (#%d)", pr.Title, pr.Number)
+		if err := runGit(ctx, tmpDir, "commit", "-m", msg); err != nil {
+			return fmt.Errorf("squash commit failed: %w", err)
+		}
+		return nil
+	case model.MergeStrategyRebase:
+		// Replay head commits onto base, then fast-forward base to the result.
+		if err := runGit(ctx, tmpDir, "checkout", "-B", "lv-rebase-head", head); err != nil {
+			return fmt.Errorf("prepare rebase: %w", err)
+		}
+		if err := runGit(ctx, tmpDir, "rebase", pr.BaseBranch); err != nil {
+			_ = runGit(ctx, tmpDir, "rebase", "--abort")
+			return fmt.Errorf("rebase conflict: please resolve conflicts before merging")
+		}
+		if err := runGit(ctx, tmpDir, "checkout", pr.BaseBranch); err != nil {
+			return fmt.Errorf("checkout base: %w", err)
+		}
+		if err := runGit(ctx, tmpDir, "merge", "--ff-only", "lv-rebase-head"); err != nil {
+			return fmt.Errorf("rebase fast-forward failed: %w", err)
+		}
+		return nil
+	default: // merge
+		msg := fmt.Sprintf("Merge pull request #%d: %s\n\nMerge %s into %s", pr.Number, pr.Title, pr.HeadBranch, pr.BaseBranch)
+		if err := runGit(ctx, tmpDir, "merge", "--no-ff", "-m", msg, head); err != nil {
+			return fmt.Errorf("merge conflict: please resolve conflicts before merging")
+		}
+		return nil
+	}
+}
+
+// enforceProtection blocks merges that violate the base branch's protection rule.
+func (s *PullRequestService) enforceProtection(ctx context.Context, repositoryID uuid.UUID, pr *model.PullRequest) error {
+	if s.bpLookup == nil {
+		return nil
+	}
+	rule, err := s.bpLookup.FindByBranch(ctx, repositoryID, pr.BaseBranch)
+	if err != nil {
+		return err
+	}
+	if rule == nil {
+		return nil
+	}
+	if rule.RequireReviews {
+		states, err := s.store.LatestReviewStates(ctx, pr.ID)
+		if err != nil {
+			return err
+		}
+		approvals := 0
+		for _, st := range states {
+			if st == model.ReviewStateChangesRequested {
+				return fmt.Errorf("merge blocked: changes were requested on this pull request")
+			}
+			if st == model.ReviewStateApproved {
+				approvals++
+			}
+		}
+		if approvals < rule.RequiredApprovals {
+			return fmt.Errorf("merge blocked: %d of %d required approvals", approvals, rule.RequiredApprovals)
+		}
+	}
+	if rule.RequireStatusChecks {
+		checks, err := s.store.ListStatusChecks(ctx, repositoryID, pr.HeadSHA)
+		if err != nil {
+			return err
+		}
+		if len(checks) == 0 {
+			return fmt.Errorf("merge blocked: required status checks have not run yet")
+		}
+		for _, c := range checks {
+			if model.ActionStatus(c.Status) != model.ActionSuccess {
+				return fmt.Errorf("merge blocked: status check %q is %s", c.Name, c.Status)
+			}
+		}
+	}
+	return nil
+}
+
+// Reviews
+
+func (s *PullRequestService) AddReview(ctx context.Context, repositoryID uuid.UUID, number int, reviewerID uuid.UUID, state model.ReviewState, body string) (*model.PullRequestReview, error) {
+	pr, err := s.Get(ctx, repositoryID, number)
+	if err != nil {
+		return nil, err
+	}
+	switch state {
+	case model.ReviewStateApproved, model.ReviewStateChangesRequested, model.ReviewStateCommented:
+	default:
+		return nil, fmt.Errorf("invalid review state")
+	}
+	rv := &model.PullRequestReview{
+		PullRequestID: pr.ID,
+		ReviewerID:    reviewerID,
+		State:         state,
+		Body:          strings.TrimSpace(body),
+		CommitSHA:     pr.HeadSHA,
+	}
+	if err := s.store.CreateReview(ctx, rv); err != nil {
+		return nil, err
+	}
+	return rv, nil
+}
+
+func (s *PullRequestService) ListReviews(ctx context.Context, prID uuid.UUID) ([]model.PullRequestReview, error) {
+	return s.store.ListReviews(ctx, prID)
+}
+
+func (s *PullRequestService) AddReviewComment(ctx context.Context, prID, authorID uuid.UUID, path string, line int, side model.ReviewSide, body string) (*model.ReviewComment, error) {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return nil, fmt.Errorf("comment body is required")
+	}
+	if strings.TrimSpace(path) == "" {
+		return nil, fmt.Errorf("path is required")
+	}
+	if side != model.ReviewSideOld && side != model.ReviewSideNew {
+		side = model.ReviewSideNew
+	}
+	c := &model.ReviewComment{
+		PullRequestID: prID,
+		AuthorID:      authorID,
+		Path:          path,
+		Line:          line,
+		Side:          side,
+		Body:          body,
+	}
+	if err := s.store.CreateReviewComment(ctx, c); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (s *PullRequestService) ListReviewComments(ctx context.Context, prID uuid.UUID) ([]model.ReviewComment, error) {
+	return s.store.ListReviewComments(ctx, prID)
+}
+
+func (s *PullRequestService) ResolveReviewComment(ctx context.Context, commentID uuid.UUID, resolved bool) error {
+	return s.store.SetReviewCommentResolved(ctx, commentID, resolved)
+}
+
+func (s *PullRequestService) DeleteReviewComment(ctx context.Context, commentID, authorID uuid.UUID) error {
+	return s.store.DeleteReviewComment(ctx, commentID, authorID)
+}
+
+func (s *PullRequestService) StatusChecks(ctx context.Context, repositoryID uuid.UUID, commitSHA string) ([]model.StatusCheck, error) {
+	return s.store.ListStatusChecks(ctx, repositoryID, commitSHA)
 }
 
 func (s *PullRequestService) Close(ctx context.Context, repositoryID uuid.UUID, number int, userID uuid.UUID) (*model.PullRequest, error) {

@@ -43,10 +43,12 @@ type Deps struct {
 	MailboxRepo     *repository.MailboxRepo
 	BackupSvc       *service.BackupService
 	PushEventSvc    *service.PushEventService
-	PullRequestRepo *repository.PullRequestRepo
-	PullRequestSvc  *service.PullRequestService
-	GameConfigRepo  *repository.GameServerConfigRepo
-	GameServerSvc   *service.GameServerService
+	PullRequestRepo      *repository.PullRequestRepo
+	PullRequestSvc       *service.PullRequestService
+	IssueSvc             *service.IssueService
+	BranchProtectionRepo *repository.BranchProtectionRepo
+	GameConfigRepo       *repository.GameServerConfigRepo
+	GameServerSvc        *service.GameServerService
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -96,6 +98,8 @@ func NewRouter(deps Deps) *chi.Mux {
 	repositoryHandler := handlers.NewRepositoryHandler(deps.RepositoryRepo, deps.RepositorySvc, deps.AuditSvc)
 	gitExplorerHandler := handlers.NewGitExplorerHandler(deps.RepositoryRepo, deps.RepositorySvc)
 	prHandler := handlers.NewPullRequestHandler(deps.RepositoryRepo, deps.PullRequestSvc, deps.AuditSvc)
+	issueHandler := handlers.NewIssueHandler(deps.RepositoryRepo, deps.IssueSvc, deps.AuditSvc)
+	bpHandler := handlers.NewBranchProtectionHandler(deps.RepositoryRepo, deps.BranchProtectionRepo, deps.AuditSvc)
 	gitHandler := handlers.NewGitHandler(deps.RepositoryRepo, deps.RepositorySvc, deps.PushEventSvc)
 	planHandler := handlers.NewPlanHandler(deps.PlanRepo, deps.UserRepo, deps.AppRepo, deps.AuditSvc)
 	settingsHandler := handlers.NewSettingsHandler(deps.SettingsRepo, deps.AuditSvc)
@@ -191,6 +195,8 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Get("/repositories", repositoryHandler.List)
 			r.Post("/repositories", repositoryHandler.Create)
 			r.Post("/repositories/import", repositoryHandler.Import)
+			r.Get("/repositories/{id}", repositoryHandler.Get)
+			r.Patch("/repositories/{id}", repositoryHandler.Update)
 			r.Delete("/repositories/{id}", repositoryHandler.Delete)
 			r.Patch("/repositories/{id}/visibility", repositoryHandler.UpdateVisibility)
 			r.Get("/repositories/{id}/branches", repositoryHandler.ListBranches)
@@ -220,6 +226,31 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Get("/repositories/{id}/pulls/{number}/comments", prHandler.ListComments)
 			r.Post("/repositories/{id}/pulls/{number}/comments", prHandler.AddComment)
 			r.Delete("/repositories/{id}/pulls/{number}/comments/{commentId}", prHandler.DeleteComment)
+			r.Get("/repositories/{id}/pulls/{number}/reviews", prHandler.ListReviews)
+			r.Post("/repositories/{id}/pulls/{number}/reviews", prHandler.AddReview)
+			r.Get("/repositories/{id}/pulls/{number}/review-comments", prHandler.ListReviewComments)
+			r.Post("/repositories/{id}/pulls/{number}/review-comments", prHandler.AddReviewComment)
+			r.Patch("/repositories/{id}/pulls/{number}/review-comments/{commentId}", prHandler.ResolveReviewComment)
+			r.Delete("/repositories/{id}/pulls/{number}/review-comments/{commentId}", prHandler.DeleteReviewComment)
+			r.Get("/repositories/{id}/pulls/{number}/checks", prHandler.StatusChecks)
+
+			// Issues + labels
+			r.Get("/repositories/{id}/issues", issueHandler.List)
+			r.Post("/repositories/{id}/issues", issueHandler.Create)
+			r.Get("/repositories/{id}/issues/{number}", issueHandler.Get)
+			r.Patch("/repositories/{id}/issues/{number}", issueHandler.Update)
+			r.Post("/repositories/{id}/issues/{number}/status", issueHandler.SetStatus)
+			r.Get("/repositories/{id}/issues/{number}/comments", issueHandler.ListComments)
+			r.Post("/repositories/{id}/issues/{number}/comments", issueHandler.AddComment)
+			r.Delete("/repositories/{id}/issues/{number}/comments/{commentId}", issueHandler.DeleteComment)
+			r.Get("/repositories/{id}/labels", issueHandler.ListLabels)
+			r.Post("/repositories/{id}/labels", issueHandler.CreateLabel)
+			r.Delete("/repositories/{id}/labels/{labelId}", issueHandler.DeleteLabel)
+
+			// Branch protection
+			r.Get("/repositories/{id}/branch-protection", bpHandler.List)
+			r.Put("/repositories/{id}/branch-protection", bpHandler.Upsert)
+			r.Delete("/repositories/{id}/branch-protection/{branch}", bpHandler.Delete)
 
 			// Apps
 			r.Get("/apps/check-subdomain/{subdomain}", appHandler.CheckSubdomain)

@@ -24,6 +24,10 @@ import { PullRequests } from './pages/PullRequests';
 import { NewPullRequest } from './pages/NewPullRequest';
 import { PullRequestDetail } from './pages/PullRequestDetail';
 import { RepositoryCode } from './pages/RepositoryCode';
+import { RepositorySettings } from './pages/RepositorySettings';
+import { Issues } from './pages/Issues';
+import { NewIssue } from './pages/NewIssue';
+import { IssueDetail } from './pages/IssueDetail';
 import { RepositoryCommits } from './pages/RepositoryCommits';
 import { CommitDetail } from './pages/CommitDetail';
 import { RepositoryBranches } from './pages/RepositoryBranches';
@@ -77,6 +81,10 @@ export function App() {
         <Route path="repositories/:repoId/pulls" element={<PullRequests />} />
         <Route path="repositories/:repoId/pulls/new" element={<NewPullRequest />} />
         <Route path="repositories/:repoId/pulls/:number" element={<PullRequestDetail />} />
+        <Route path="repositories/:repoId/issues" element={<Issues />} />
+        <Route path="repositories/:repoId/issues/new" element={<NewIssue />} />
+        <Route path="repositories/:repoId/issues/:number" element={<IssueDetail />} />
+        <Route path="repositories/:repoId/settings" element={<RepositorySettings />} />
         <Route path="resources" element={<Resources />} />
         <Route path="resources/db/:serviceId" element={<DbExplorer />} />
         <Route path="resources/storage/:serviceId" element={<StorageExplorer />} />

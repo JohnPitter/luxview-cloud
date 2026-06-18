@@ -187,7 +187,12 @@ func (h *PullRequestHandler) Merge(w http.ResponseWriter, r *http.Request) {
 	}
 	user := middleware.GetUser(r.Context())
 
-	pr, err := h.prSvc.Merge(r.Context(), repo.ID, number, user.ID)
+	var req struct {
+		Strategy model.MergeStrategy `json:"strategy"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	pr, err := h.prSvc.Merge(r.Context(), repo.ID, number, user.ID, req.Strategy)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -282,6 +287,193 @@ func (h *PullRequestHandler) AddComment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusCreated, comment)
+}
+
+// Reviews
+
+// ListReviews GET /repositories/{id}/pulls/{number}/reviews
+func (h *PullRequestHandler) ListReviews(w http.ResponseWriter, r *http.Request) {
+	repo, ok := h.authorizeRepository(w, r)
+	if !ok {
+		return
+	}
+	number, ok := h.prNumber(w, r)
+	if !ok {
+		return
+	}
+	pr, err := h.prSvc.Get(r.Context(), repo.ID, number)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	reviews, err := h.prSvc.ListReviews(r.Context(), pr.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list reviews")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"reviews": reviews})
+}
+
+// AddReview POST /repositories/{id}/pulls/{number}/reviews
+func (h *PullRequestHandler) AddReview(w http.ResponseWriter, r *http.Request) {
+	repo, ok := h.authorizeRepository(w, r)
+	if !ok {
+		return
+	}
+	number, ok := h.prNumber(w, r)
+	if !ok {
+		return
+	}
+	user := middleware.GetUser(r.Context())
+
+	var req struct {
+		State model.ReviewState `json:"state"`
+		Body  string            `json:"body"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	review, err := h.prSvc.AddReview(r.Context(), repo.ID, number, user.ID, req.State, req.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if h.auditSvc != nil {
+		h.auditSvc.Log(r.Context(), service.AuditEntry{
+			ActorID: user.ID, ActorUsername: user.Username,
+			Action: "review", ResourceType: "pull_request",
+			ResourceID: review.PullRequestID.String(), ResourceName: string(req.State),
+			IPAddress: clientIP(r),
+		})
+	}
+	writeJSON(w, http.StatusCreated, review)
+}
+
+// ListReviewComments GET /repositories/{id}/pulls/{number}/review-comments
+func (h *PullRequestHandler) ListReviewComments(w http.ResponseWriter, r *http.Request) {
+	repo, ok := h.authorizeRepository(w, r)
+	if !ok {
+		return
+	}
+	number, ok := h.prNumber(w, r)
+	if !ok {
+		return
+	}
+	pr, err := h.prSvc.Get(r.Context(), repo.ID, number)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	comments, err := h.prSvc.ListReviewComments(r.Context(), pr.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list review comments")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"comments": comments})
+}
+
+// AddReviewComment POST /repositories/{id}/pulls/{number}/review-comments
+func (h *PullRequestHandler) AddReviewComment(w http.ResponseWriter, r *http.Request) {
+	repo, ok := h.authorizeRepository(w, r)
+	if !ok {
+		return
+	}
+	number, ok := h.prNumber(w, r)
+	if !ok {
+		return
+	}
+	user := middleware.GetUser(r.Context())
+	pr, err := h.prSvc.Get(r.Context(), repo.ID, number)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	var req struct {
+		Path string           `json:"path"`
+		Line int              `json:"line"`
+		Side model.ReviewSide `json:"side"`
+		Body string           `json:"body"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	comment, err := h.prSvc.AddReviewComment(r.Context(), pr.ID, user.ID, req.Path, req.Line, req.Side, req.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, comment)
+}
+
+// ResolveReviewComment PATCH /repositories/{id}/pulls/{number}/review-comments/{commentId}
+func (h *PullRequestHandler) ResolveReviewComment(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.authorizeRepository(w, r); !ok {
+		return
+	}
+	commentID, err := uuid.Parse(chi.URLParam(r, "commentId"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid comment ID")
+		return
+	}
+	var req struct {
+		Resolved bool `json:"resolved"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.prSvc.ResolveReviewComment(r.Context(), commentID, req.Resolved); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// DeleteReviewComment DELETE /repositories/{id}/pulls/{number}/review-comments/{commentId}
+func (h *PullRequestHandler) DeleteReviewComment(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.authorizeRepository(w, r); !ok {
+		return
+	}
+	user := middleware.GetUser(r.Context())
+	commentID, err := uuid.Parse(chi.URLParam(r, "commentId"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid comment ID")
+		return
+	}
+	if err := h.prSvc.DeleteReviewComment(r.Context(), commentID, user.ID); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// StatusChecks GET /repositories/{id}/pulls/{number}/checks
+func (h *PullRequestHandler) StatusChecks(w http.ResponseWriter, r *http.Request) {
+	repo, ok := h.authorizeRepository(w, r)
+	if !ok {
+		return
+	}
+	number, ok := h.prNumber(w, r)
+	if !ok {
+		return
+	}
+	pr, err := h.prSvc.Get(r.Context(), repo.ID, number)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	checks, err := h.prSvc.StatusChecks(r.Context(), repo.ID, pr.HeadSHA)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list status checks")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"checks": checks})
 }
 
 // DeleteComment DELETE /repositories/{id}/pulls/{number}/comments/{commentId}

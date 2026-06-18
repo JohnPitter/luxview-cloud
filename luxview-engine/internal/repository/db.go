@@ -444,6 +444,98 @@ func (db *DB) migrate(ctx context.Context) error {
 		`UPDATE game_server_configs
 		   SET volumes = '[{"name":"luxview-cloud_vrising-data","mount_path":"/vrising-data"},{"name":"luxview-cloud_vrising-server","mount_path":"/vrising-server"}]'::jsonb
 		 WHERE template_id = 'vrising' AND volumes = '[]'::jsonb`,
+
+		// Repository description (README/markdown surface)
+		`ALTER TABLE repositories ADD COLUMN IF NOT EXISTS description VARCHAR(500) NOT NULL DEFAULT ''`,
+
+		// Issues
+		`CREATE TABLE IF NOT EXISTS issues (
+			id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			repository_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+			author_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			number        INT NOT NULL,
+			title         VARCHAR(255) NOT NULL,
+			body          TEXT NOT NULL DEFAULT '',
+			status        VARCHAR(20) NOT NULL DEFAULT 'open',
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			closed_at     TIMESTAMPTZ,
+			UNIQUE(repository_id, number),
+			CONSTRAINT chk_issues_status CHECK (status IN ('open','closed'))
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_issues_repo_status ON issues(repository_id, status, created_at DESC)`,
+
+		`CREATE TABLE IF NOT EXISTS labels (
+			id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			repository_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+			name          VARCHAR(50) NOT NULL,
+			color         VARCHAR(7) NOT NULL DEFAULT '#6366f1',
+			description   VARCHAR(200) NOT NULL DEFAULT '',
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			UNIQUE(repository_id, name)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_labels_repo ON labels(repository_id)`,
+
+		`CREATE TABLE IF NOT EXISTS issue_labels (
+			issue_id UUID NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+			label_id UUID NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+			PRIMARY KEY (issue_id, label_id)
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS issue_comments (
+			id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			issue_id   UUID NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+			author_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			body       TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_issue_comments_issue ON issue_comments(issue_id, created_at ASC)`,
+
+		// Pull request reviews (approve / request changes / comment)
+		`CREATE TABLE IF NOT EXISTS pull_request_reviews (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			pull_request_id UUID NOT NULL REFERENCES pull_requests(id) ON DELETE CASCADE,
+			reviewer_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			state           VARCHAR(20) NOT NULL,
+			body            TEXT NOT NULL DEFAULT '',
+			commit_sha      VARCHAR(40) NOT NULL DEFAULT '',
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			CONSTRAINT chk_pr_review_state CHECK (state IN ('approved','changes_requested','commented'))
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_pr_reviews_pr ON pull_request_reviews(pull_request_id, created_at ASC)`,
+
+		// Inline review comments anchored to a file + line
+		`CREATE TABLE IF NOT EXISTS pull_request_review_comments (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			pull_request_id UUID NOT NULL REFERENCES pull_requests(id) ON DELETE CASCADE,
+			author_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			path            VARCHAR(1024) NOT NULL,
+			line            INT NOT NULL,
+			side            VARCHAR(10) NOT NULL DEFAULT 'new',
+			body            TEXT NOT NULL,
+			resolved        BOOLEAN NOT NULL DEFAULT false,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			CONSTRAINT chk_pr_review_comment_side CHECK (side IN ('old','new'))
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_pr_review_comments_pr ON pull_request_review_comments(pull_request_id, path)`,
+
+		// Branch protection rules
+		`CREATE TABLE IF NOT EXISTS branch_protection_rules (
+			id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			repository_id         UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+			branch                VARCHAR(100) NOT NULL,
+			require_reviews       BOOLEAN NOT NULL DEFAULT false,
+			required_approvals    INT NOT NULL DEFAULT 1,
+			dismiss_stale_reviews BOOLEAN NOT NULL DEFAULT false,
+			require_status_checks BOOLEAN NOT NULL DEFAULT false,
+			block_force_push      BOOLEAN NOT NULL DEFAULT true,
+			created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			UNIQUE(repository_id, branch)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_branch_protection_repo ON branch_protection_rules(repository_id)`,
 	}
 
 	for i, m := range migrations {
