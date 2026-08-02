@@ -13,18 +13,20 @@ import (
 // PushEventService processes a push to a LuxView-hosted repository.
 // It mirrors the GitHub webhook flow but uses the internal repository as source.
 type PushEventService struct {
-	appRepo    *repository.AppRepo
-	repoSvc    *RepositoryService
-	actionSvc  *ActionService
-	buildQueue chan<- DeployRequest
+	appRepo        *repository.AppRepo
+	repositoryRepo *repository.RepositoryRepo
+	repoSvc        *RepositoryService
+	actionSvc      *ActionService
+	buildQueue     chan<- DeployRequest
 }
 
-func NewPushEventService(appRepo *repository.AppRepo, repoSvc *RepositoryService, actionSvc *ActionService, buildQueue chan<- DeployRequest) *PushEventService {
+func NewPushEventService(appRepo *repository.AppRepo, repositoryRepo *repository.RepositoryRepo, repoSvc *RepositoryService, actionSvc *ActionService, buildQueue chan<- DeployRequest) *PushEventService {
 	return &PushEventService{
-		appRepo:    appRepo,
-		repoSvc:    repoSvc,
-		actionSvc:  actionSvc,
-		buildQueue: buildQueue,
+		appRepo:        appRepo,
+		repositoryRepo: repositoryRepo,
+		repoSvc:        repoSvc,
+		actionSvc:      actionSvc,
+		buildQueue:     buildQueue,
 	}
 }
 
@@ -86,14 +88,15 @@ func (s *PushEventService) HandlePush(ctx context.Context, repositoryID uuid.UUI
 
 	// Sync backup remotes in background — failure must not block the response.
 	go func() {
-		// Find the owner of this repository to get the GitHub token.
-		apps2, _, _ := s.appRepo.ListAll(context.Background(), 1000, 0)
-		for _, app := range apps2 {
-			if app.RepositoryID != nil && *app.RepositoryID == repositoryID {
-				s.repoSvc.SyncAllBackups(context.Background(), repositoryID, app.UserID)
-				return
-			}
+		if s.repositoryRepo == nil {
+			return
 		}
+		repo, err := s.repositoryRepo.FindByID(context.Background(), repositoryID)
+		if err != nil || repo == nil {
+			log.Warn().Err(err).Str("repo_id", repositoryID.String()).Msg("could not resolve repository owner for backup")
+			return
+		}
+		s.repoSvc.SyncAllBackups(context.Background(), repositoryID, repo.UserID)
 	}()
 
 	return nil

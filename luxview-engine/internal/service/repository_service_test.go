@@ -78,6 +78,18 @@ func (s *fakeRepositoryStore) UpdateRemoteSyncStatus(_ context.Context, remoteID
 	return nil
 }
 
+func (s *fakeRepositoryStore) MarkBackupsPending(_ context.Context, repositoryID uuid.UUID) error {
+	for i, remote := range s.remotes {
+		if remote.RepositoryID != repositoryID {
+			continue
+		}
+		status := model.RepositorySyncStatusPending
+		s.remotes[i].LastSyncStatus = &status
+		s.remotes[i].LastSyncError = ""
+	}
+	return nil
+}
+
 func TestRepositoryServiceCreateInitializesBareRepo(t *testing.T) {
 	ctx := context.Background()
 	store := newFakeRepositoryStore()
@@ -161,6 +173,80 @@ func TestRepositoryServiceListBranchesResolveRefAndCheckout(t *testing.T) {
 	normalizedContent := strings.ReplaceAll(string(content), "\r\n", "\n")
 	if normalizedContent != "feature\n" {
 		t.Fatalf("checkout README = %q, want feature", string(content))
+	}
+}
+
+func TestRepositoryServiceReceiveHookEnforcesProtectedBranches(t *testing.T) {
+	ctx := context.Background()
+	store := newFakeRepositoryStore()
+	baseDir, err := os.MkdirTemp("", "lvh-")
+	if err != nil {
+		t.Fatalf("create short temp directory: %v", err)
+	}
+	defer os.RemoveAll(baseDir)
+	svc := NewRepositoryService(store, baseDir)
+	repo, err := svc.Create(ctx, CreateRepositoryRequest{UserID: uuid.New(), Name: "protected-repo"})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	seedRepository(t, ctx, repo.StoragePath)
+
+	rule := []model.BranchProtectionRule{{
+		Branch:              "main",
+		RequireReviews:      true,
+		RequiredApprovals:   1,
+		RequireStatusChecks: true,
+		BlockForcePush:      true,
+	}}
+	if err := svc.EnsureReceiveHook(ctx, repo.ID, rule); err != nil {
+		t.Fatalf("EnsureReceiveHook() error = %v", err)
+	}
+	if err := svc.EnsureReceiveHook(ctx, repo.ID, rule); err != nil {
+		t.Fatalf("EnsureReceiveHook() second call error = %v", err)
+	}
+
+	worktree, err := os.MkdirTemp("", "lvw-")
+	if err != nil {
+		t.Fatalf("create short worktree: %v", err)
+	}
+	defer os.RemoveAll(worktree)
+	if err := runGit(ctx, "", "clone", repo.StoragePath, worktree); err != nil {
+		t.Fatalf("clone protected repository: %v", err)
+	}
+	if err := runGit(ctx, worktree, "config", "user.email", "test@luxview.local"); err != nil {
+		t.Fatalf("configure email: %v", err)
+	}
+	if err := runGit(ctx, worktree, "config", "user.name", "LuxView Test"); err != nil {
+		t.Fatalf("configure name: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(worktree, "protected.txt"), []byte("blocked\n"), 0644); err != nil {
+		t.Fatalf("write protected file: %v", err)
+	}
+	if err := runGit(ctx, worktree, "add", "protected.txt"); err != nil {
+		t.Fatalf("stage protected file: %v", err)
+	}
+	if err := runGit(ctx, worktree, "commit", "-m", "direct push"); err != nil {
+		t.Fatalf("commit protected file: %v", err)
+	}
+	if err := runGit(ctx, worktree, "push", "origin", "main"); err == nil {
+		t.Fatal("expected direct push to protected branch to fail")
+	}
+	if err := runGitWithEnv(ctx, worktree, map[string]string{"LUXVIEW_INTERNAL_MERGE": "1"}, "push", "origin", "main"); err != nil {
+		t.Fatalf("internal merge push: %v", err)
+	}
+}
+
+func TestRepositoryServiceRedactsRemoteCredentials(t *testing.T) {
+	redacted := redactGitOutput("fatal: unable to access https://ghp_secret@github.com/acme/repo.git")
+	if strings.Contains(redacted, "ghp_secret") || !strings.Contains(redacted, "https://***@github.com") {
+		t.Fatalf("redacted output = %q", redacted)
+	}
+}
+
+func TestGitObjectStorageBytes(t *testing.T) {
+	output := "count: 2\nsize: 4\nin-pack: 1\npacks: 1\nsize-pack: 8\nsize-garbage: 1\n"
+	if got, want := gitObjectStorageBytes(output), int64(13*1024); got != want {
+		t.Fatalf("gitObjectStorageBytes() = %d, want %d", got, want)
 	}
 }
 

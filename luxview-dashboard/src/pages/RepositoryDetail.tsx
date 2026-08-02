@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Rocket, Copy, Check, Trash2, GitPullRequest, FileCode2, GitCommit, GitBranch, Tag, Globe, Lock, CircleDot, Settings, Pencil, BookText } from 'lucide-react';
+import { ArrowLeft, Rocket, Copy, Check, Trash2, GitPullRequest, FileCode2, GitCommit, GitBranch, Tag, Globe, Lock, CircleDot, Settings, Pencil, BookText, KeyRound, Loader2 } from 'lucide-react';
 import { PillButton } from '../components/common/PillButton';
 import { GlassCard } from '../components/common/GlassCard';
 import { Markdown } from '../components/common/Markdown';
 import { RepositoryBackupPanel } from '../components/repositories/RepositoryBackupPanel';
 import { useThemeStore } from '../stores/theme.store';
 import { useNotificationsStore } from '../stores/notifications.store';
-import { repositoriesApi, type LuxViewRepository } from '../api/repositories';
+import { repositoriesApi, type GitCredential, type LuxViewRepository } from '../api/repositories';
 import { gitApi } from '../api/git';
 
 export function RepositoryDetail() {
@@ -27,6 +27,8 @@ export function RepositoryDetail() {
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [savingInfo, setSavingInfo] = useState(false);
+  const [gitCredential, setGitCredential] = useState<GitCredential | null>(null);
+  const [creatingGitCredential, setCreatingGitCredential] = useState(false);
 
   async function handleSaveInfo() {
     if (!repoId) return;
@@ -76,6 +78,18 @@ export function RepositoryDetail() {
     navigator.clipboard.writeText(text);
     setCopied(key);
     setTimeout(() => setCopied(null), 2000);
+  }
+
+  async function handleCreateGitCredential() {
+    setCreatingGitCredential(true);
+    try {
+      setGitCredential(await repositoriesApi.createGitCredential());
+      addNotification({ type: 'success', title: t('repo.detail.credentialCreated') });
+    } catch {
+      addNotification({ type: 'error', title: t('repo.detail.credentialFailed') });
+    } finally {
+      setCreatingGitCredential(false);
+    }
   }
 
   useEffect(() => {
@@ -173,9 +187,12 @@ export function RepositoryDetail() {
 
       {repo && (() => {
         const cloneUrl = `${window.location.origin}/git/${repo.ownerUsername}/${repo.slug}.git`;
+        const authenticatedCloneUrl = gitCredential
+          ? `https://${gitCredential.username}@${window.location.host}/git/${repo.ownerUsername}/${repo.slug}.git`
+          : cloneUrl;
         const commands = [
-          { key: 'clone', label: t('repo.detail.clone'), cmd: `git clone ${cloneUrl}` },
-          { key: 'remote', label: t('repo.detail.addRemote'), cmd: `git remote add origin ${cloneUrl}` },
+          { key: 'clone', label: t('repo.detail.clone'), cmd: `git clone ${authenticatedCloneUrl}` },
+          { key: 'remote', label: t('repo.detail.addRemote'), cmd: `git remote add origin ${authenticatedCloneUrl}` },
           { key: 'push', label: t('repo.detail.push'), cmd: `git push -u origin ${repo.defaultBranch}` },
         ];
         return (
@@ -183,6 +200,29 @@ export function RepositoryDetail() {
             <p className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
               {t('repo.detail.cloneTitle')}
             </p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-zinc-500">{t('repo.detail.credentialHint')}</p>
+              <PillButton
+                variant="ghost"
+                size="sm"
+                icon={creatingGitCredential ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />}
+                onClick={handleCreateGitCredential}
+                disabled={creatingGitCredential}
+              >
+                {t('repo.detail.createCredential')}
+              </PillButton>
+            </div>
+            {gitCredential && (
+              <div className={`rounded-lg border p-3 space-y-2 ${isDark ? 'border-amber-400/20 bg-amber-400/5' : 'border-amber-200 bg-amber-50'}`}>
+                <p className="text-xs text-zinc-500">{t('repo.detail.credentialPassword')}</p>
+                <div className="flex items-center gap-2 font-mono text-xs">
+                  <span className="flex-1 truncate">{gitCredential.token}</span>
+                  <button onClick={() => copyToClipboard(gitCredential.token, 'credential')} className="text-zinc-500 hover:text-zinc-300">
+                    {copied === 'credential' ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                  </button>
+                </div>
+              </div>
+            )}
             {commands.map(({ key, label, cmd }) => (
               <div key={key}>
                 <p className="text-xs text-zinc-500 mb-1">{label}</p>

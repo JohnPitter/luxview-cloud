@@ -30,6 +30,14 @@ GET /auth/me
 
 Returns the authenticated user's profile, including their plan.
 
+### Generate Git Credential
+
+```
+GET /auth/git-token
+```
+
+Returns a 24-hour JWT credential for Git HTTP Basic authentication. Use the returned `username` in the clone URL and the `token` as the Git password. The token is never stored by LuxView.
+
 **Response:**
 
 ```json

@@ -68,6 +68,12 @@ func (s *PullRequestService) Create(ctx context.Context, req CreatePRRequest) (*
 	if err != nil {
 		return nil, err
 	}
+	if err := validateGitBranchSyntax(req.HeadBranch); err != nil {
+		return nil, fmt.Errorf("invalid head branch")
+	}
+	if err := validateGitBranchSyntax(req.BaseBranch); err != nil {
+		return nil, fmt.Errorf("invalid base branch")
+	}
 
 	// Verify both branches exist
 	headSHA, err := gitOutput(ctx, repo.StoragePath, "rev-parse", req.HeadBranch)
@@ -279,7 +285,7 @@ func (s *PullRequestService) Merge(ctx context.Context, repositoryID uuid.UUID, 
 	}
 
 	// Push result back to the bare repo
-	if err := runGit(ctx, tmpDir, "push", "origin", pr.BaseBranch); err != nil {
+	if err := runGitWithEnv(ctx, tmpDir, map[string]string{"LUXVIEW_INTERNAL_MERGE": "1"}, "push", "origin", pr.BaseBranch); err != nil {
 		return nil, fmt.Errorf("push merge: %w", err)
 	}
 

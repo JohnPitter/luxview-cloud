@@ -174,7 +174,13 @@ Run a database backup:
 make backup
 ```
 
-This executes `scripts/backup.sh`, which dumps all databases to `/backups/`.
+This executes `scripts/backup.sh`, which dumps all databases and the hosted Git repositories to `/backups/`.
+
+To restore hosted repositories, first stop Git writes and run:
+
+```bash
+CONFIRM_RESTORE=YES scripts/restore-repositories.sh /backups/repositories_<timestamp>.tar.gz
+```
 
 ## Useful Commands
 

@@ -76,6 +76,7 @@ func main() {
 	provisioner := service.NewProvisioner(serviceRepo, mailboxRepo, cfg, encryptionKey)
 	routerSvc := service.NewRouterService(appRepo, cfg.Domain)
 	repositorySvc := service.NewRepositoryService(repositoryRepo, cfg.RepositoryBasePath)
+	repositorySvc.WithMaxRepositoryBytes(cfg.RepositoryMaxBytes)
 	// Backup support is wired after githubAppSvc is initialised below.
 	sourceCheckout := service.NewAppSourceCheckout(
 		service.NewGitHubSourceCheckout(userRepo, encryptionKey, "source-checkout"),
@@ -103,7 +104,9 @@ func main() {
 
 	actionSvc := service.NewActionService(actionRepo, appRepo, sourceCheckout, buildQueue, cfg.ActionArtifactsDir)
 	webhookSvc := service.NewWebhookService(appRepo, buildQueue, actionSvc)
-	pushEventSvc := service.NewPushEventService(appRepo, repositorySvc, actionSvc, buildQueue)
+	pushEventSvc := service.NewPushEventService(appRepo, repositoryRepo, repositorySvc, actionSvc, buildQueue)
+	repositoryBackupWorker := worker.NewRepositoryBackupWorker(repositoryRepo, repositorySvc)
+	go repositoryBackupWorker.Start(ctx)
 	pullRequestRepo := repository.NewPullRequestRepo(db)
 	branchProtectionRepo := repository.NewBranchProtectionRepo(db)
 	pullRequestSvc := service.NewPullRequestService(pullRequestRepo, repositorySvc, branchProtectionRepo)
@@ -170,39 +173,39 @@ func main() {
 
 	// Router
 	router := api.NewRouter(api.Deps{
-		Config:         cfg,
-		UserRepo:       userRepo,
-		RepositoryRepo: repositoryRepo,
-		AppRepo:        appRepo,
-		DeployRepo:     deployRepo,
-		ActionRepo:     actionRepo,
-		ServiceRepo:    serviceRepo,
-		MetricRepo:     metricRepo,
-		AlertRepo:      alertRepo,
-		PlanRepo:       planRepo,
-		Container:      containerMgr,
-		Provisioner:    provisioner,
-		Router:         routerSvc,
-		WebhookSvc:     webhookSvc,
-		ActionSvc:      actionSvc,
-		PushEventSvc:   pushEventSvc,
-		RepositorySvc:  repositorySvc,
-		GitHubAppSvc:   githubAppSvc,
-		BuildQueue:     buildQueue,
-		EncryptKey:     encryptionKey,
-		SettingsRepo:   settingsRepo,
-		Docker:         docker,
-		AuditRepo:      auditRepo,
-		AuditSvc:       auditSvc,
-		PageviewRepo:   pageviewRepo,
-		MailboxRepo:    mailboxRepo,
-		BackupSvc:       backupSvc,
-		PullRequestRepo: pullRequestRepo,
-		PullRequestSvc:  pullRequestSvc,
+		Config:               cfg,
+		UserRepo:             userRepo,
+		RepositoryRepo:       repositoryRepo,
+		AppRepo:              appRepo,
+		DeployRepo:           deployRepo,
+		ActionRepo:           actionRepo,
+		ServiceRepo:          serviceRepo,
+		MetricRepo:           metricRepo,
+		AlertRepo:            alertRepo,
+		PlanRepo:             planRepo,
+		Container:            containerMgr,
+		Provisioner:          provisioner,
+		Router:               routerSvc,
+		WebhookSvc:           webhookSvc,
+		ActionSvc:            actionSvc,
+		PushEventSvc:         pushEventSvc,
+		RepositorySvc:        repositorySvc,
+		GitHubAppSvc:         githubAppSvc,
+		BuildQueue:           buildQueue,
+		EncryptKey:           encryptionKey,
+		SettingsRepo:         settingsRepo,
+		Docker:               docker,
+		AuditRepo:            auditRepo,
+		AuditSvc:             auditSvc,
+		PageviewRepo:         pageviewRepo,
+		MailboxRepo:          mailboxRepo,
+		BackupSvc:            backupSvc,
+		PullRequestRepo:      pullRequestRepo,
+		PullRequestSvc:       pullRequestSvc,
 		IssueSvc:             issueSvc,
 		BranchProtectionRepo: branchProtectionRepo,
-		GameConfigRepo:  gameConfigRepo,
-		GameServerSvc:   gameServerSvc,
+		GameConfigRepo:       gameConfigRepo,
+		GameServerSvc:        gameServerSvc,
 	})
 
 	// HTTP server

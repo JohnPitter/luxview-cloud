@@ -132,13 +132,13 @@ func (h *AuthHandler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 	})
 
 	h.auditSvc.Log(ctx, service.AuditEntry{
-		ActorID:      user.ID,
+		ActorID:       user.ID,
 		ActorUsername: user.Username,
-		Action:       "login",
-		ResourceType: "user",
-		ResourceID:   user.ID.String(),
-		ResourceName: user.Username,
-		IPAddress:    clientIP(r),
+		Action:        "login",
+		ResourceType:  "user",
+		ResourceID:    user.ID.String(),
+		ResourceName:  user.Username,
+		IPAddress:     clientIP(r),
 	})
 
 	log.Info().Str("user", user.Username).Msg("user authenticated")
@@ -205,4 +205,24 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	user.LastLoginAt = &now
 
 	writeJSON(w, http.StatusOK, user.ToResponse())
+}
+
+// GitToken creates a short-lived JWT suitable for Git HTTP Basic authentication.
+func (h *AuthHandler) GitToken(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	token, err := middleware.GenerateJWT(user.ID, user.Role, h.cfg.JWTSecret)
+	if err != nil {
+		log := logger.With("auth")
+		log.Error().Err(err).Str("user", user.Username).Msg("failed to generate Git credential")
+		writeError(w, http.StatusInternalServerError, "failed to generate Git credential")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"username": user.Username,
+		"token":    token,
+	})
 }

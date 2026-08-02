@@ -14,6 +14,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BACKUP_DIR="/backups"
+REPOSITORY_DIR="${REPOSITORY_BASE_PATH:-/data/luxview/repositories}"
 RETENTION_DAYS=30
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 COMPOSE="docker compose"
@@ -64,7 +65,17 @@ docker cp luxview-redis-shared:/data/appendonlydir "$BACKUP_DIR/redis-shared_${T
     log "  WARNING: Could not copy Redis data file."
 log "  -> Redis backup saved."
 
-# -- 5. Cleanup old backups ---------------------------------------------------
+# -- 5. Hosted Git repositories -----------------------------------------------
+if [[ -d "$REPOSITORY_DIR" ]]; then
+    REPOSITORIES_FILE="$BACKUP_DIR/repositories_${TIMESTAMP}.tar.gz"
+    tar -C "$(dirname "$REPOSITORY_DIR")" -czf "$REPOSITORIES_FILE" "$(basename "$REPOSITORY_DIR")"
+    log "Backing up hosted repositories..."
+    log "  -> $REPOSITORIES_FILE ($(du -h "$REPOSITORIES_FILE" | cut -f1))"
+else
+    log "WARNING: hosted repository directory not found: $REPOSITORY_DIR"
+fi
+
+# -- 6. Cleanup old backups ---------------------------------------------------
 log "Cleaning backups older than ${RETENTION_DAYS} days..."
 DELETED=$(find "$BACKUP_DIR" -type f -mtime "+$RETENTION_DAYS" -print -delete | wc -l)
 DELETED_DIRS=$(find "$BACKUP_DIR" -type d -mtime "+$RETENTION_DAYS" -empty -print -delete 2>/dev/null | wc -l)
