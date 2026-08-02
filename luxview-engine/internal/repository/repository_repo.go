@@ -13,6 +13,12 @@ type RepositoryRepo struct {
 	db *DB
 }
 
+type PendingBackupTarget struct {
+	RepositoryID uuid.UUID
+	RemoteID     uuid.UUID
+	UserID       uuid.UUID
+}
+
 func NewRepositoryRepo(db *DB) *RepositoryRepo {
 	return &RepositoryRepo{db: db}
 }
@@ -183,4 +189,42 @@ func (r *RepositoryRepo) UpdateRemoteSyncStatus(ctx context.Context, remoteID uu
 		return fmt.Errorf("update repository remote sync status: %w", err)
 	}
 	return nil
+}
+
+func (r *RepositoryRepo) MarkBackupsPending(ctx context.Context, repositoryID uuid.UUID) error {
+	_, err := r.db.Pool.Exec(ctx,
+		`UPDATE repository_remotes
+		 SET last_sync_status = 'pending', last_sync_error = ''
+		 WHERE repository_id = $1`, repositoryID)
+	if err != nil {
+		return fmt.Errorf("mark repository backups pending: %w", err)
+	}
+	return nil
+}
+
+func (r *RepositoryRepo) ListPendingBackupTargets(ctx context.Context, limit int) ([]PendingBackupTarget, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 100
+	}
+	rows, err := r.db.Pool.Query(ctx,
+		`SELECT rr.repository_id, rr.id, r.user_id
+		 FROM repository_remotes rr
+		 JOIN repositories r ON r.id = rr.repository_id
+		 WHERE rr.last_sync_status = 'pending'
+		 ORDER BY rr.created_at ASC
+		 LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list pending repository backups: %w", err)
+	}
+	defer rows.Close()
+
+	var targets []PendingBackupTarget
+	for rows.Next() {
+		var target PendingBackupTarget
+		if err := rows.Scan(&target.RepositoryID, &target.RemoteID, &target.UserID); err != nil {
+			return nil, fmt.Errorf("scan pending repository backup: %w", err)
+		}
+		targets = append(targets, target)
+	}
+	return targets, nil
 }

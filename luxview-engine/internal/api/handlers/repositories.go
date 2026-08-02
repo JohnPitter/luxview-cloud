@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -295,8 +296,9 @@ func (h *RepositoryHandler) SyncRemote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log := logger.With("repository.sync-remote")
+	syncCtx := context.WithoutCancel(ctx)
 	go func() {
-		if err := h.repositorySvc.SyncBackup(ctx, repo.ID, remoteID, userID); err != nil {
+		if err := h.repositorySvc.SyncBackup(syncCtx, repo.ID, remoteID, userID); err != nil {
 			log.Warn().Err(err).Str("repo", repo.Slug).Str("remote_id", remoteID.String()).Msg("sync failed")
 		}
 	}()

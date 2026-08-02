@@ -82,6 +82,10 @@ func (h *BranchProtectionHandler) Upsert(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "branch is required")
 		return
 	}
+	if err := service.ValidateGitBranchName(branch); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if req.RequiredApprovals < 1 {
 		req.RequiredApprovals = 1
 	}

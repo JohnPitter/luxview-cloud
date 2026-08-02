@@ -16,33 +16,33 @@ import (
 
 // Deps holds all dependencies needed to set up the router.
 type Deps struct {
-	Config          *config.Config
-	UserRepo        *repository.UserRepo
-	RepositoryRepo  *repository.RepositoryRepo
-	AppRepo         *repository.AppRepo
-	DeployRepo      *repository.DeploymentRepo
-	ActionRepo      *repository.ActionRepo
-	ServiceRepo     *repository.ServiceRepo
-	MetricRepo      *repository.MetricRepo
-	AlertRepo       *repository.AlertRepo
-	Container       *service.ContainerManager
-	Provisioner     *service.Provisioner
-	Router          *service.RouterService
-	WebhookSvc      *service.WebhookService
-	ActionSvc       *service.ActionService
-	RepositorySvc   *service.RepositoryService
-	GitHubAppSvc    *service.GitHubAppService
-	BuildQueue      chan<- service.DeployRequest
-	EncryptKey      []byte
-	PlanRepo        *repository.PlanRepo
-	SettingsRepo    *repository.SettingsRepo
-	Docker          *dockerclient.Client
-	AuditRepo       *repository.AuditLogRepo
-	AuditSvc        *service.AuditService
-	PageviewRepo    *repository.PageviewRepo
-	MailboxRepo     *repository.MailboxRepo
-	BackupSvc       *service.BackupService
-	PushEventSvc    *service.PushEventService
+	Config               *config.Config
+	UserRepo             *repository.UserRepo
+	RepositoryRepo       *repository.RepositoryRepo
+	AppRepo              *repository.AppRepo
+	DeployRepo           *repository.DeploymentRepo
+	ActionRepo           *repository.ActionRepo
+	ServiceRepo          *repository.ServiceRepo
+	MetricRepo           *repository.MetricRepo
+	AlertRepo            *repository.AlertRepo
+	Container            *service.ContainerManager
+	Provisioner          *service.Provisioner
+	Router               *service.RouterService
+	WebhookSvc           *service.WebhookService
+	ActionSvc            *service.ActionService
+	RepositorySvc        *service.RepositoryService
+	GitHubAppSvc         *service.GitHubAppService
+	BuildQueue           chan<- service.DeployRequest
+	EncryptKey           []byte
+	PlanRepo             *repository.PlanRepo
+	SettingsRepo         *repository.SettingsRepo
+	Docker               *dockerclient.Client
+	AuditRepo            *repository.AuditLogRepo
+	AuditSvc             *service.AuditService
+	PageviewRepo         *repository.PageviewRepo
+	MailboxRepo          *repository.MailboxRepo
+	BackupSvc            *service.BackupService
+	PushEventSvc         *service.PushEventService
 	PullRequestRepo      *repository.PullRequestRepo
 	PullRequestSvc       *service.PullRequestService
 	IssueSvc             *service.IssueService
@@ -67,9 +67,6 @@ func NewRouter(deps Deps) *chi.Mux {
 	}))
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.RequestLogger)
-
-	// Request body size limit: 1MB (CWE-770)
-	r.Use(middleware.BodySizeLimit(1 << 20))
 
 	// Rate limiter: 20 req/s with burst of 40
 	rl := middleware.NewRateLimiter(20, 40)
@@ -100,7 +97,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	prHandler := handlers.NewPullRequestHandler(deps.RepositoryRepo, deps.PullRequestSvc, deps.AuditSvc)
 	issueHandler := handlers.NewIssueHandler(deps.RepositoryRepo, deps.IssueSvc, deps.AuditSvc)
 	bpHandler := handlers.NewBranchProtectionHandler(deps.RepositoryRepo, deps.BranchProtectionRepo, deps.AuditSvc)
-	gitHandler := handlers.NewGitHandler(deps.RepositoryRepo, deps.RepositorySvc, deps.PushEventSvc)
+	gitHandler := handlers.NewGitHandler(deps.RepositoryRepo, deps.BranchProtectionRepo, deps.RepositorySvc, deps.PushEventSvc)
 	planHandler := handlers.NewPlanHandler(deps.PlanRepo, deps.UserRepo, deps.AppRepo, deps.AuditSvc)
 	settingsHandler := handlers.NewSettingsHandler(deps.SettingsRepo, deps.AuditSvc)
 	analyzeHandler := handlers.NewAnalyzeHandler(deps.AppRepo, deps.UserRepo, deps.DeployRepo, deps.SettingsRepo, deps.ServiceRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)
@@ -133,6 +130,9 @@ func NewRouter(deps Deps) *chi.Mux {
 	})
 
 	r.Route("/api", func(r chi.Router) {
+		// API JSON endpoints are intentionally limited; Git HTTP has its own 512 MB limit.
+		r.Use(middleware.BodySizeLimit(1 << 20))
+
 		// Health check (public, for status page)
 		r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -179,6 +179,7 @@ func NewRouter(deps Deps) *chi.Mux {
 
 			// User
 			r.Get("/auth/me", authHandler.Me)
+			r.Get("/auth/git-token", authHandler.GitToken)
 
 			// GitHub App install (authenticated redirect + callback)
 			r.Get("/auth/github/app/install", authHandler.GitHubAppInstallRedirect)

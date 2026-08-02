@@ -213,50 +213,6 @@ flowchart LR
 
 ---
 
-## CI/CD Pipeline
-
-Every push to `main` runs through an automated pipeline with **3 sequential stages**:
-
-```mermaid
-flowchart LR
-    subgraph "Stage 1: Frontend"
-        FB[Typecheck + Build]
-        FS[Security Audit]
-    end
-
-    subgraph "Stage 2: Backend"
-        BB[Vet + Build]
-        BS[govulncheck]
-    end
-
-    subgraph "Stage 3: Deploy"
-        D[SSH → VPS<br/>docker compose up]
-    end
-
-    FB --> BB
-    FS --> BB
-    FB --> BS
-    FS --> BS
-    BB --> D
-    BS --> D
-
-    style FB fill:#61DAFB,color:#000,stroke:none
-    style FS fill:#61DAFB,color:#000,stroke:none
-    style BB fill:#00ADD8,color:#fff,stroke:none
-    style BS fill:#00ADD8,color:#fff,stroke:none
-    style D fill:#10B981,color:#fff,stroke:none
-```
-
-| Stage | Jobs | What it validates |
-|---|---|---|
-| **Frontend** | `tsc -b`, `vite build`, `npm audit` | Type safety, build integrity, dependency security |
-| **Backend** | `go vet`, `go build`, `govulncheck` | Code correctness, compilation, vulnerability scan |
-| **Deploy** | SSH into VPS, `git pull`, `docker compose up --build` | Automated deployment (only on `push`, skipped for PRs) |
-
-Pull requests run Stages 1 and 2 only (no deploy).
-
----
-
 ## Service Provisioning
 
 When you add a service to your app, LuxView automatically:
@@ -317,8 +273,10 @@ LuxView includes a built-in **self-hosted Git server** — no Gitea or GitLab re
 
 - **Repository browser** — navigate the file tree, view file contents, commit history, branches, and tags from the dashboard
 - **Pull Requests** — open, review, diff, and merge PRs entirely within the platform
-- **Push/pull via HTTP** — standard `git clone https://luxview.cloud/git/<repo>.git`
+- **Push/pull via HTTP** — standard `git clone https://luxview.cloud/git/<username>/<repo>.git`; private repositories use a temporary Git credential generated in the dashboard
 - **Visibility control** — toggle repositories between public and private
+- **Branch protection** — direct pushes to protected branches are rejected by the server-side receive hook
+- **Repository backups** — hosted repositories are included in the VPS backup archive and can be restored with `scripts/restore-repositories.sh`
 
 ---
 
@@ -405,107 +363,6 @@ make prod && make migrate
 
 ---
 
-## Tech Stack
-
-<div align="center">
-
-| Layer | Technology |
-|:---:|:---:|
-| **Proxy** | Traefik v3 (SSL, routing, middleware) |
-| **Backend** | Go 1.26, Chi router, pgx, Docker SDK |
-| **Frontend** | React 19, TypeScript 5, Vite, Tailwind CSS, Zustand, react-i18next, react-joyride |
-| **Database** | PostgreSQL 16 |
-| **Storage** | Local volumes (Docker-managed) |
-| **Email** | docker-mailserver + Roundcube |
-| **Containers** | Docker Engine API |
-| **Auth** | GitHub OAuth + JWT |
-| **Encryption** | AES-256-GCM (credentials at rest) |
-| **CI/CD** | GitHub Actions (build → security → deploy) |
-| **Observability** | Structured logging (zerolog), real-time metrics, audit logs, analytics |
-| **Game Servers** | Go service + Docker (V Rising) |
-
-</div>
-
----
-
-## Project Structure
-
-```
-luxview-cloud/
-  .github/workflows/pipeline.yml  # CI/CD: build, security scan, deploy
-  docker-compose.yml              # Production compose
-  docker-compose.dev.yml          # Development override
-  Makefile                        # Common commands
-
-  luxview-engine/                 # Go API backend
-    cmd/engine/main.go            # Entry point + worker orchestration
-    internal/
-      api/                        # HTTP handlers + middleware + router
-        handlers/
-          apps.go                 # App CRUD + deploy/rollback
-          deployments.go          # Deployment history + logs
-          services.go             # Service provisioning
-          db_explorer.go          # DB Explorer + Storage explorer endpoints
-          git.go                  # Git HTTP backend (push/pull)
-          git_explorer.go         # Repository browser (tree, file, log, branches, tags)
-          pull_requests.go        # Pull request lifecycle
-          actions.go              # GitHub Actions integration
-          analytics.go            # Page view + GeoIP analytics
-          audit_handler.go        # Audit log endpoints
-          backup_handler.go       # Backup + restore endpoints
-          repositories.go         # Hosted repository management
-          settings_handler.go     # Platform settings (maintenance mode, etc.)
-          metrics.go              # Container metrics (SSE)
-      buildpack/                  # Stack detection (node, python, go, rust, java, docker, static)
-      config/                     # Environment config loader
-      model/                      # Domain models (App, Deployment, Service, Alert, Metric, Repository, PullRequest...)
-      repository/                 # PostgreSQL data access layer
-      service/                    # Business logic (deployer, container, provisioner, health, metrics, git, backup...)
-      worker/                     # Background workers (build, metrics, health, alerts, cleanup, stale deploys, backups, analytics)
-    pkg/                          # Shared packages (crypto, docker client, logger)
-    migrations/                   # SQL migration files
-
-  luxview-dashboard/              # React SPA frontend
-    src/
-      api/                        # API client layer (apps, services, deployments, metrics, git, analytics...)
-      components/                 # UI components (apps, deploy, monitoring, services, layout, common)
-      hooks/                      # Custom React hooks
-      i18n/                       # Internationalization setup + locale files (en, pt-BR, es)
-      lib/                        # Utility functions
-      pages/
-        Landing.tsx               # Public landing page with feature toggles
-        Dashboard.tsx             # Main dashboard overview
-        AppDetail.tsx             # Per-app management (deploy, metrics, logs, services)
-        DbExplorer.tsx            # SQL editor + table browser + schema viewer
-        StorageExplorer.tsx       # Storage explorer (upload, download, delete)
-        EmailManager.tsx          # Email service management
-        Repositories.tsx          # Hosted repository list
-        RepositoryDetail.tsx      # Repository overview (visibility toggle)
-        RepositoryCode.tsx        # File tree + code viewer
-        RepositoryCommits.tsx     # Commit history
-        RepositoryBranches.tsx    # Branch management
-        RepositoryTags.tsx        # Tag list
-        PullRequests.tsx          # Pull request list
-        PullRequestDetail.tsx     # PR diff + review + merge
-        Analytics.tsx             # Platform analytics dashboard
-        Backups.tsx               # Backup management
-        Resources.tsx             # Resource overview (all services across apps)
-        Admin.tsx                 # Admin panel
-        Status.tsx                # Platform status page
-      stores/                     # Zustand state management
-      tours/                      # Interactive guided tour step definitions per page
-
-  luxview-games/                  # Game server management API (Go)
-    main.go                       # Games API + Docker management
-    games/vrising/                # V Rising server config + entrypoint
-
-  traefik/                        # Traefik configuration
-  scripts/                        # VPS setup, deploy, backup scripts
-  docs/                           # Runbooks and internal documentation
-```
-
----
-
 ## Environment Variables
 
 | Variable | Description | Required |
@@ -522,25 +379,11 @@ luxview-cloud/
 | `SHARED_RABBITMQ_PASSWORD` | Shared RabbitMQ password | Yes |
 | `ACME_EMAIL` | Let's Encrypt email | Production |
 | `REPOSITORY_BASE_PATH` | LuxView-hosted Git repository storage path (default: `/data/luxview/repositories`) | No |
+| `REPOSITORY_MAX_BYTES` | Maximum size of one hosted Git repository in bytes (default: `10737418240`) | No |
 | `BUILD_CONCURRENCY` | Max concurrent builds (default: `3`) | No |
 | `LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` | No |
 
 ---
-
-## Make Commands
-
-| Command | Description |
-|---|---|
-| `make dev` | Start dev environment with hot reload |
-| `make prod` | Start production (detached) |
-| `make build` | Build all Docker images |
-| `make logs` | Follow all service logs |
-| `make migrate` | Run SQL migrations |
-| `make status` | Show running containers |
-| `make backup` | Backup all databases |
-| `make clean` | Stop & remove everything |
-| `make psql` | Connect to platform database |
-| `make shell SVC=engine` | Shell into a container |
 
 ---
 

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http"
 	"strings"
 	"time"
@@ -22,7 +23,7 @@ const (
 
 // JWTClaims holds the custom JWT claims.
 type JWTClaims struct {
-	UserID string    `json:"user_id"`
+	UserID string         `json:"user_id"`
 	Role   model.UserRole `json:"role"`
 	jwt.RegisteredClaims
 }
@@ -183,6 +184,15 @@ func extractToken(r *http.Request) string {
 	auth := r.Header.Get("Authorization")
 	if strings.HasPrefix(auth, "Bearer ") {
 		return strings.TrimPrefix(auth, "Bearer ")
+	}
+	if strings.HasPrefix(auth, "Basic ") {
+		encoded := strings.TrimSpace(strings.TrimPrefix(auth, "Basic "))
+		decoded, err := base64.StdEncoding.DecodeString(encoded)
+		if err == nil {
+			if _, password, ok := strings.Cut(string(decoded), ":"); ok && password != "" {
+				return password
+			}
+		}
 	}
 
 	// Check cookie

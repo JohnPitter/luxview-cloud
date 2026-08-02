@@ -36,6 +36,11 @@ export interface CreateRepositoryPayload {
   visibility?: RepositoryVisibility;
 }
 
+export interface GitCredential {
+  username: string;
+  token: string;
+}
+
 export const repositoriesApi = {
   async list(limit = 30, offset = 0): Promise<LuxViewRepository[]> {
     const { data } = await api.get<{ repositories: LuxViewRepository[]; total: number }>('/repositories', {
@@ -92,6 +97,11 @@ export const repositoriesApi = {
 
   async importFromGitHub(payload: { owner: string; repo: string; name?: string; defaultBranch?: string; visibility?: RepositoryVisibility }): Promise<LuxViewRepository> {
     const { data } = await api.post<LuxViewRepository>('/repositories/import', payload);
+    return data;
+  },
+
+  async createGitCredential(): Promise<GitCredential> {
+    const { data } = await api.get<GitCredential>('/auth/git-token');
     return data;
   },
 };

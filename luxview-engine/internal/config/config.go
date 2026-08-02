@@ -49,6 +49,7 @@ type Config struct {
 
 	StorageBasePath    string // base path for local storage volumes
 	RepositoryBasePath string // base path for LuxView-hosted Git repositories
+	RepositoryMaxBytes int64  // maximum size of one hosted Git repository
 	MailContainerName  string // docker-mailserver container name
 	BackupDir          string // base directory for backup files
 	ActionArtifactsDir string // base directory for action artifacts
@@ -132,6 +133,7 @@ func Load() (*Config, error) {
 
 		StorageBasePath:    envStr("STORAGE_BASE_PATH", "/data/luxview/storage"),
 		RepositoryBasePath: envStr("REPOSITORY_BASE_PATH", "/data/luxview/repositories"),
+		RepositoryMaxBytes: envInt64("REPOSITORY_MAX_BYTES", 10*1024*1024*1024),
 		MailContainerName:  envStr("MAIL_CONTAINER_NAME", "luxview-mailserver"),
 		BackupDir:          envStr("BACKUP_DIR", "/backups"),
 		ActionArtifactsDir: envStr("ACTION_ARTIFACTS_DIR", "/data/luxview/action-artifacts"),
