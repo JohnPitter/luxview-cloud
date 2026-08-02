@@ -49,8 +49,9 @@ import { analyzeApi, type AnalysisResult } from '../api/analyze';
 import { DeployAnalysis } from '../components/deploy/DeployAnalysis';
 import { CustomDomainSettings } from '../components/apps/CustomDomainSettings';
 import { ActionRunList } from '../components/actions/ActionRunList';
+import { DockerfileEditor } from '../components/deploy/DockerfileEditor';
 
-type Tab = 'overview' | 'deployments' | 'logs' | 'env' | 'services' | 'metrics' | 'alerts' | 'actions' | 'settings' | 'game';
+type Tab = 'overview' | 'dockerfile' | 'deployments' | 'logs' | 'env' | 'services' | 'metrics' | 'alerts' | 'actions' | 'settings' | 'game';
 
 export function AppDetail() {
   const { t } = useTranslation();
@@ -64,6 +65,7 @@ export function AppDetail() {
 
   const webTabs: Array<{ id: Tab; label: string }> = [
     { id: 'overview', label: t('app.tabs.overview') },
+    { id: 'dockerfile', label: t('app.tabs.dockerfile') },
     { id: 'deployments', label: t('app.tabs.deployments') },
     { id: 'logs', label: t('app.tabs.logs') },
     { id: 'env', label: t('app.tabs.environment') },
@@ -770,6 +772,19 @@ export function AppDetail() {
             <GlassCard className="lg:col-span-3">
               <UptimeBar days={uptimeDays} uptimePercent={99.87} />
             </GlassCard>
+          </div>
+        )}
+
+        {/* ==================== DOCKERFILE ==================== */}
+        {!isGame && appId && (
+          <div className={activeTab === 'dockerfile' ? 'animate-fade-in' : 'hidden'}>
+            <DockerfileEditor
+              key={appId}
+              appId={appId}
+              savedContent={app.customDockerfile}
+              isDark={isDark}
+              onSaved={() => fetchApp(appId)}
+            />
           </div>
         )}
 

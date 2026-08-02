@@ -25,6 +25,7 @@ export interface App {
   };
   autoDeploy: boolean;
   appType: AppType;
+  customDockerfile?: string | null;
   customDomain?: string | null;
   gameConfig?: GameServerConfig | null;
   createdAt: string;
