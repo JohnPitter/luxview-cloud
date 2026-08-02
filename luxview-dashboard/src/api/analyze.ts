@@ -37,6 +37,19 @@ export interface AISettings {
   aiModel: string;
 }
 
+export const DEFAULT_AI_MODEL = 'openrouter/free';
+
+export const FREE_AI_MODELS = [
+  { value: DEFAULT_AI_MODEL, label: 'Free Models Router — recomendado' },
+  { value: 'openai/gpt-oss-20b:free', label: 'GPT-OSS 20B (free)' },
+  { value: 'nvidia/nemotron-3-nano-30b-a3b:free', label: 'Nemotron 3 Nano (free)' },
+] as const;
+
+export function isFreeAIModel(model: string): boolean {
+  const normalized = model.trim();
+  return normalized === DEFAULT_AI_MODEL || normalized.endsWith(':free');
+}
+
 export interface ApplyAnalysisRequest {
   dockerfile: string;
   envVars: Record<string, string>;

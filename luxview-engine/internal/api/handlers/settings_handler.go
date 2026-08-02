@@ -62,14 +62,16 @@ func (h *SettingsHandler) GetAISettings(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	model, err := agent.ResolveFreeModel(settings["model"])
+	if err != nil {
+		log.Warn().Str("configured_model", settings["model"]).Str("fallback_model", agent.DefaultFreeModel).Msg("configured AI model is not free; using fallback")
+		model = agent.DefaultFreeModel
+	}
+
 	resp := aiSettingsResponse{
 		APIKey:    maskSecret(settings["api_key"]),
 		AIEnabled: settings["enabled"] == "true",
-		AIModel:   settings["model"],
-	}
-
-	if resp.AIModel == "" {
-		resp.AIModel = "anthropic/claude-sonnet-4"
+		AIModel:   model,
 	}
 
 	writeJSON(w, http.StatusOK, resp)
@@ -84,6 +86,16 @@ func (h *SettingsHandler) UpdateAISettings(w http.ResponseWriter, r *http.Reques
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
+	}
+
+	var resolvedModel string
+	if req.AIModel != nil {
+		var err error
+		resolvedModel, err = agent.ResolveFreeModel(*req.AIModel)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 
 	if req.APIKey != nil {
@@ -107,7 +119,7 @@ func (h *SettingsHandler) UpdateAISettings(w http.ResponseWriter, r *http.Reques
 	}
 
 	if req.AIModel != nil {
-		if err := h.settingsRepo.Set(ctx, "ai_model", *req.AIModel, false); err != nil {
+		if err := h.settingsRepo.Set(ctx, "ai_model", resolvedModel, false); err != nil {
 			log.Error().Err(err).Msg("failed to set ai model")
 			writeError(w, http.StatusInternalServerError, "failed to update settings")
 			return
@@ -120,20 +132,20 @@ func (h *SettingsHandler) UpdateAISettings(w http.ResponseWriter, r *http.Reques
 		auditNewValues["aiEnabled"] = *req.AIEnabled
 	}
 	if req.AIModel != nil {
-		auditNewValues["aiModel"] = *req.AIModel
+		auditNewValues["aiModel"] = resolvedModel
 	}
 	if req.APIKey != nil {
 		auditNewValues["apiKeyChanged"] = true
 	}
 	h.auditSvc.Log(ctx, service.AuditEntry{
-		ActorID:      user.ID,
+		ActorID:       user.ID,
 		ActorUsername: user.Username,
-		Action:       "update",
-		ResourceType: "setting",
-		ResourceID:   "ai",
-		ResourceName: "ai",
-		NewValues:    auditNewValues,
-		IPAddress:    clientIP(r),
+		Action:        "update",
+		ResourceType:  "setting",
+		ResourceID:    "ai",
+		ResourceName:  "ai",
+		NewValues:     auditNewValues,
+		IPAddress:     clientIP(r),
 	})
 
 	log.Info().Msg("AI settings updated")
@@ -177,8 +189,20 @@ func (h *SettingsHandler) TestAIConnection(w http.ResponseWriter, r *http.Reques
 			model = stored
 		}
 	}
+	resolvedModel, modelErr := agent.ResolveFreeModel(model)
+	if modelErr != nil && req.Model == "" {
+		log.Warn().Str("configured_model", model).Str("fallback_model", agent.DefaultFreeModel).Msg("configured AI model is not free; testing fallback")
+		resolvedModel = agent.DefaultFreeModel
+	}
+	if modelErr != nil && req.Model != "" {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"error":   modelErr.Error(),
+		})
+		return
+	}
 
-	usedModel, err := da.TestConnection(ctx, token, model)
+	usedModel, err := da.TestConnection(ctx, token, resolvedModel)
 	if err != nil {
 		log.Warn().Err(err).Msg("AI connection test failed")
 		writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -223,14 +247,14 @@ func (h *SettingsHandler) UpdateAuthSettings(w http.ResponseWriter, r *http.Requ
 	}
 	user := middleware.GetUser(ctx)
 	h.auditSvc.Log(ctx, service.AuditEntry{
-		ActorID:      user.ID,
+		ActorID:       user.ID,
 		ActorUsername: user.Username,
-		Action:       "update",
-		ResourceType: "setting",
-		ResourceID:   "auth",
-		ResourceName: "auth",
-		NewValues:    map[string]interface{}{"require_auth": req.RequireAuth},
-		IPAddress:    clientIP(r),
+		Action:        "update",
+		ResourceType:  "setting",
+		ResourceID:    "auth",
+		ResourceName:  "auth",
+		NewValues:     map[string]interface{}{"require_auth": req.RequireAuth},
+		IPAddress:     clientIP(r),
 	})
 	writeJSON(w, http.StatusOK, map[string]string{"message": "auth settings updated"})
 }
@@ -263,14 +287,14 @@ func (h *SettingsHandler) UpdateTimezone(w http.ResponseWriter, r *http.Request)
 
 	user := middleware.GetUser(ctx)
 	h.auditSvc.Log(ctx, service.AuditEntry{
-		ActorID:      user.ID,
+		ActorID:       user.ID,
 		ActorUsername: user.Username,
-		Action:       "update",
-		ResourceType: "setting",
-		ResourceID:   "timezone",
-		ResourceName: "timezone",
-		NewValues:    map[string]interface{}{"timezone": req.Timezone},
-		IPAddress:    clientIP(r),
+		Action:        "update",
+		ResourceType:  "setting",
+		ResourceID:    "timezone",
+		ResourceName:  "timezone",
+		NewValues:     map[string]interface{}{"timezone": req.Timezone},
+		IPAddress:     clientIP(r),
 	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "timezone updated"})

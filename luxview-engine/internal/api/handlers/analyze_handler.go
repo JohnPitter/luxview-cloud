@@ -65,6 +65,7 @@ type aiConfig struct {
 
 // getAIConfig reads and validates AI settings from the settings repo.
 func (h *AnalyzeHandler) getAIConfig(ctx context.Context) (*aiConfig, error) {
+	log := logger.With("deploy-agent")
 	settings, err := h.settingsRepo.GetAll(ctx, "ai_")
 	if err != nil {
 		return nil, fmt.Errorf("get AI settings: %w", err)
@@ -79,9 +80,10 @@ func (h *AnalyzeHandler) getAIConfig(ctx context.Context) (*aiConfig, error) {
 		return nil, fmt.Errorf("OpenRouter API key not configured")
 	}
 
-	model := settings["model"]
-	if model == "" {
-		model = "anthropic/claude-sonnet-4"
+	model, modelErr := agent.ResolveFreeModel(settings["model"])
+	if modelErr != nil {
+		log.Warn().Str("configured_model", settings["model"]).Str("fallback_model", agent.DefaultFreeModel).Msg("configured AI model is not free; using fallback")
+		model = agent.DefaultFreeModel
 	}
 
 	return &aiConfig{apiKey: apiKey, model: model}, nil
@@ -432,14 +434,14 @@ func (h *AnalyzeHandler) ApplyAnalysis(w http.ResponseWriter, r *http.Request) {
 
 	user := middleware.GetUser(ctx)
 	h.auditSvc.Log(ctx, service.AuditEntry{
-		ActorID:      user.ID,
+		ActorID:       user.ID,
 		ActorUsername: user.Username,
-		Action:       "create",
-		ResourceType: "deployment",
-		ResourceID:   app.ID.String(),
-		ResourceName: app.Subdomain,
-		NewValues:    map[string]interface{}{"services": req.Services},
-		IPAddress:    clientIP(r),
+		Action:        "create",
+		ResourceType:  "deployment",
+		ResourceID:    app.ID.String(),
+		ResourceName:  app.Subdomain,
+		NewValues:     map[string]interface{}{"services": req.Services},
+		IPAddress:     clientIP(r),
 	})
 
 	writeJSON(w, http.StatusOK, applyAnalysisResponse{

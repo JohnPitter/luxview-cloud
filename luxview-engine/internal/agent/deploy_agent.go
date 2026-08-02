@@ -15,7 +15,6 @@ import (
 
 const (
 	openRouterAPIURL   = "https://openrouter.ai/api/v1/chat/completions"
-	defaultModel       = "anthropic/claude-sonnet-4"
 	defaultMaxTokens   = 8192
 	defaultTemperature = 0
 	httpClientTimeout  = 180 * time.Second
@@ -81,9 +80,11 @@ func (a *DeployAgent) AnalyzeFailure(ctx context.Context, apiKey, model, repoDir
 // TestConnection sends a minimal request to the OpenRouter API to verify the key is valid.
 // Returns the model name on success or an error describing the failure.
 func (a *DeployAgent) TestConnection(ctx context.Context, apiKey, model string) (string, error) {
-	if model == "" {
-		model = defaultModel
+	resolvedModel, err := ResolveFreeModel(model)
+	if err != nil {
+		return "", err
 	}
+	model = resolvedModel
 
 	reqBody := openRouterRequest{
 		Model:       model,
@@ -160,9 +161,11 @@ type openRouterResponse struct {
 func (a *DeployAgent) callLLM(ctx context.Context, apiKey, model, system, userPrompt string) (*AnalysisResult, error) {
 	log := logger.With("deploy-agent")
 
-	if model == "" {
-		model = defaultModel
+	resolvedModel, err := ResolveFreeModel(model)
+	if err != nil {
+		return nil, err
 	}
+	model = resolvedModel
 
 	reqBody := openRouterRequest{
 		Model:       model,
@@ -247,9 +250,11 @@ func (a *DeployAgent) callLLM(ctx context.Context, apiKey, model, system, userPr
 func (a *DeployAgent) callLLMRaw(ctx context.Context, apiKey, model, system, userPrompt string) (string, error) {
 	log := logger.With("deploy-agent")
 
-	if model == "" {
-		model = defaultModel
+	resolvedModel, err := ResolveFreeModel(model)
+	if err != nil {
+		return "", err
 	}
+	model = resolvedModel
 
 	reqBody := openRouterRequest{
 		Model:       model,
