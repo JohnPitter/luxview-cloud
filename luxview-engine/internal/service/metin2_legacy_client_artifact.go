@@ -2,16 +2,18 @@ package service
 
 import (
 	"archive/zip"
-	"bytes"
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 )
 
 const (
-	metin2RootDataName  = "root.data"
-	metin2LocaleCfgName = "locale.cfg"
+	metin2RootDataName          = "root.data"
+	metin2LocaleCfgName         = "locale.cfg"
+	metin2ServerIPPlaceholder   = "000.000.000.000"
+	metin2LegacyServerIPLiteral = "185.171.90.185"
 )
 
 // LegacyMetin2ClientOptions contains the endpoint values embedded in the
@@ -24,8 +26,9 @@ type LegacyMetin2ClientOptions struct {
 }
 
 // WriteLegacyMetin2ClientZip streams a per-server legacy Metin2 client. The
-// base zip is copied without recompression except for root.data and locale.cfg,
-// which must carry the target server endpoint and the pt-BR locale.
+// base zip is copied without recompression except for root.data and
+// locale.cfg. root.data uses a fixed-width endpoint placeholder because its
+// companion index stores offsets into the data file.
 func WriteLegacyMetin2ClientZip(base io.ReaderAt, size int64, out io.Writer, opts LegacyMetin2ClientOptions) error {
 	reader, err := zip.NewReader(base, size)
 	if err != nil {
@@ -82,7 +85,11 @@ func validateLegacyMetin2Options(opts LegacyMetin2ClientOptions) error {
 }
 
 func patchLegacyMetin2RootData(content []byte, opts LegacyMetin2ClientOptions) ([]byte, error) {
-	publicIP, err := formatLegacyMetin2IPv4(opts.ServerIP, len("185.171.90.185"))
+	publicIP, err := formatLegacyMetin2IPv4(opts.ServerIP, len(metin2ServerIPPlaceholder))
+	if err != nil {
+		return nil, err
+	}
+	legacyPublicIP, err := formatLegacyMetin2IPv4(opts.ServerIP, len(metin2LegacyServerIPLiteral))
 	if err != nil {
 		return nil, err
 	}
@@ -91,13 +98,15 @@ func patchLegacyMetin2RootData(content []byte, opts LegacyMetin2ClientOptions) (
 		return nil, err
 	}
 	patched := append([]byte(nil), content...)
-	mainIPCount := replaceFixedBytes(patched, []byte("185.171.90.185"), []byte(publicIP))
+	mainIPCount := replaceFixedBytes(patched, []byte(metin2LegacyServerIPLiteral), []byte(legacyPublicIP))
 	mainIPCount += replaceFixedBytes(patched, []byte("127.000.00.001"), []byte(publicIP))
 	mainIPCount += replaceFixedBytes(patched, []byte("192.168.2.100"), []byte(privateIP))
 	mainIPCount += replaceFixedBytes(patched, []byte("127.000.000.1"), []byte(privateIP))
-	var count int
-	patched, count = replaceText(patched, []byte(`SERVER_IP = "127.0.0.1"`), []byte(fmt.Sprintf(`SERVER_IP = "%s"`, opts.ServerIP)))
-	mainIPCount += count
+	mainIPCount += replaceFixedBytes(
+		patched,
+		[]byte(fmt.Sprintf(`SERVER_IP = "%s"`, metin2ServerIPPlaceholder)),
+		[]byte(fmt.Sprintf(`SERVER_IP = "%s"`, publicIP)),
+	)
 	if mainIPCount == 0 {
 		return nil, fmt.Errorf("legacy Metin2 root.data does not contain a known server endpoint")
 	}
@@ -120,28 +129,41 @@ func formatLegacyMetin2IPv4(value string, targetLength int) (string, error) {
 		return "", fmt.Errorf("legacy Metin2 client requires a valid IPv4 endpoint")
 	}
 
-	digits := make([]int, len(ip))
-	totalDigits := 0
+	decimalParts := make([]string, len(ip))
+	hexParts := make([]string, len(ip))
 	for i, part := range ip {
-		digits[i] = len(fmt.Sprintf("%d", part))
-		totalDigits += digits[i]
-	}
-	remaining := targetLength - 3 - totalDigits
-	widths := append([]int(nil), digits...)
-	for i := len(widths) - 1; i >= 0 && remaining > 0; i-- {
-		padding := min(3-widths[i], remaining)
-		widths[i] += padding
-		remaining -= padding
-	}
-	if remaining > 0 {
-		return "", fmt.Errorf("server IPv4 %q cannot fit in legacy Metin2 root.data", value)
+		decimalParts[i] = strconv.Itoa(int(part))
+		hexParts[i] = fmt.Sprintf("0x%X", part)
 	}
 
-	parts := make([]string, len(ip))
-	for i, part := range ip {
-		parts[i] = fmt.Sprintf("%0*d", widths[i], part)
+	for hexCount := 0; hexCount <= len(ip); hexCount++ {
+		for mask := 0; mask < 1<<len(ip); mask++ {
+			if countBits(mask) != hexCount {
+				continue
+			}
+			parts := append([]string(nil), decimalParts...)
+			for i := range parts {
+				if mask&(1<<i) != 0 {
+					parts[i] = hexParts[i]
+				}
+			}
+			candidate := strings.Join(parts, ".")
+			if len(candidate) == targetLength {
+				return candidate, nil
+			}
+		}
 	}
-	return strings.Join(parts, "."), nil
+
+	return "", fmt.Errorf("server IPv4 %q cannot fit in legacy Metin2 root.data", value)
+}
+
+func countBits(value int) int {
+	count := 0
+	for value != 0 {
+		count += value & 1
+		value >>= 1
+	}
+	return count
 }
 
 func replaceFixedBytes(content, oldValue, newValue []byte) int {
@@ -158,14 +180,6 @@ func replaceFixedBytes(content, oldValue, newValue []byte) int {
 		offset += len(oldValue) - 1
 	}
 	return count
-}
-
-func replaceText(content, oldValue, newValue []byte) ([]byte, int) {
-	count := bytes.Count(content, oldValue)
-	if count == 0 {
-		return content, 0
-	}
-	return bytes.ReplaceAll(content, oldValue, newValue), count
 }
 
 func writeZipEntry(writer *zip.Writer, name string, content []byte) error {
