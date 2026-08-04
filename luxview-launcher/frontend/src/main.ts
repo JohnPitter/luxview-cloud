@@ -1,6 +1,6 @@
 import './style.css';
 import './app.css';
-import { GetGames, InstallGame, Play, GetSettings, SaveSettings, OpenInstallFolder, Version, IsGameRunning, CheckForUpdate, ApplyUpdate, Register } from '../wailsjs/go/main/App';
+import { GetGames, InstallGame, Play, GetSettings, SaveSettings, OpenInstallFolder, Version, IsGameRunning, IsInstalled, CheckForUpdate, ApplyUpdate, Register } from '../wailsjs/go/main/App';
 import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
 import rakionImg from './assets/games/rakion.jpg';
 import muImg from './assets/games/mu.jpg';
@@ -329,7 +329,13 @@ async function doAction() {
         toast('Iniciando o jogo…');
         monitorGame(g);
       } catch (e) {
-        toast(String(e).replace(/^Error:\s*/, ''), true);
+        const message = String(e).replace(/^Error:\s*/, '');
+        if (message.includes('jogo não encontrado')) {
+          g.installed = await IsInstalled(g.app_id, g.game);
+          paintFooter();
+          paintChips();
+        }
+        toast(message, true);
       }
     } else {
       openLogin(g);
@@ -342,6 +348,9 @@ async function doAction() {
   document.getElementById('pbarwrap')!.classList.add('active');
   try {
     await InstallGame(g as any);
+    if (!(await IsInstalled(g.app_id, g.game))) {
+      throw new Error('client extraído incompleto — tente instalar novamente');
+    }
     g.installed = true;
     toast('Instalado com sucesso!');
   } catch (e) {

@@ -266,6 +266,9 @@ func (a *App) InstallGame(card GameCard) error {
 	}); err != nil {
 		return fmt.Errorf("falha ao extrair: %w", err)
 	}
+	if spec, ok := launchSpecs[card.Game]; ok && !clientFilesReady(dir, card.Game, spec) {
+		return fmt.Errorf("client extraído incompleto — arquivos obrigatórios não encontrados")
+	}
 	a.applyDefaultDisplay(card)
 	a.progress(card.Game, "done", 100)
 	return nil
