@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"unsafe"
@@ -14,6 +15,16 @@ import (
 // gameProcessRunning reports whether a process with the given image name (e.g.
 // "rakion.bin") is currently running.
 func gameProcessRunning(name string) bool { return gameProcessPID(name) != 0 }
+
+// launchExecutable mirrors the known-good legacy startup command from
+// JOGAR.ps1: the client must run elevated and resolve all DLL/config paths from
+// its own directory.
+func launchExecutable(exePath, workingDir string) error {
+	if err := shellExec("runas", exePath, "", workingDir, windows.SW_SHOWNORMAL); err != nil {
+		return fmt.Errorf("falha ao iniciar o jogo: %w", err)
+	}
+	return nil
+}
 
 // gameProcessPID returns the PID of the first process with the given image name,
 // or 0 if not running.
@@ -37,7 +48,6 @@ func gameProcessPID(name string) uint32 {
 		}
 	}
 }
-
 
 func shellExec(verb, exe, args, cwd string, show int32) error {
 	v, _ := windows.UTF16PtrFromString(verb)

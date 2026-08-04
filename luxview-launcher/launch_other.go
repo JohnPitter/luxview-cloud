@@ -2,8 +2,22 @@
 
 package main
 
+import (
+	"fmt"
+	"os/exec"
+)
+
 func hklmLocationOK(_, _ string) bool   { return true }
 func setHKCURootDir(_, _ string)        {}
 func setHKLMElevated(_, _ string) error { return nil }
 func gameProcessRunning(_ string) bool  { return false }
 func gameProcessPID(_ string) uint32    { return 0 }
+
+func launchExecutable(exePath, workingDir string) error {
+	command := exec.Command(exePath)
+	command.Dir = workingDir
+	if err := command.Start(); err != nil {
+		return fmt.Errorf("falha ao iniciar o jogo: %w", err)
+	}
+	return nil
+}

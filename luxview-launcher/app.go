@@ -97,7 +97,7 @@ var launchSpecs = map[string]launchSpec{
 		processName:  "rakion.bin",
 	},
 	"metin2": {
-		clientDir:  "Metin2FullClient",
+		clientDir:   "Metin2FullClient",
 		gameExe:     "Metin2Distribute.exe",
 		processName: "Metin2Distribute.exe",
 	},
@@ -434,15 +434,6 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	go patchKeyHook(spec.processName)
 	if err := invokeRakionDriver(clientDir, user, passHex, windowed); err != nil {
 		return err
-	}
-	return nil
-}
-
-func launchExecutable(exePath, workingDir string) error {
-	command := exec.Command(exePath)
-	command.Dir = workingDir
-	if err := command.Start(); err != nil {
-		return fmt.Errorf("falha ao iniciar o jogo: %w", err)
 	}
 	return nil
 }
