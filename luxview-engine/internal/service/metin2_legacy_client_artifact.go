@@ -2,6 +2,7 @@ package service
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -94,6 +95,9 @@ func patchLegacyMetin2RootData(content []byte, opts LegacyMetin2ClientOptions) (
 	mainIPCount += replaceFixedBytes(patched, []byte("127.000.00.001"), []byte(publicIP))
 	mainIPCount += replaceFixedBytes(patched, []byte("192.168.2.100"), []byte(privateIP))
 	mainIPCount += replaceFixedBytes(patched, []byte("127.000.000.1"), []byte(privateIP))
+	var count int
+	patched, count = replaceText(patched, []byte(`SERVER_IP = "127.0.0.1"`), []byte(fmt.Sprintf(`SERVER_IP = "%s"`, opts.ServerIP)))
+	mainIPCount += count
 	if mainIPCount == 0 {
 		return nil, fmt.Errorf("legacy Metin2 root.data does not contain a known server endpoint")
 	}
@@ -154,6 +158,14 @@ func replaceFixedBytes(content, oldValue, newValue []byte) int {
 		offset += len(oldValue) - 1
 	}
 	return count
+}
+
+func replaceText(content, oldValue, newValue []byte) ([]byte, int) {
+	count := bytes.Count(content, oldValue)
+	if count == 0 {
+		return content, 0
+	}
+	return bytes.ReplaceAll(content, oldValue, newValue), count
 }
 
 func writeZipEntry(writer *zip.Writer, name string, content []byte) error {

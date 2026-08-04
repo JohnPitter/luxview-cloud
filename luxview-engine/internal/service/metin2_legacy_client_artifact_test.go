@@ -26,6 +26,29 @@ func TestPatchLegacyMetin2RootData(t *testing.T) {
 	}
 }
 
+func TestPatchLegacyMetin2RootDataSupportsS1llClientLayout(t *testing.T) {
+	content := []byte("SERVER_IP = \"127.0.0.1\"\nCH1_PORT = 13101\nMARKADDR = 13101\nAUTH_PORT = 11100\n")
+	patched, err := patchLegacyMetin2RootData(content, LegacyMetin2ClientOptions{
+		ServerIP:  "187.77.227.65",
+		AuthPort:  11000,
+		WorldPort: 13001,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(patched)
+	for _, expected := range []string{
+		"SERVER_IP = \"187.77.227.65\"",
+		"CH1_PORT = 13001",
+		"MARKADDR = 13001",
+		"AUTH_PORT = 11000",
+	} {
+		if !strings.Contains(text, expected) {
+			t.Errorf("patched s1ll root.data missing %q: %s", expected, text)
+		}
+	}
+}
+
 func TestWriteLegacyMetin2ClientZipPatchesRootAndLocale(t *testing.T) {
 	base := newZip(t, map[string]string{
 		"Metin2FullClient/pack/root.data":       "SERVER_IP = \"185.171.90.185\"\nPRIVATE_IP = \"192.168.2.100\"\nCH1_PORT = 13001\nMARKADDR = 13001\nAUTH_PORT = 11000\n",
