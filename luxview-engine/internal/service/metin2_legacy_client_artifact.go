@@ -57,7 +57,7 @@ func WriteLegacyMetin2ClientZip(base io.ReaderAt, size int64, out io.Writer, opt
 			}
 			rootFound = true
 		case strings.EqualFold(baseName(file.Name), metin2LocaleCfgName):
-			if err := writeZipEntry(writer, file.Name, []byte("1252 pt\n")); err != nil {
+			if err := writeZipEntry(writer, file.Name, []byte("1252 pt")); err != nil {
 				return err
 			}
 		default:

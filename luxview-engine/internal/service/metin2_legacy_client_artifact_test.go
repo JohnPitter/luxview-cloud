@@ -77,7 +77,7 @@ func TestWriteLegacyMetin2ClientZipPatchesRootAndLocale(t *testing.T) {
 	if !strings.Contains(files["Metin2FullClient/pack/root.data"], "187.0x4D.227.65") {
 		t.Error("root.data was not patched with the server IP")
 	}
-	if files["Metin2FullClient/locale.cfg"] != "1252 pt\n" {
+	if files["Metin2FullClient/locale.cfg"] != "1252 pt" {
 		t.Errorf("locale.cfg = %q, want pt-BR", files["Metin2FullClient/locale.cfg"])
 	}
 }
