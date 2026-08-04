@@ -51,6 +51,8 @@ wait_for_socket() {
 }
 
 start_init_server() {
+    mkdir -p /run/mysqld
+    chown mysql:mysql /run/mysqld
     rm -f "$init_socket" "$init_pid"
     mariadbd --user=mysql --datadir="$data_dir" --skip-networking \
         --socket="$init_socket" --pid-file="$init_pid" "$@" \
@@ -128,6 +130,8 @@ SQL
 }
 
 start_database() {
+    mkdir -p /run/mysqld
+    chown mysql:mysql /run/mysqld
     mariadbd --user=mysql --datadir="$data_dir" --bind-address=0.0.0.0 \
         --port="$mysql_port" --sql-mode=NO_ENGINE_SUBSTITUTION \
         >>"$log_dir/mariadb.log" 2>&1 &
