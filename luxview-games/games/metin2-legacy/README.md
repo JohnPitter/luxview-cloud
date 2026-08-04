@@ -14,18 +14,21 @@ ele não deve ser apontado diretamente como imagem do template.
 
 Nome esperado: `luxview-cloud-metin2-legacy:latest`.
 
-O `Dockerfile` compila o servidor legado e empacota MariaDB no mesmo container.
-O engine do LuxView não inicia o `docker-compose.yml` do workspace OpenMetin;
-ele precisa desta imagem única.
+O `Dockerfile` parte da imagem local `metinfiles-server:latest`, que contém os
+binários legados já validados, e empacota MariaDB no mesmo container. O engine
+do LuxView não inicia o `docker-compose.yml` do workspace OpenMetin; ele precisa
+desta imagem única.
 
 Estrutura mínima de `assets/` para o build:
 
 ```text
-assets/05062349source.tar.gz
-assets/05062349game.tar.gz
 assets/29052339mysql.tar.gz
-assets/build/               # patches e compat.h do build legado
-assets/localization/server-pt-BR/game/share/
+```
+
+Carregue a imagem base produzida pelo workspace OpenMetin antes do build:
+
+```bash
+docker load -i metinfiles-server.tar
 ```
 
 Build:
