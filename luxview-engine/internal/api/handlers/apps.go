@@ -35,22 +35,21 @@ func defaultVolumeName(subdomain, mountPath string) string {
 }
 
 type AppHandler struct {
-	appRepo           *repository.AppRepo
-	repositoryRepo    *repository.RepositoryRepo
-	userRepo          *repository.UserRepo
-	serviceRepo       *repository.ServiceRepo
-	container         *service.ContainerManager
-	provisioner       *service.Provisioner
-	repositorySvc     *service.RepositoryService
-	github            *service.GitHubClient
-	buildQueue        chan<- service.DeployRequest
-	encryptionKey     []byte
-	auditSvc          *service.AuditService
-	webhookURL        string
-	webhookSecret     string
-	gameConfigRepo    *repository.GameServerConfigRepo
-	gameServerSvc     *service.GameServerService
-	gameClientStorage *service.GameClientStorageService
+	appRepo        *repository.AppRepo
+	repositoryRepo *repository.RepositoryRepo
+	userRepo       *repository.UserRepo
+	serviceRepo    *repository.ServiceRepo
+	container      *service.ContainerManager
+	provisioner    *service.Provisioner
+	repositorySvc  *service.RepositoryService
+	github         *service.GitHubClient
+	buildQueue     chan<- service.DeployRequest
+	encryptionKey  []byte
+	auditSvc       *service.AuditService
+	webhookURL     string
+	webhookSecret  string
+	gameConfigRepo *repository.GameServerConfigRepo
+	gameServerSvc  *service.GameServerService
 }
 
 func NewAppHandler(
@@ -68,25 +67,23 @@ func NewAppHandler(
 	webhookSecret string,
 	gameConfigRepo *repository.GameServerConfigRepo,
 	gameServerSvc *service.GameServerService,
-	gameClientStorage *service.GameClientStorageService,
 ) *AppHandler {
 	return &AppHandler{
-		appRepo:           appRepo,
-		repositoryRepo:    repositoryRepo,
-		userRepo:          userRepo,
-		serviceRepo:       serviceRepo,
-		container:         container,
-		provisioner:       provisioner,
-		repositorySvc:     repositorySvc,
-		github:            service.NewGitHubClient(),
-		buildQueue:        buildQueue,
-		encryptionKey:     encryptionKey,
-		auditSvc:          auditSvc,
-		webhookURL:        webhookURL,
-		webhookSecret:     webhookSecret,
-		gameConfigRepo:    gameConfigRepo,
-		gameServerSvc:     gameServerSvc,
-		gameClientStorage: gameClientStorage,
+		appRepo:        appRepo,
+		repositoryRepo: repositoryRepo,
+		userRepo:       userRepo,
+		serviceRepo:    serviceRepo,
+		container:      container,
+		provisioner:    provisioner,
+		repositorySvc:  repositorySvc,
+		github:         service.NewGitHubClient(),
+		buildQueue:     buildQueue,
+		encryptionKey:  encryptionKey,
+		auditSvc:       auditSvc,
+		webhookURL:     webhookURL,
+		webhookSecret:  webhookSecret,
+		gameConfigRepo: gameConfigRepo,
+		gameServerSvc:  gameServerSvc,
 	}
 }
 
@@ -216,11 +213,6 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 
 		app.GameConfig = gameCfg
-		if h.gameClientStorage != nil {
-			if _, storageErr := h.gameClientStorage.Ensure(ctx, app.ID, gc.TemplateID); storageErr != nil {
-				log.Warn().Err(storageErr).Str("app", app.Subdomain).Str("template", gc.TemplateID).Msg("game client storage is not ready")
-			}
-		}
 		log.Info().Str("app", app.Subdomain).Str("template", gc.TemplateID).Msg("game server created")
 		h.auditSvc.Log(ctx, service.AuditEntry{
 			ActorID: user.ID, ActorUsername: user.Username,

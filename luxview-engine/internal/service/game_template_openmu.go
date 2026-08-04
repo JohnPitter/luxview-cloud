@@ -44,6 +44,7 @@ func openmuTemplate() model.GameTemplate {
 			{Key: "OPENMU_MAX_LEVEL", Label: "Nível Máximo", Type: "number", Placeholder: "400", Section: "Gameplay"},
 			{Key: "OPENMU_POINTS_PER_LEVEL", Label: "Pontos por Nível", Type: "number", Placeholder: "5", Section: "Gameplay"},
 			{Key: "OPENMU_PK_ENABLED", Label: "PvP (PK) Habilitado", Type: "select", Section: "Gameplay", Options: sel("true", "Sim", "false", "Não")},
+			{Key: model.GameClientGlobalFileField, Label: "Arquivo do client no armazenamento global", Type: model.ConfigFieldTypeGlobalFile, Placeholder: "openmu-assets/openmu-s6-base.zip", Section: "Launcher"},
 			// Avançado
 			{Key: "POSTGRES_PASSWORD", Label: "Senha PostgreSQL (interno)", Type: "password", Placeholder: "openmu", Section: "Avançado"},
 		},

@@ -34,6 +34,7 @@ func rakionTemplate() model.GameTemplate {
 			{MountPath: "/var/lib/mysql"}, // persiste contas/personagens entre restarts
 		},
 		ConfigFields: []model.ConfigFieldDef{
+			{Key: model.GameClientGlobalFileField, Label: "Arquivo do client no armazenamento global", Type: model.ConfigFieldTypeGlobalFile, Placeholder: "rakion-assets/rakion-client-base.zip", Section: "Launcher"},
 			// Avançado — contas são criadas pelo painel admin (web)
 			{Key: "RAKION_ADMIN_PASS", Label: "Senha do Painel Admin", Type: "password", Placeholder: "admin123", Section: "Avançado"},
 			{Key: "MYSQL_ROOT_PASSWORD", Label: "Senha MySQL (interno)", Type: "password", Placeholder: "123456", Section: "Avançado"},

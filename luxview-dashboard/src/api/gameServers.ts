@@ -9,7 +9,7 @@ export interface ConfigFieldOption {
 export interface ConfigFieldDef {
   key: string;
   label: string;
-  type: 'text' | 'password' | 'number' | 'select';
+  type: 'text' | 'password' | 'number' | 'select' | 'global_file';
   options?: ConfigFieldOption[];
   placeholder?: string;
   section?: string;

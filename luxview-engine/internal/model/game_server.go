@@ -6,6 +6,11 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	GameClientGlobalFileField = "LUXVIEW_CLIENT_GLOBAL_FILE"
+	ConfigFieldTypeGlobalFile = "global_file"
+)
+
 type GameVolume struct {
 	Name      string `json:"name"`       // Docker volume name
 	MountPath string `json:"mount_path"` // container path
@@ -25,9 +30,9 @@ type GameServerConfig struct {
 	GamePort     int               `json:"game_port"`
 	QueryPort    int               `json:"query_port,omitempty"`
 	ExtraPorts   []ExtraPort       `json:"extra_ports,omitempty"`
-	DataDir      string            `json:"data_dir"`               // legacy single-volume fallback
-	DataVolume   string            `json:"data_volume,omitempty"`  // legacy single-volume fallback
-	Volumes      []GameVolume      `json:"volumes"`                // preferred: multi-volume support
+	DataDir      string            `json:"data_dir"`              // legacy single-volume fallback
+	DataVolume   string            `json:"data_volume,omitempty"` // legacy single-volume fallback
+	Volumes      []GameVolume      `json:"volumes"`               // preferred: multi-volume support
 	Protocol     string            `json:"protocol"`
 	ConfigFields map[string]string `json:"config_fields"`
 	CreatedAt    time.Time         `json:"created_at"`
@@ -54,7 +59,7 @@ type SelectOptionDef struct {
 type ConfigFieldDef struct {
 	Key         string            `json:"key"`
 	Label       string            `json:"label"`
-	Type        string            `json:"type"` // "text", "password", "number", "select"
+	Type        string            `json:"type"` // "text", "password", "number", "select", "global_file"
 	Options     []SelectOptionDef `json:"options,omitempty"`
 	Placeholder string            `json:"placeholder,omitempty"`
 	Section     string            `json:"section,omitempty"`

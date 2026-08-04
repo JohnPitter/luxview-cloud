@@ -85,8 +85,19 @@ func (h *GameServerHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Attach template definition so the dashboard knows which fields to render
-	tmpl := service.GetGameTemplate(cfg.TemplateID)
+	// Attach the template and populate the global client selector for the dashboard.
+	tmpl := h.configTemplate(cfg.TemplateID)
+	responseConfig := cloneGameConfig(cfg)
+	if h.gameClientStorage != nil && gameClientWithDownload[cfg.TemplateID] {
+		if responseConfig.ConfigFields == nil {
+			responseConfig.ConfigFields = map[string]string{}
+		}
+		if strings.TrimSpace(responseConfig.ConfigFields[model.GameClientGlobalFileField]) == "" {
+			if key := h.gameClientStorage.DefaultGlobalKey(cfg.TemplateID); key != "" {
+				responseConfig.ConfigFields[model.GameClientGlobalFileField] = key
+			}
+		}
+	}
 	type response struct {
 		*model.GameServerConfig
 		Template          *model.GameTemplate `json:"template,omitempty"`
@@ -95,7 +106,7 @@ func (h *GameServerHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		ClientPublicURL   string              `json:"clientPublicUrl,omitempty"`
 	}
 	writeJSON(w, http.StatusOK, response{
-		GameServerConfig:  cfg,
+		GameServerConfig:  responseConfig,
 		Template:          tmpl,
 		ServerIP:          h.serverIP,
 		ClientDownloadURL: gameClientDownloadURL(appID.String(), cfg.TemplateID),
@@ -338,7 +349,7 @@ func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Reque
 		}
 		clientReady := true
 		if h.gameClientStorage != nil && gameClientWithDownload[cfg.TemplateID] {
-			if _, err := h.gameClientStorage.Ensure(ctx, app.ID, cfg.TemplateID); err != nil {
+			if _, err := h.gameClientStorage.Resolve(ctx, app.ID, cfg.TemplateID, cfg.ConfigFields[model.GameClientGlobalFileField]); err != nil {
 				clientReady = false
 				log := logger.With("game-client-storage")
 				log.Warn().Err(err).Str("app", app.Subdomain).Msg("launcher client is not ready")
@@ -383,9 +394,9 @@ func (h *GameServerHandler) serveGameClient(w http.ResponseWriter, r *http.Reque
 	}
 	baseZipPath := h.clientBaseZips[cfg.TemplateID]
 	if h.gameClientStorage != nil {
-		baseZipPath, err = h.gameClientStorage.Ensure(ctx, app.ID, cfg.TemplateID)
+		baseZipPath, err = h.gameClientStorage.Resolve(ctx, app.ID, cfg.TemplateID, cfg.ConfigFields[model.GameClientGlobalFileField])
 		if err != nil {
-			writeError(w, http.StatusNotFound, "client is not available in the app storage")
+			writeError(w, http.StatusNotFound, "client is not available in global storage")
 			return
 		}
 	}
@@ -449,6 +460,39 @@ func (h *GameServerHandler) serveGameClient(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
+}
+
+func (h *GameServerHandler) configTemplate(templateID string) *model.GameTemplate {
+	tmpl := service.GetGameTemplate(templateID)
+	if tmpl == nil || h.gameClientStorage == nil || !gameClientWithDownload[templateID] {
+		return tmpl
+	}
+
+	options, err := h.gameClientStorage.ListGlobalFiles()
+	if err != nil {
+		log := logger.With("game-client-storage")
+		log.Warn().Err(err).Str("template", templateID).Msg("failed to list global client files")
+		return tmpl
+	}
+	copyTemplate := *tmpl
+	copyTemplate.ConfigFields = make([]model.ConfigFieldDef, len(tmpl.ConfigFields))
+	copy(copyTemplate.ConfigFields, tmpl.ConfigFields)
+	for i := range copyTemplate.ConfigFields {
+		field := &copyTemplate.ConfigFields[i]
+		if field.Key == model.GameClientGlobalFileField {
+			field.Options = options
+		}
+	}
+	return &copyTemplate
+}
+
+func cloneGameConfig(cfg *model.GameServerConfig) *model.GameServerConfig {
+	copyConfig := *cfg
+	copyConfig.ConfigFields = make(map[string]string, len(cfg.ConfigFields))
+	for key, value := range cfg.ConfigFields {
+		copyConfig.ConfigFields[key] = value
+	}
+	return &copyConfig
 }
 
 const (

@@ -311,7 +311,7 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
           {fieldsBySection[currentSection]?.map((fieldDef) => (
             <div key={fieldDef.key}>
               <label className="block text-xs text-zinc-500 mb-1.5">{fieldDef.label}</label>
-              {fieldDef.type === 'select' && fieldDef.options ? (
+              {(fieldDef.type === 'select' || fieldDef.type === 'global_file') && fieldDef.options?.length ? (
                 <select
                   value={fields[fieldDef.key] ?? ''}
                   onChange={(e) => setFields({ ...fields, [fieldDef.key]: e.target.value })}

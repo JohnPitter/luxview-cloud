@@ -16,51 +16,66 @@ import (
 	"github.com/luxview/engine/pkg/logger"
 )
 
-// GameClientStorageService keeps each game's base client in the storage service
-// attached to that app. The global asset is used only as the seed for new apps.
+// GameClientStorageService resolves a client from global storage and keeps
+// compatibility with app-local client services created by older versions.
 type GameClientStorageService struct {
 	serviceRepo   *repository.ServiceRepo
-	provisioner   *Provisioner
 	encryptionKey []byte
+	globalRoot    string
 	basePaths     map[string]string
 }
 
 func NewGameClientStorageService(
 	serviceRepo *repository.ServiceRepo,
-	provisioner *Provisioner,
 	encryptionKey []byte,
+	globalRoot string,
 	basePaths map[string]string,
 ) *GameClientStorageService {
 	return &GameClientStorageService{
 		serviceRepo:   serviceRepo,
-		provisioner:   provisioner,
 		encryptionKey: encryptionKey,
+		globalRoot:    globalRoot,
 		basePaths:     basePaths,
 	}
 }
 
-// Ensure creates the app storage service when needed and returns the client
-// path inside it. Existing app-local clients are preferred over global assets.
-func (s *GameClientStorageService) Ensure(ctx context.Context, appID uuid.UUID, templateID string) (string, error) {
-	source := strings.TrimSpace(s.basePaths[templateID])
-	if source == "" {
-		return "", fmt.Errorf("client base is not configured for template %s", templateID)
+// Resolve returns the configured global client or the legacy app-local file.
+// A missing app-local service falls back to the template's global default and
+// never provisions a storage service just for the client download.
+func (s *GameClientStorageService) Resolve(ctx context.Context, appID uuid.UUID, templateID, globalKey string) (string, error) {
+	if key := strings.TrimSpace(globalKey); key != "" {
+		return s.resolveGlobalFile(key)
 	}
 
+	if s.serviceRepo != nil {
+		localPath, err := s.resolveExistingAppFile(ctx, appID, templateID)
+		if err != nil {
+			return "", err
+		}
+		if localPath != "" {
+			return localPath, nil
+		}
+	}
+
+	return s.defaultSource(templateID)
+}
+
+func (s *GameClientStorageService) resolveExistingAppFile(ctx context.Context, appID uuid.UUID, templateID string) (string, error) {
 	svc, err := s.serviceRepo.FindByAppAndType(ctx, appID, model.ServiceStorage)
 	if err != nil {
 		return "", fmt.Errorf("find game storage: %w", err)
 	}
 	if svc == nil {
-		svc, err = s.provisioner.Provision(ctx, appID, model.ServiceStorage)
-		if err != nil {
-			return "", fmt.Errorf("provision game storage: %w", err)
-		}
+		return "", nil
 	}
 
 	hostPath, err := storageHostPath(svc, s.encryptionKey)
 	if err != nil {
 		return "", err
+	}
+	source, sourceErr := s.defaultSource(templateID)
+	if sourceErr != nil {
+		return "", sourceErr
 	}
 	target, err := safeStorageFile(hostPath, filepath.Base(source))
 	if err != nil {
@@ -69,16 +84,90 @@ func (s *GameClientStorageService) Ensure(ctx context.Context, appID uuid.UUID, 
 	if isRegularFile(target) {
 		return target, nil
 	}
-	if !isRegularFile(source) {
-		return "", fmt.Errorf("client base zip not found: %s", source)
-	}
 	if err := seedClientFile(source, target); err != nil {
-		return "", fmt.Errorf("seed client storage: %w", err)
+		return "", fmt.Errorf("seed legacy app client storage: %w", err)
 	}
 
 	log := logger.With("game-client-storage")
-	log.Info().Str("app_id", appID.String()).Str("template", templateID).Str("path", target).Msg("game client stored in app service")
+	log.Info().Str("app_id", appID.String()).Str("template", templateID).Str("path", target).Msg("legacy game client restored in app service")
 	return target, nil
+}
+
+func (s *GameClientStorageService) resolveGlobalFile(key string) (string, error) {
+	path, err := safeGlobalPath(s.globalRoot, key)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", fmt.Errorf("global client file not found: %s", key)
+	}
+	base, err := filepath.EvalSymlinks(s.globalRoot)
+	if err != nil || !strings.HasPrefix(resolved, base+string(filepath.Separator)) {
+		return "", fmt.Errorf("global client file escapes storage root")
+	}
+	if !isRegularFile(resolved) {
+		return "", fmt.Errorf("global client file not found: %s", key)
+	}
+	return resolved, nil
+}
+
+func (s *GameClientStorageService) defaultSource(templateID string) (string, error) {
+	source := strings.TrimSpace(s.basePaths[templateID])
+	if source == "" {
+		return "", fmt.Errorf("client base is not configured for template %s", templateID)
+	}
+	if !isRegularFile(source) {
+		return "", fmt.Errorf("client base zip not found: %s", source)
+	}
+	return source, nil
+}
+
+// DefaultGlobalKey maps the configured template fallback to the global-root
+// relative key shown in the game settings selector.
+func (s *GameClientStorageService) DefaultGlobalKey(templateID string) string {
+	source := strings.TrimSpace(s.basePaths[templateID])
+	if source == "" || s.globalRoot == "" {
+		return ""
+	}
+	relative, err := filepath.Rel(s.globalRoot, source)
+	if err != nil || relative == "." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	return filepath.ToSlash(relative)
+}
+
+// ListGlobalFiles returns ZIP references without exposing absolute server paths.
+func (s *GameClientStorageService) ListGlobalFiles() ([]model.SelectOptionDef, error) {
+	if strings.TrimSpace(s.globalRoot) == "" {
+		return []model.SelectOptionDef{}, nil
+	}
+	if _, err := os.Stat(s.globalRoot); err != nil {
+		if os.IsNotExist(err) {
+			return []model.SelectOptionDef{}, nil
+		}
+		return nil, err
+	}
+
+	options := make([]model.SelectOptionDef, 0)
+	err := filepath.WalkDir(s.globalRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !strings.EqualFold(filepath.Ext(entry.Name()), ".zip") {
+			return nil
+		}
+		relative, err := filepath.Rel(s.globalRoot, path)
+		if err != nil {
+			return err
+		}
+		options = append(options, model.SelectOptionDef{
+			Value: filepath.ToSlash(relative),
+			Label: filepath.ToSlash(relative),
+		})
+		return nil
+	})
+	return options, err
 }
 
 func storageHostPath(svc *model.AppService, key []byte) (string, error) {
@@ -103,6 +192,27 @@ func storageHostPath(svc *model.AppService, key []byte) (string, error) {
 	return creds["host_path"], nil
 }
 
+func safeGlobalPath(root, key string) (string, error) {
+	key = strings.TrimSpace(key)
+	relative := filepath.FromSlash(key)
+	clean := filepath.Clean(relative)
+	if key == "" || filepath.IsAbs(relative) || clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid global storage reference")
+	}
+	base, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	target, err := filepath.Abs(filepath.Join(base, clean))
+	if err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(target, base+string(filepath.Separator)) {
+		return "", fmt.Errorf("global storage reference escapes root")
+	}
+	return target, nil
+}
+
 func safeStorageFile(basePath, name string) (string, error) {
 	if name == "" || name == "." || name != filepath.Base(name) {
 		return "", fmt.Errorf("invalid client filename")
@@ -123,6 +233,16 @@ func safeStorageFile(basePath, name string) (string, error) {
 
 func seedClientFile(source, target string) error {
 	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		return err
+	}
+	if info, err := os.Lstat(target); err == nil {
+		if info.IsDir() {
+			return fmt.Errorf("client target is a directory")
+		}
+		if err := os.Remove(target); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
 		return err
 	}
 	if err := os.Link(source, target); err == nil {

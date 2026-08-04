@@ -31,6 +31,7 @@ func metin2Template() model.GameTemplate {
 			{Key: "METIN_DB_USER", Label: "Usuário do banco do jogo", Type: "text", Placeholder: "user", Section: "Servidor"},
 			{Key: "METIN_DB_PASSWORD", Label: "Senha do banco do jogo", Type: "password", Placeholder: "pw", Section: "Servidor"},
 			{Key: "METIN_SERVER_NAME", Label: "Nome exibido no cliente", Type: "text", Placeholder: "OpenMetin", Section: "Servidor"},
+			{Key: model.GameClientGlobalFileField, Label: "Arquivo do client no armazenamento global", Type: model.ConfigFieldTypeGlobalFile, Placeholder: "metin2-legacy-assets/metin2-legacy-client-base.zip", Section: "Launcher"},
 			{Key: "LUXVIEW_LISTED", Label: "Exibir no launcher LuxView", Type: "select", Options: sel("true", "Sim", "false", "Não"), Section: "Launcher"},
 		},
 	}

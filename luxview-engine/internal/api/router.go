@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"path/filepath"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -86,8 +87,9 @@ func NewRouter(deps Deps) *chi.Mux {
 		"rakion": deps.Config.RakionClientBaseZipPath,
 		"metin2": deps.Config.Metin2LegacyClientBaseZipPath,
 	}
-	gameClientStorage := service.NewGameClientStorageService(deps.ServiceRepo, deps.Provisioner, deps.EncryptKey, gameClientBaseZips)
-	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.RepositoryRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.RepositorySvc, deps.BuildQueue, deps.EncryptKey, deps.AuditSvc, webhookURL, deps.Config.InternalToken, deps.GameConfigRepo, deps.GameServerSvc, gameClientStorage)
+	globalStorageRoot := filepath.Join(deps.Config.StorageBasePath, "_global")
+	gameClientStorage := service.NewGameClientStorageService(deps.ServiceRepo, deps.EncryptKey, globalStorageRoot, gameClientBaseZips)
+	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.RepositoryRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.RepositorySvc, deps.BuildQueue, deps.EncryptKey, deps.AuditSvc, webhookURL, deps.Config.InternalToken, deps.GameConfigRepo, deps.GameServerSvc)
 	deployHandler := handlers.NewDeploymentHandler(deps.DeployRepo, deps.AppRepo, deps.BuildQueue, deps.AuditSvc)
 	actionHandler := handlers.NewActionHandler(deps.ActionRepo, deps.AppRepo, deps.ActionSvc, deps.AuditSvc)
 	serviceHandler := handlers.NewServiceHandler(deps.ServiceRepo, deps.AppRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)
