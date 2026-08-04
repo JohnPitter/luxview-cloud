@@ -48,9 +48,11 @@ Portas publicadas pelo template:
 | 13004/tcp | Canal 1 / core 4 |
 | 13099/tcp | Game 99 |
 
-A imagem deve ler `LUXVIEW_PUBLIC_IP` para anunciar o IP público nos arquivos
-`CONFIG` e aceitar `METIN_DB_USER` e `METIN_DB_PASSWORD`. O volume
-`/var/lib/mysql` é persistente por servidor.
+`LUXVIEW_PUBLIC_IP` identifica o endereço público usado pelo client gerado; o
+`BIND_IP` interno dos processos usa `METIN_BIND_IP` e, por padrão, fica em
+`127.0.0.1` para o P2P entre os cores no mesmo container. A imagem também
+aceita `METIN_DB_USER` e `METIN_DB_PASSWORD`. O volume `/var/lib/mysql` é
+persistente por servidor.
 
 ## Client base
 

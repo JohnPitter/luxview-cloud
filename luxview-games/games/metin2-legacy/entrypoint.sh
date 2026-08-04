@@ -14,6 +14,7 @@ mysql_user="${METIN_DB_USER:-user}"
 mysql_password="${METIN_DB_PASSWORD:-pw}"
 root_password="${MYSQL_ROOT_PASSWORD:-root}"
 public_ip="${LUXVIEW_PUBLIC_IP:-${METIN_PUBLIC_IP:-127.0.0.1}}"
+bind_ip="${METIN_BIND_IP:-127.0.0.1}"
 process_names=()
 declare -A process_directories process_executables process_pids
 
@@ -176,6 +177,7 @@ configure_game() {
     validate_config_value METIN_DB_USER "$mysql_user"
     validate_config_value METIN_DB_PASSWORD "$mysql_password"
     validate_config_value LUXVIEW_PUBLIC_IP "$public_ip"
+    validate_config_value METIN_BIND_IP "$bind_ip"
 
     sed -E -i \
         -e "s#^SQL_ACCOUNT =.*#SQL_ACCOUNT = \"${mysql_host} account ${mysql_user} ${mysql_password} ${mysql_port}\"#" \
@@ -189,9 +191,9 @@ configure_game() {
             "s#^(PLAYER_SQL|COMMON_SQL|LOG_SQL): [^ ]+ [^ ]+ [^ ]+ (.+)\$#\\1: ${mysql_host} ${mysql_user} ${mysql_password} \\2#" \
             "$config"
         if grep -qi '^BIND_IP:' "$config"; then
-            sed -E -i "s#^BIND_IP:.*#BIND_IP: ${public_ip}#I" "$config"
+            sed -E -i "s#^BIND_IP:.*#BIND_IP: ${bind_ip}#I" "$config"
         else
-            printf '\nBIND_IP: %s\n' "$public_ip" >>"$config"
+            printf '\nBIND_IP: %s\n' "$bind_ip" >>"$config"
         fi
     done < <(find /usr/game/core -name CONFIG -type f)
 }
