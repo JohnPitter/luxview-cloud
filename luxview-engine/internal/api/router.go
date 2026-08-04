@@ -81,7 +81,13 @@ func NewRouter(deps Deps) *chi.Mux {
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(deps.Config, deps.UserRepo, deps.SettingsRepo, deps.EncryptKey, deps.AuditSvc, deps.GitHubAppSvc)
 	webhookURL := deps.Config.BaseURL + "/api/webhooks/github"
-	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.RepositoryRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.RepositorySvc, deps.BuildQueue, deps.EncryptKey, deps.AuditSvc, webhookURL, deps.Config.InternalToken, deps.GameConfigRepo, deps.GameServerSvc)
+	gameClientBaseZips := map[string]string{
+		"openmu": deps.Config.OpenMUClientBaseZipPath,
+		"rakion": deps.Config.RakionClientBaseZipPath,
+		"metin2": deps.Config.Metin2LegacyClientBaseZipPath,
+	}
+	gameClientStorage := service.NewGameClientStorageService(deps.ServiceRepo, deps.Provisioner, deps.EncryptKey, gameClientBaseZips)
+	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.RepositoryRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.RepositorySvc, deps.BuildQueue, deps.EncryptKey, deps.AuditSvc, webhookURL, deps.Config.InternalToken, deps.GameConfigRepo, deps.GameServerSvc, gameClientStorage)
 	deployHandler := handlers.NewDeploymentHandler(deps.DeployRepo, deps.AppRepo, deps.BuildQueue, deps.AuditSvc)
 	actionHandler := handlers.NewActionHandler(deps.ActionRepo, deps.AppRepo, deps.ActionSvc, deps.AuditSvc)
 	serviceHandler := handlers.NewServiceHandler(deps.ServiceRepo, deps.AppRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)
@@ -108,16 +114,25 @@ func NewRouter(deps Deps) *chi.Mux {
 	backupHandler := handlers.NewBackupHandler(deps.BackupSvc, deps.AuditSvc)
 	domainChecker := service.NewDomainChecker(deps.Config.VPSPublicIP, deps.Config.AcmeStorePath)
 	domainCheckHandler := handlers.NewDomainCheckHandler(deps.AppRepo, domainChecker)
-	gameClientBaseZips := map[string]string{
-		"openmu": deps.Config.OpenMUClientBaseZipPath,
-		"rakion": deps.Config.RakionClientBaseZipPath,
-		"metin2": deps.Config.Metin2LegacyClientBaseZipPath,
-	}
-	gameServerHandler := handlers.NewGameServerHandler(deps.AppRepo, deps.GameConfigRepo, deps.GameServerSvc, deps.Config.VPSPublicIP, deps.Config.Domain, gameClientBaseZips)
+	gameServerHandler := handlers.NewGameServerHandler(deps.AppRepo, deps.GameConfigRepo, deps.GameServerSvc, gameClientStorage, deps.Config.VPSPublicIP, deps.Config.Domain, gameClientBaseZips)
 	launcherHandler := handlers.NewLauncherHandler(deps.Config.LauncherReleaseRepo, deps.Config.LauncherAssetName, deps.Config.GitHubAPIToken)
+	globalStorageHandler := handlers.NewGlobalStorageHandler(deps.Config.StorageBasePath)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 	optionalAuthMiddleware := middleware.OptionalAuth(deps.Config.JWTSecret, deps.UserRepo)
+
+	// Global client assets can be large, so they use a dedicated route with a
+	// larger body limit instead of the 1 MB JSON API limit below.
+	r.Route("/api/global-storage", func(r chi.Router) {
+		r.Use(authMiddleware)
+		r.Use(middleware.AdminOnly)
+		r.Use(middleware.BodySizeLimit(4 << 30))
+		r.Get("/files", globalStorageHandler.ListFiles)
+		r.Post("/files/upload", globalStorageHandler.UploadFile)
+		r.Get("/files/download", globalStorageHandler.DownloadFile)
+		r.Delete("/files", globalStorageHandler.DeleteFile)
+		r.Get("/usage", globalStorageHandler.Usage)
+	})
 
 	// Git HTTP smart protocol — mounted outside /api, no 1MB body limit (pushes can be large).
 	// Limit set to 512MB per request to prevent abuse while allowing large repos.

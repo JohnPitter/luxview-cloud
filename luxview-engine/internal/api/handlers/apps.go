@@ -35,21 +35,22 @@ func defaultVolumeName(subdomain, mountPath string) string {
 }
 
 type AppHandler struct {
-	appRepo        *repository.AppRepo
-	repositoryRepo *repository.RepositoryRepo
-	userRepo       *repository.UserRepo
-	serviceRepo    *repository.ServiceRepo
-	container      *service.ContainerManager
-	provisioner    *service.Provisioner
-	repositorySvc  *service.RepositoryService
-	github         *service.GitHubClient
-	buildQueue     chan<- service.DeployRequest
-	encryptionKey  []byte
-	auditSvc       *service.AuditService
-	webhookURL     string
-	webhookSecret  string
-	gameConfigRepo *repository.GameServerConfigRepo
-	gameServerSvc  *service.GameServerService
+	appRepo           *repository.AppRepo
+	repositoryRepo    *repository.RepositoryRepo
+	userRepo          *repository.UserRepo
+	serviceRepo       *repository.ServiceRepo
+	container         *service.ContainerManager
+	provisioner       *service.Provisioner
+	repositorySvc     *service.RepositoryService
+	github            *service.GitHubClient
+	buildQueue        chan<- service.DeployRequest
+	encryptionKey     []byte
+	auditSvc          *service.AuditService
+	webhookURL        string
+	webhookSecret     string
+	gameConfigRepo    *repository.GameServerConfigRepo
+	gameServerSvc     *service.GameServerService
+	gameClientStorage *service.GameClientStorageService
 }
 
 func NewAppHandler(
@@ -67,23 +68,25 @@ func NewAppHandler(
 	webhookSecret string,
 	gameConfigRepo *repository.GameServerConfigRepo,
 	gameServerSvc *service.GameServerService,
+	gameClientStorage *service.GameClientStorageService,
 ) *AppHandler {
 	return &AppHandler{
-		appRepo:        appRepo,
-		repositoryRepo: repositoryRepo,
-		userRepo:       userRepo,
-		serviceRepo:    serviceRepo,
-		container:      container,
-		provisioner:    provisioner,
-		repositorySvc:  repositorySvc,
-		github:         service.NewGitHubClient(),
-		buildQueue:     buildQueue,
-		encryptionKey:  encryptionKey,
-		auditSvc:       auditSvc,
-		webhookURL:     webhookURL,
-		webhookSecret:  webhookSecret,
-		gameConfigRepo: gameConfigRepo,
-		gameServerSvc:  gameServerSvc,
+		appRepo:           appRepo,
+		repositoryRepo:    repositoryRepo,
+		userRepo:          userRepo,
+		serviceRepo:       serviceRepo,
+		container:         container,
+		provisioner:       provisioner,
+		repositorySvc:     repositorySvc,
+		github:            service.NewGitHubClient(),
+		buildQueue:        buildQueue,
+		encryptionKey:     encryptionKey,
+		auditSvc:          auditSvc,
+		webhookURL:        webhookURL,
+		webhookSecret:     webhookSecret,
+		gameConfigRepo:    gameConfigRepo,
+		gameServerSvc:     gameServerSvc,
+		gameClientStorage: gameClientStorage,
 	}
 }
 
@@ -163,15 +166,15 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 		resourceLimits := model.ResourceLimits{CPU: "1.0", Memory: "4g", Disk: "1g"}
 
 		app := &model.App{
-			UserID:    userID,
-			Name:      req.Name,
-			Subdomain: subdomain,
-			Stack:     "game",
-			Status:    model.AppStatusStopped,
-			AppType:   model.AppTypeGame,
-			EnvVars:   envVarsEncrypted,
+			UserID:         userID,
+			Name:           req.Name,
+			Subdomain:      subdomain,
+			Stack:          "game",
+			Status:         model.AppStatusStopped,
+			AppType:        model.AppTypeGame,
+			EnvVars:        envVarsEncrypted,
 			ResourceLimits: resourceLimits,
-			AutoDeploy: false,
+			AutoDeploy:     false,
 		}
 
 		if err := h.appRepo.Create(ctx, app); err != nil {
@@ -213,9 +216,14 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 
 		app.GameConfig = gameCfg
+		if h.gameClientStorage != nil {
+			if _, storageErr := h.gameClientStorage.Ensure(ctx, app.ID, gc.TemplateID); storageErr != nil {
+				log.Warn().Err(storageErr).Str("app", app.Subdomain).Str("template", gc.TemplateID).Msg("game client storage is not ready")
+			}
+		}
 		log.Info().Str("app", app.Subdomain).Str("template", gc.TemplateID).Msg("game server created")
 		h.auditSvc.Log(ctx, service.AuditEntry{
-			ActorID:      user.ID, ActorUsername: user.Username,
+			ActorID: user.ID, ActorUsername: user.Username,
 			Action: "create", ResourceType: "app", ResourceID: app.ID.String(), ResourceName: app.Subdomain,
 			NewValues: map[string]string{"name": app.Name, "subdomain": app.Subdomain, "type": "game", "template": gc.TemplateID},
 			IPAddress: clientIP(r),

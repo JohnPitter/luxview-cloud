@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -24,7 +24,7 @@ import { GlassCard } from '../components/common/GlassCard';
 import { PillButton } from '../components/common/PillButton';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { useThemeStore } from '../stores/theme.store';
-import { servicesApi, type StorageFileInfo, type StorageUsageInfo } from '../api/services';
+import { globalStorageApi, servicesApi, type StorageFileInfo, type StorageUsageInfo } from '../api/services';
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return '-';
@@ -67,7 +67,11 @@ function isPreviewable(key: string): boolean {
 
 const MAX_TEXT_PREVIEW = 512 * 1024; // 512KB max for text preview
 
-export function StorageExplorer() {
+interface StorageExplorerProps {
+  global?: boolean;
+}
+
+export function StorageExplorer({ global = false }: StorageExplorerProps) {
   const { serviceId } = useParams<{ serviceId: string }>();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
@@ -93,6 +97,26 @@ export function StorageExplorer() {
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  const storage = useMemo(() => {
+    if (global) {
+      return {
+        listFiles: (prefix?: string) => globalStorageApi.listFiles(prefix),
+        uploadFile: (file: File, key?: string) => globalStorageApi.uploadFile(file, key),
+        downloadFile: (key: string) => globalStorageApi.downloadFile(key),
+        deleteFile: (key: string) => globalStorageApi.deleteFile(key),
+        getUsage: () => globalStorageApi.getUsage(),
+      };
+    }
+    if (!serviceId) return null;
+    return {
+      listFiles: (prefix?: string) => servicesApi.listFiles(serviceId, prefix),
+      uploadFile: (file: File, key?: string) => servicesApi.uploadFile(serviceId, file, key),
+      downloadFile: (key: string) => servicesApi.downloadFile(serviceId, key),
+      deleteFile: (key: string) => servicesApi.deleteFile(serviceId, key),
+      getUsage: () => servicesApi.getServiceUsage(serviceId),
+    };
+  }, [global, serviceId]);
+
   const formatDate = (dateStr: string): string => {
     if (!dateStr) return '-';
     const d = new Date(dateStr);
@@ -107,28 +131,28 @@ export function StorageExplorer() {
   };
 
   const fetchUsage = useCallback(async () => {
-    if (!serviceId) return;
+    if (!storage) return;
     try {
-      const data = await servicesApi.getServiceUsage(serviceId);
+      const data = await storage.getUsage();
       setUsage(data);
     } catch {
       // non-critical
     }
-  }, [serviceId]);
+  }, [storage]);
 
   const fetchFiles = useCallback(async () => {
-    if (!serviceId) return;
+    if (!storage) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await servicesApi.listFiles(serviceId, prefix || undefined);
+      const data = await storage.listFiles(prefix || undefined);
       setFiles(data);
     } catch {
       setError(t('resources.storage.failedToLoadFiles'));
     } finally {
       setLoading(false);
     }
-  }, [serviceId, prefix, t]);
+  }, [storage, prefix, t]);
 
   useEffect(() => {
     fetchFiles();
@@ -163,13 +187,13 @@ export function StorageExplorer() {
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
-    if (!fileList || !serviceId) return;
+    if (!fileList || !storage) return;
     setUploading(true);
     setError(null);
     try {
       for (const file of Array.from(fileList)) {
         const key = prefix + file.name;
-        await servicesApi.uploadFile(serviceId, file, key);
+        await storage.uploadFile(file, key);
       }
       await fetchFiles();
       fetchUsage();
@@ -182,10 +206,10 @@ export function StorageExplorer() {
   };
 
   const handleDownload = async (key: string) => {
-    if (!serviceId) return;
+    if (!storage) return;
     setDownloadingKey(key);
     try {
-      const blob = await servicesApi.downloadFile(serviceId, key);
+      const blob = await storage.downloadFile(key);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -202,7 +226,7 @@ export function StorageExplorer() {
   };
 
   const handlePreview = async (file: StorageFileInfo) => {
-    if (!serviceId) return;
+    if (!storage) return;
     setPreviewFile(file);
     setPreviewLoading(true);
     setPreviewText(null);
@@ -211,7 +235,7 @@ export function StorageExplorer() {
       setPreviewUrl(null);
     }
     try {
-      const blob = await servicesApi.downloadFile(serviceId, file.key);
+      const blob = await storage.downloadFile(file.key);
       const type = getFileType(file.key);
       if (type === 'text') {
         if (file.size > MAX_TEXT_PREVIEW) {
@@ -242,10 +266,10 @@ export function StorageExplorer() {
   };
 
   const handleDelete = async () => {
-    if (!serviceId || !deleteTarget) return;
+    if (!storage || !deleteTarget) return;
     setDeleting(true);
     try {
-      await servicesApi.deleteFile(serviceId, deleteTarget);
+      await storage.deleteFile(deleteTarget);
       setDeleteTarget(null);
       await fetchFiles();
       fetchUsage();
@@ -268,7 +292,7 @@ export function StorageExplorer() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/dashboard/resources')}
+            onClick={() => navigate(global ? '/dashboard' : '/dashboard/resources')}
             className={`p-2 rounded-xl transition-colors ${
               isDark ? 'hover:bg-zinc-800' : 'hover:bg-zinc-100'
             }`}
@@ -281,18 +305,20 @@ export function StorageExplorer() {
                 isDark ? 'text-zinc-100' : 'text-zinc-900'
               }`}
             >
-              {t('resources.storage.title')}
+              {global ? t('resources.globalStorage.title') : t('resources.storage.title')}
             </h1>
-            <p className="text-xs text-zinc-500">{t('resources.storage.subtitle')}</p>
+            <p className="text-xs text-zinc-500">
+              {global ? t('resources.globalStorage.subtitle') : t('resources.storage.subtitle')}
+            </p>
           </div>
         </div>
-        {usage && usage.limit > 0 && (
+        {usage && (usage.limit > 0 || global) && (
           <div className="flex items-center gap-3 mr-4">
             <div className="flex flex-col items-end gap-1">
               <span className={`text-[11px] font-mono ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                {formatSize(usage.used)} / {usage.limitStr}
+                {formatSize(usage.used)}{usage.limit > 0 ? ` / ${usage.limitStr}` : ' · global'}
               </span>
-              <div className={`w-32 h-1.5 rounded-full overflow-hidden ${isDark ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+              {usage.limit > 0 && <div className={`w-32 h-1.5 rounded-full overflow-hidden ${isDark ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
                 <div
                   className={`h-full rounded-full transition-all duration-500 ${
                     usage.used / usage.limit > 0.9
@@ -303,7 +329,7 @@ export function StorageExplorer() {
                   }`}
                   style={{ width: `${Math.min((usage.used / usage.limit) * 100, 100)}%` }}
                 />
-              </div>
+              </div>}
             </div>
           </div>
         )}

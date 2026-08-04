@@ -20,29 +20,32 @@ import (
 )
 
 type GameServerHandler struct {
-	appRepo        *repository.AppRepo
-	gameConfigRepo *repository.GameServerConfigRepo
-	gameServerSvc  *service.GameServerService
-	serverIP       string
-	domain         string
-	clientBaseZips map[string]string // templateID -> base client zip path
+	appRepo           *repository.AppRepo
+	gameConfigRepo    *repository.GameServerConfigRepo
+	gameServerSvc     *service.GameServerService
+	gameClientStorage *service.GameClientStorageService
+	serverIP          string
+	domain            string
+	clientBaseZips    map[string]string // templateID -> base client zip path
 }
 
 func NewGameServerHandler(
 	appRepo *repository.AppRepo,
 	gameConfigRepo *repository.GameServerConfigRepo,
 	gameServerSvc *service.GameServerService,
+	gameClientStorage *service.GameClientStorageService,
 	serverIP string,
 	domain string,
 	clientBaseZips map[string]string,
 ) *GameServerHandler {
 	return &GameServerHandler{
-		appRepo:        appRepo,
-		gameConfigRepo: gameConfigRepo,
-		gameServerSvc:  gameServerSvc,
-		serverIP:       serverIP,
-		domain:         domain,
-		clientBaseZips: clientBaseZips,
+		appRepo:           appRepo,
+		gameConfigRepo:    gameConfigRepo,
+		gameServerSvc:     gameServerSvc,
+		gameClientStorage: gameClientStorage,
+		serverIP:          serverIP,
+		domain:            domain,
+		clientBaseZips:    clientBaseZips,
 	}
 }
 
@@ -306,7 +309,7 @@ type PublicGameCard struct {
 	Enabled     bool   `json:"enabled"`      // running + has a downloadable client
 	DownloadURL string `json:"download_url"` // public, shareable client zip
 	ServerIP    string `json:"server_ip"`
-	AuthHost    string `json:"auth_host"`    // <subdomain>.<domain> — onde o launcher faz login
+	AuthHost    string `json:"auth_host"` // <subdomain>.<domain> — onde o launcher faz login
 }
 
 // ListPublicGames returns the public catalog consumed by the LuxView launcher.
@@ -333,6 +336,14 @@ func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Reque
 		if strings.ToLower(cfg.ConfigFields["LUXVIEW_LISTED"]) != "true" {
 			continue
 		}
+		clientReady := true
+		if h.gameClientStorage != nil && gameClientWithDownload[cfg.TemplateID] {
+			if _, err := h.gameClientStorage.Ensure(ctx, app.ID, cfg.TemplateID); err != nil {
+				clientReady = false
+				log := logger.With("game-client-storage")
+				log.Warn().Err(err).Str("app", app.Subdomain).Msg("launcher client is not ready")
+			}
+		}
 		display, desc := cfg.TemplateID, ""
 		if tmpl := service.GetGameTemplate(cfg.TemplateID); tmpl != nil {
 			display = tmpl.DisplayName
@@ -344,7 +355,7 @@ func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Reque
 			Game:        cfg.TemplateID,
 			DisplayName: display,
 			Description: desc,
-			Enabled:     app.Status == model.AppStatusRunning && gameClientWithDownload[cfg.TemplateID],
+			Enabled:     app.Status == model.AppStatusRunning && gameClientWithDownload[cfg.TemplateID] && clientReady,
 			DownloadURL: gameClientPublicURL("https://"+h.domain, app.ID.String(), cfg.TemplateID),
 			ServerIP:    h.serverIP,
 			AuthHost:    fmt.Sprintf("%s.%s", app.Subdomain, h.domain),
@@ -366,13 +377,20 @@ func (h *GameServerHandler) serveGameClient(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusNotFound, "game config not found")
 		return
 	}
-	baseZipPath := h.clientBaseZips[cfg.TemplateID]
-	if baseZipPath == "" {
-		writeError(w, http.StatusNotFound, "client download is not available for this template")
-		return
-	}
 	if h.serverIP == "" {
 		writeError(w, http.StatusInternalServerError, "server IP is not configured")
+		return
+	}
+	baseZipPath := h.clientBaseZips[cfg.TemplateID]
+	if h.gameClientStorage != nil {
+		baseZipPath, err = h.gameClientStorage.Ensure(ctx, app.ID, cfg.TemplateID)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "client is not available in the app storage")
+			return
+		}
+	}
+	if baseZipPath == "" {
+		writeError(w, http.StatusNotFound, "client download is not available for this template")
 		return
 	}
 

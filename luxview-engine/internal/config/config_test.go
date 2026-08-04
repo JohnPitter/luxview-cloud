@@ -14,10 +14,10 @@ func TestLoadUsesRepoOpenMUClientAssetsPathByDefault(t *testing.T) {
 		t.Fatalf("load config: %v", err)
 	}
 
-	if cfg.OpenMUClientBaseZipPath != "/opt/luxview/openmu-assets/openmu-s6-base.zip" {
+	if cfg.OpenMUClientBaseZipPath != "/data/luxview/storage/_global/openmu-assets/openmu-s6-base.zip" {
 		t.Fatalf("OpenMUClientBaseZipPath = %q", cfg.OpenMUClientBaseZipPath)
 	}
-	if cfg.Metin2LegacyClientBaseZipPath != "/opt/luxview/metin2-legacy-assets/metin2-legacy-client-base.zip" {
+	if cfg.Metin2LegacyClientBaseZipPath != "/data/luxview/storage/_global/metin2-legacy-assets/metin2-legacy-client-base.zip" {
 		t.Fatalf("Metin2LegacyClientBaseZipPath = %q", cfg.Metin2LegacyClientBaseZipPath)
 	}
 }

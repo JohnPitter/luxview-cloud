@@ -88,6 +88,7 @@ export function App() {
         <Route path="resources" element={<Resources />} />
         <Route path="resources/db/:serviceId" element={<DbExplorer />} />
         <Route path="resources/storage/:serviceId" element={<StorageExplorer />} />
+        <Route path="storage" element={<StorageExplorer global />} />
         <Route path="resources/email/:serviceId" element={<EmailManager />} />
         <Route path="logs" element={<Logs />} />
         <Route path="analytics" element={<Analytics />} />

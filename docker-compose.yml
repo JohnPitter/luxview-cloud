@@ -86,14 +86,13 @@ services:
       - SMTP_FROM=${SMTP_FROM:-alerts@luxview.cloud}
       - VPS_PUBLIC_IP=${VPS_PUBLIC_IP:-}
       - ACME_STORE_PATH=/letsencrypt/acme.json
-      # Base client zip lives in the "Armazenamento" (storage) service volume
-      # under STORAGE_BASE_PATH (already mounted above). Deployment-specific path
-      # set via .env; falls back to the OpenMU app's storage volume.
-      - OPENMU_CLIENT_BASE_ZIP=${OPENMU_CLIENT_BASE_ZIP:-/data/luxview/storage/app-6c43b313-8d94-45ad-ba65-173ca7f381dd/openmu-s6-base.zip}
+      # Global client assets live in the central storage tab; each game app
+      # receives its own seeded copy in its storage service on first use.
+      - OPENMU_CLIENT_BASE_ZIP=${OPENMU_CLIENT_BASE_ZIP:-/data/luxview/storage/_global/openmu-assets/openmu-s6-base.zip}
       # Rakion base client zip — config.xfs é injetado por servidor (subdomínio).
-      - RAKION_CLIENT_BASE_ZIP=${RAKION_CLIENT_BASE_ZIP:-/data/luxview/storage/rakion-assets/rakion-client-base.zip}
+      - RAKION_CLIENT_BASE_ZIP=${RAKION_CLIENT_BASE_ZIP:-/data/luxview/storage/_global/rakion-assets/rakion-client-base.zip}
       # Metin2 legado base client zip — IP/portas são injetados no root.data.
-      - METIN2_LEGACY_CLIENT_BASE_ZIP=${METIN2_LEGACY_CLIENT_BASE_ZIP:-/data/luxview/storage/metin2-legacy-assets/metin2-legacy-client-base.zip}
+      - METIN2_LEGACY_CLIENT_BASE_ZIP=${METIN2_LEGACY_CLIENT_BASE_ZIP:-/data/luxview/storage/_global/metin2-legacy-assets/metin2-legacy-client-base.zip}
     networks:
       - luxview-net
       - traefik-public

@@ -157,9 +157,9 @@ func Load() (*Config, error) {
 		VPSPublicIP:   envStr("VPS_PUBLIC_IP", ""),
 		AcmeStorePath: envStr("ACME_STORE_PATH", "/letsencrypt/acme.json"),
 
-		OpenMUClientBaseZipPath:       envStr("OPENMU_CLIENT_BASE_ZIP", "/opt/luxview/openmu-assets/openmu-s6-base.zip"),
-		RakionClientBaseZipPath:       envStr("RAKION_CLIENT_BASE_ZIP", "/opt/luxview/rakion-assets/rakion-client-base.zip"),
-		Metin2LegacyClientBaseZipPath: envStr("METIN2_LEGACY_CLIENT_BASE_ZIP", "/opt/luxview/metin2-legacy-assets/metin2-legacy-client-base.zip"),
+		OpenMUClientBaseZipPath:       envStr("OPENMU_CLIENT_BASE_ZIP", "/data/luxview/storage/_global/openmu-assets/openmu-s6-base.zip"),
+		RakionClientBaseZipPath:       envStr("RAKION_CLIENT_BASE_ZIP", "/data/luxview/storage/_global/rakion-assets/rakion-client-base.zip"),
+		Metin2LegacyClientBaseZipPath: envStr("METIN2_LEGACY_CLIENT_BASE_ZIP", "/data/luxview/storage/_global/metin2-legacy-assets/metin2-legacy-client-base.zip"),
 
 		LauncherReleaseRepo: envStr("LAUNCHER_RELEASE_REPO", "JohnPitter/luxview-cloud"),
 		LauncherAssetName:   envStr("LAUNCHER_ASSET_NAME", "luxview-launcher.exe"),

@@ -159,3 +159,40 @@ export const servicesApi = {
     return data;
   },
 };
+
+export const globalStorageApi = {
+  async listFiles(prefix?: string): Promise<StorageFileInfo[]> {
+    const params = prefix ? { prefix } : {};
+    const { data } = await api.get<StorageFileInfo[]>('/global-storage/files', { params });
+    return data ?? [];
+  },
+
+  async uploadFile(file: File, key?: string): Promise<{ key: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (key) formData.append('key', key);
+    const { data } = await api.post<{ key: string }>('/global-storage/files/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 15 * 60 * 1000,
+    });
+    return data;
+  },
+
+  async downloadFile(key: string): Promise<Blob> {
+    const { data } = await api.get('/global-storage/files/download', {
+      params: { key },
+      responseType: 'blob',
+      timeout: 15 * 60 * 1000,
+    });
+    return data;
+  },
+
+  async deleteFile(key: string): Promise<void> {
+    await api.delete('/global-storage/files', { params: { key } });
+  },
+
+  async getUsage(): Promise<StorageUsageInfo> {
+    const { data } = await api.get<StorageUsageInfo>('/global-storage/usage');
+    return data;
+  },
+};

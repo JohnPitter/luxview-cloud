@@ -8,6 +8,7 @@ import {
   Shield,
   HardDrive,
   GitBranch,
+  FolderOpen,
 } from 'lucide-react';
 import { useThemeStore } from '../../stores/theme.store';
 import { useAuthStore } from '../../stores/auth.store';
@@ -25,6 +26,7 @@ const items: SidebarItem[] = [
   { icon: Plus, labelKey: 'layout.sidebar.newApp', path: '/dashboard/new' },
   { icon: GitBranch, labelKey: 'layout.sidebar.repositories', path: '/dashboard/repositories' },
   { icon: BarChart3, labelKey: 'layout.sidebar.analytics', path: '/dashboard/analytics' },
+  { icon: FolderOpen, labelKey: 'layout.sidebar.globalStorage', path: '/dashboard/storage', adminOnly: true },
   { icon: Settings, labelKey: 'layout.sidebar.settings', path: '/dashboard/settings' },
   { icon: HardDrive, labelKey: 'layout.sidebar.backups', path: '/dashboard/backups', adminOnly: true },
   { icon: Shield, labelKey: 'layout.sidebar.admin', path: '/dashboard/admin', adminOnly: true },
