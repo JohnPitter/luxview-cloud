@@ -14,7 +14,8 @@ mysql_user="${METIN_DB_USER:-user}"
 mysql_password="${METIN_DB_PASSWORD:-pw}"
 root_password="${MYSQL_ROOT_PASSWORD:-root}"
 public_ip="${LUXVIEW_PUBLIC_IP:-${METIN_PUBLIC_IP:-127.0.0.1}}"
-pids=()
+process_names=()
+declare -A process_directories process_executables process_pids
 
 log() {
     printf '[openmetin] %s\n' "$*"
@@ -204,7 +205,12 @@ start_process() {
         cd "$directory"
         exec "$executable"
     ) >>"$log_dir/${name}.log" 2>&1 &
-    pids+=("$!")
+    if [[ -z ${process_pids[$name]+set} ]]; then
+        process_names+=("$name")
+    fi
+    process_directories["$name"]="$directory"
+    process_executables["$name"]="$executable"
+    process_pids["$name"]="$!"
 }
 
 wait_for_cache_db() {
@@ -221,13 +227,34 @@ wait_for_cache_db() {
 
 stop_all() {
     trap - EXIT INT TERM
-    for pid in "${pids[@]}"; do
-        kill -TERM "$pid" 2>/dev/null || true
+    local name pid
+    for name in "${process_names[@]}"; do
+        pid="${process_pids[$name]:-}"
+        if [[ -n "$pid" ]]; then
+            kill -TERM "$pid" 2>/dev/null || true
+        fi
     done
     if [[ -n "$db_pid" ]]; then
         kill -TERM "$db_pid" 2>/dev/null || true
     fi
     wait 2>/dev/null || true
+}
+
+supervise_processes() {
+    local name pid state
+    for name in "${process_names[@]}"; do
+        pid="${process_pids[$name]:-}"
+        state=""
+        if [[ -n "$pid" ]]; then
+            state="$(ps -o stat= -p "$pid" 2>/dev/null || true)"
+        fi
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && [[ "$state" != Z* ]]; then
+            continue
+        fi
+        wait "$pid" 2>/dev/null || true
+        log "${name} encerrou; reiniciando"
+        start_process "$name" "${process_directories[$name]}" "${process_executables[$name]}"
+    done
 }
 
 trap stop_all EXIT INT TERM
@@ -252,6 +279,7 @@ done
 start_process game99 /usr/game/core/game99 ./game
 
 log 'servidor legado iniciado'
-wait -n "${pids[@]}"
-echo 'Um processo crítico do servidor encerrou. Consulte /var/log/openmetin.' >&2
-exit 1
+while true; do
+    supervise_processes
+    sleep 2
+done
