@@ -412,6 +412,15 @@ func (h *GameServerHandler) serveGameClient(w http.ResponseWriter, r *http.Reque
 			writeError(w, http.StatusInternalServerError, "failed to generate Rakion client")
 			return
 		}
+	case metin2TemplateID:
+		if err := service.WriteLegacyMetin2ClientZip(baseZip, stat.Size(), w, service.LegacyMetin2ClientOptions{
+			ServerIP:  h.serverIP,
+			AuthPort:  cfg.GamePort,
+			WorldPort: cfg.QueryPort,
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to generate legacy Metin2 client")
+			return
+		}
 	default: // openMUTemplateID
 		if err := service.WriteOpenMUClientZip(baseZip, stat.Size(), w, service.OpenMUClientOptions{
 			ServerName: app.Name,
@@ -427,12 +436,14 @@ func (h *GameServerHandler) serveGameClient(w http.ResponseWriter, r *http.Reque
 const (
 	openMUTemplateID = "openmu"
 	rakionTemplateID = "rakion"
+	metin2TemplateID = "metin2"
 )
 
 // gameClientWithDownload lists templates that offer a configured client download.
 var gameClientWithDownload = map[string]bool{
 	openMUTemplateID: true,
 	rakionTemplateID: true,
+	metin2TemplateID: true,
 }
 
 func gameClientDownloadURL(appID string, templateID string) string {

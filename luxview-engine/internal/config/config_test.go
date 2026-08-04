@@ -17,4 +17,7 @@ func TestLoadUsesRepoOpenMUClientAssetsPathByDefault(t *testing.T) {
 	if cfg.OpenMUClientBaseZipPath != "/opt/luxview/openmu-assets/openmu-s6-base.zip" {
 		t.Fatalf("OpenMUClientBaseZipPath = %q", cfg.OpenMUClientBaseZipPath)
 	}
+	if cfg.Metin2LegacyClientBaseZipPath != "/opt/luxview/metin2-legacy-assets/metin2-legacy-client-base.zip" {
+		t.Fatalf("Metin2LegacyClientBaseZipPath = %q", cfg.Metin2LegacyClientBaseZipPath)
+	}
 }

@@ -96,6 +96,11 @@ var launchSpecs = map[string]launchSpec{
 		registerPath: "/register.php",
 		processName:  "rakion.bin",
 	},
+	"metin2": {
+		clientDir:  "Metin2FullClient",
+		gameExe:     "Metin2Distribute.exe",
+		processName: "Metin2Distribute.exe",
+	},
 }
 
 // IsGameRunning reports whether the game's process is currently running, so the
@@ -377,14 +382,6 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	if !ok {
 		return fmt.Errorf("jogo não suportado: %s", card.Game)
 	}
-	// Login() validates the credentials against the web auth (launcherlogin.php).
-	// We don't forward the long web token to the game: the 3rd arg is a short auth
-	// ticket and a 40-char token corrupts the client's login packet, making the
-	// world report "ID doesn't exist". A short ticket works (broker is a stub; the
-	// world only checks the user/hex-pass we pass as args 1 and 2).
-	if _, err := a.Login(card, user, pass); err != nil {
-		return err
-	}
 	dir, err := installDir(card.AppID)
 	if err != nil {
 		return err
@@ -393,6 +390,18 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	exePath := filepath.Join(clientDir, spec.gameExe)
 	if _, err := os.Stat(exePath); err != nil {
 		return fmt.Errorf("jogo não encontrado — instale primeiro")
+	}
+	if card.Game == "metin2" {
+		return launchExecutable(exePath, clientDir)
+	}
+
+	// Login() validates the credentials against the web auth (launcherlogin.php).
+	// We don't forward the long web token to the game: the 3rd arg is a short auth
+	// ticket and a 40-char token corrupts the client's login packet, making the
+	// world report "ID doesn't exist". A short ticket works (broker is a stub; the
+	// world only checks the user/hex-pass we pass as args 1 and 2).
+	if _, err := a.Login(card, user, pass); err != nil {
+		return err
 	}
 
 	a.ensureRegistry(spec, clientDir)
@@ -425,6 +434,15 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	go patchKeyHook(spec.processName)
 	if err := invokeRakionDriver(clientDir, user, passHex, windowed); err != nil {
 		return err
+	}
+	return nil
+}
+
+func launchExecutable(exePath, workingDir string) error {
+	command := exec.Command(exePath)
+	command.Dir = workingDir
+	if err := command.Start(); err != nil {
+		return fmt.Errorf("falha ao iniciar o jogo: %w", err)
 	}
 	return nil
 }

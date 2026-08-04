@@ -289,6 +289,7 @@ LuxView Games is a standalone Go service that manages dedicated game server cont
 | Game | Notes |
 |---|---|
 | **V Rising** | Fully managed dedicated server with configurable settings, auto-start, and log streaming |
+| **Metin2 Legacy** | Legacy server template with per-server client configuration and LuxView launcher catalog |
 
 Game server containers are managed via the Docker API and exposed through Traefik routing, following the same pattern as regular apps.
 

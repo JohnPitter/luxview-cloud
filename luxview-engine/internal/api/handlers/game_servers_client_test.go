@@ -6,11 +6,13 @@ import (
 	"github.com/luxview/engine/internal/model"
 )
 
-func TestGameClientDownloadURLOnlyForOpenMU(t *testing.T) {
+func TestGameClientDownloadURLForConfiguredClientTemplates(t *testing.T) {
 	const appID = "8f18612d-8cb3-4b0e-b67d-94d26b1ce53f"
 
-	if got := gameClientDownloadURL(appID, "openmu"); got != "/api/apps/"+appID+"/game-client/download" {
-		t.Fatalf("openmu client url = %q", got)
+	for _, template := range []string{"openmu", "rakion", "metin2"} {
+		if got := gameClientDownloadURL(appID, template); got != "/api/apps/"+appID+"/game-client/download" {
+			t.Fatalf("%s client url = %q", template, got)
+		}
 	}
 
 	if got := gameClientDownloadURL(appID, "vrising"); got != "" {

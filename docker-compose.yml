@@ -92,6 +92,8 @@ services:
       - OPENMU_CLIENT_BASE_ZIP=${OPENMU_CLIENT_BASE_ZIP:-/data/luxview/storage/app-6c43b313-8d94-45ad-ba65-173ca7f381dd/openmu-s6-base.zip}
       # Rakion base client zip — config.xfs é injetado por servidor (subdomínio).
       - RAKION_CLIENT_BASE_ZIP=${RAKION_CLIENT_BASE_ZIP:-/data/luxview/storage/rakion-assets/rakion-client-base.zip}
+      # Metin2 legado base client zip — IP/portas são injetados no root.data.
+      - METIN2_LEGACY_CLIENT_BASE_ZIP=${METIN2_LEGACY_CLIENT_BASE_ZIP:-/data/luxview/storage/metin2-legacy-assets/metin2-legacy-client-base.zip}
     networks:
       - luxview-net
       - traefik-public

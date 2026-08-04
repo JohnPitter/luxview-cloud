@@ -291,7 +291,7 @@ function paintFooter() {
   if (!installing) { bar.classList.remove('active', 'indet'); fill.style.width = '0%'; }
   const actions = document.getElementById('actions')!;
   actions.innerHTML = `
-    ${g && g.installed ? `<button class="btn icon" id="optionsBtn" title="Opções (mouse, resolução, som)">⚙</button>` : ''}
+    ${g && g.installed && g.game === 'rakion' ? `<button class="btn icon" id="optionsBtn" title="Opções (mouse, resolução, som)">⚙</button>` : ''}
     <button class="btn icon" id="folderBtn" title="Abrir pasta de instalação" ${g && g.installed ? '' : 'disabled'}>📁</button>
     ${actionBtn(g)}`;
   document.getElementById('actionBtn')?.addEventListener('click', doAction);
@@ -302,7 +302,7 @@ function paintFooter() {
 function actionBtn(g?: Card): string {
   if (!g) return '';
   if (!g.enabled) return `<button class="btn" disabled>Indisponível</button>`;
-  if (g.game === loadingGame) return `<button class="btn primary" disabled><span class="spinner"></span> Carregando Rakion…</button>`;
+  if (g.game === loadingGame) return `<button class="btn primary" disabled><span class="spinner"></span> Carregando ${esc(niceName(g))}…</button>`;
   if (g.game === runningGame) return `<button class="btn primary" disabled>● Em execução</button>`;
   if (installing) return `<button class="btn primary" disabled><span class="spinner"></span> Instalando…</button>`;
   if (g.installed) return `<button class="btn primary" id="actionBtn">▶ JOGAR</button>`;
@@ -312,7 +312,7 @@ function actionBtn(g?: Card): string {
 function footerLine(g?: Card): string {
   if (!g) return '';
   if (!g.enabled) return 'Este jogo ainda não está disponível.';
-  if (g.game === loadingGame) return 'Carregando Rakion… (verificando arquivos e iniciando o jogo).';
+  if (g.game === loadingGame) return `Carregando ${niceName(g)}… (verificando arquivos e iniciando o jogo).`;
   if (g.game === runningGame) return 'Jogo em execução — Alt+Tab liberado (ou Ctrl+Alt+M para minimizar).';
   if (g.installed) return 'Instalado — pronto para jogar.';
   return 'Clique em INSTALAR para baixar o client.';
@@ -323,7 +323,17 @@ async function doAction() {
   if (!g || !g.enabled || installing) return;
 
   if (g.installed) {
-    openLogin(g);
+    if (g.game === 'metin2') {
+      try {
+        await Play(g as any, '', '');
+        toast('Iniciando o jogo…');
+        monitorGame(g);
+      } catch (e) {
+        toast(String(e).replace(/^Error:\s*/, ''), true);
+      }
+    } else {
+      openLogin(g);
+    }
     return;
   }
 

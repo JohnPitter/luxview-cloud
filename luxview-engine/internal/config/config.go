@@ -72,8 +72,9 @@ type Config struct {
 	VPSPublicIP   string // Public IP A-record users must point custom domains to
 	AcmeStorePath string // Path to Traefik acme.json (read-only mount), used for cert status
 
-	OpenMUClientBaseZipPath string // Base Season 6 client zip used to generate configured downloads
-	RakionClientBaseZipPath string // Base Rakion client zip used to generate configured downloads
+	OpenMUClientBaseZipPath       string // Base Season 6 client zip used to generate configured downloads
+	RakionClientBaseZipPath       string // Base Rakion client zip used to generate configured downloads
+	Metin2LegacyClientBaseZipPath string // Base legacy Metin2 client zip used to generate configured downloads
 
 	LauncherReleaseRepo string // GitHub "owner/name" whose Releases publish the launcher .exe
 	LauncherAssetName   string // Release asset filename for the launcher (e.g. luxview-launcher.exe)
@@ -156,8 +157,9 @@ func Load() (*Config, error) {
 		VPSPublicIP:   envStr("VPS_PUBLIC_IP", ""),
 		AcmeStorePath: envStr("ACME_STORE_PATH", "/letsencrypt/acme.json"),
 
-		OpenMUClientBaseZipPath: envStr("OPENMU_CLIENT_BASE_ZIP", "/opt/luxview/openmu-assets/openmu-s6-base.zip"),
-		RakionClientBaseZipPath: envStr("RAKION_CLIENT_BASE_ZIP", "/opt/luxview/rakion-assets/rakion-client-base.zip"),
+		OpenMUClientBaseZipPath:       envStr("OPENMU_CLIENT_BASE_ZIP", "/opt/luxview/openmu-assets/openmu-s6-base.zip"),
+		RakionClientBaseZipPath:       envStr("RAKION_CLIENT_BASE_ZIP", "/opt/luxview/rakion-assets/rakion-client-base.zip"),
+		Metin2LegacyClientBaseZipPath: envStr("METIN2_LEGACY_CLIENT_BASE_ZIP", "/opt/luxview/metin2-legacy-assets/metin2-legacy-client-base.zip"),
 
 		LauncherReleaseRepo: envStr("LAUNCHER_RELEASE_REPO", "JohnPitter/luxview-cloud"),
 		LauncherAssetName:   envStr("LAUNCHER_ASSET_NAME", "luxview-launcher.exe"),

@@ -111,6 +111,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	gameClientBaseZips := map[string]string{
 		"openmu": deps.Config.OpenMUClientBaseZipPath,
 		"rakion": deps.Config.RakionClientBaseZipPath,
+		"metin2": deps.Config.Metin2LegacyClientBaseZipPath,
 	}
 	gameServerHandler := handlers.NewGameServerHandler(deps.AppRepo, deps.GameConfigRepo, deps.GameServerSvc, deps.Config.VPSPublicIP, deps.Config.Domain, gameClientBaseZips)
 	launcherHandler := handlers.NewLauncherHandler(deps.Config.LauncherReleaseRepo, deps.Config.LauncherAssetName, deps.Config.GitHubAPIToken)

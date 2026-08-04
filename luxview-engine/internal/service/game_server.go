@@ -254,7 +254,7 @@ func (s *GameServerService) CountConnections(ctx context.Context, containerNameO
 
 // GetTemplates returns all available game server templates.
 func GetGameTemplates() []model.GameTemplate {
-	return []model.GameTemplate{vrisingTemplate(), openmuTemplate(), muemuTemplate(), rakionTemplate()}
+	return []model.GameTemplate{vrisingTemplate(), openmuTemplate(), muemuTemplate(), rakionTemplate(), metin2Template()}
 }
 
 func GetGameTemplate(id string) *model.GameTemplate {
