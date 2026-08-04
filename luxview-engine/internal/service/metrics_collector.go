@@ -78,7 +78,7 @@ func (mc *MetricsCollector) collectOne(ctx context.Context, app *model.App) (*mo
 	}
 
 	cpuPercent := calculateCPUPercent(&stats)
-	memoryBytes := stats.MemoryStats.Usage
+	memoryBytes := effectiveMemoryUsage(stats.MemoryStats)
 
 	var netRx, netTx int64
 	for _, netStats := range stats.Networks {
@@ -135,11 +135,29 @@ type dockerStats struct {
 		SystemCPUUsage uint64 `json:"system_cpu_usage"`
 	} `json:"precpu_stats"`
 	MemoryStats struct {
-		Usage uint64 `json:"usage"`
-		Limit uint64 `json:"limit"`
+		Usage uint64            `json:"usage"`
+		Limit uint64            `json:"limit"`
+		Stats map[string]uint64 `json:"stats"`
 	} `json:"memory_stats"`
 	Networks map[string]struct {
 		RxBytes int64 `json:"rx_bytes"`
 		TxBytes int64 `json:"tx_bytes"`
 	} `json:"networks"`
+}
+
+// effectiveMemoryUsage mirrors Docker CLI's memory value by excluding reclaimable
+// file cache. The raw cgroup usage otherwise reports cached ZIPs/assets as RAM.
+func effectiveMemoryUsage(memoryStats struct {
+	Usage uint64            `json:"usage"`
+	Limit uint64            `json:"limit"`
+	Stats map[string]uint64 `json:"stats"`
+}) uint64 {
+	cache := memoryStats.Stats["total_inactive_file"]
+	if cache == 0 {
+		cache = memoryStats.Stats["inactive_file"]
+	}
+	if cache >= memoryStats.Usage {
+		return 0
+	}
+	return memoryStats.Usage - cache
 }

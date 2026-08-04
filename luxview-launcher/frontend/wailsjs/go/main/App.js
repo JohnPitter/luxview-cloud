@@ -14,6 +14,10 @@ export function GetGames() {
   return window['go']['main']['App']['GetGames']();
 }
 
+export function GetMetin2Settings(arg1) {
+  return window['go']['main']['App']['GetMetin2Settings'](arg1);
+}
+
 export function GetSettings(arg1) {
   return window['go']['main']['App']['GetSettings'](arg1);
 }
@@ -44,6 +48,10 @@ export function Play(arg1, arg2, arg3) {
 
 export function Register(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['Register'](arg1, arg2, arg3, arg4);
+}
+
+export function SaveMetin2Settings(arg1, arg2) {
+  return window['go']['main']['App']['SaveMetin2Settings'](arg1, arg2);
 }
 
 export function SaveSettings(arg1, arg2) {

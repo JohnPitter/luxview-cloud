@@ -99,6 +99,7 @@ var launchSpecs = map[string]launchSpec{
 	"metin2": {
 		clientDir:   "Metin2FullClient",
 		gameExe:     "Metin2Distribute.exe",
+		settingsINI: "metin2.cfg",
 		processName: "Metin2Distribute.exe",
 	},
 }
@@ -504,6 +505,45 @@ type GameSettings struct {
 	Gamma            float64 `json:"gamma"`
 }
 
+type Metin2Settings struct {
+	ScreenWidth         int     `json:"screen_width"`
+	ScreenHeight        int     `json:"screen_height"`
+	BPP                 int     `json:"bpp"`
+	Frequency           int     `json:"frequency"`
+	Windowed            bool    `json:"windowed"`
+	SoftwareCursor      bool    `json:"software_cursor"`
+	ObjectCulling       bool    `json:"object_culling"`
+	Visibility          int     `json:"visibility"`
+	MusicVolume         float64 `json:"music_volume"`
+	SoundVolume         int     `json:"sound_volume"`
+	Gamma               int     `json:"gamma"`
+	PreLoadingDelay     int     `json:"pre_loading_delay"`
+	DecompressedTexture bool    `json:"decompressed_texture"`
+	AlwaysViewName      bool    `json:"always_view_name"`
+	ShowRefineDialog    bool    `json:"show_refine_dialog"`
+	FogMode             bool    `json:"fog_mode"`
+	NightMode           bool    `json:"night_mode"`
+	SnowMode            bool    `json:"snow_mode"`
+	SnowTexture         bool    `json:"snow_texture"`
+	ShowMobLevel        bool    `json:"show_mob_level"`
+	ShowMobAIFlag       bool    `json:"show_mob_ai_flag"`
+	AutoPickup          bool    `json:"auto_pickup"`
+	ExtendedFOV         bool    `json:"extended_fov"`
+	EffectLevel         int     `json:"effect_level"`
+	PrivateShopLevel    int     `json:"private_shop_level"`
+	DropItemLevel       int     `json:"drop_item_level"`
+	PetStatus           bool    `json:"pet_status"`
+	NPCNameStatus       bool    `json:"npc_name_status"`
+	ShowDiceInfo        bool    `json:"show_dice_info"`
+	PolyDogMode         bool    `json:"poly_dog_mode"`
+	PremiumAffect       bool    `json:"premium_affect"`
+	TimeSystem          bool    `json:"time_system"`
+	ENBModeStatus       bool    `json:"enb_mode_status"`
+	UseDefaultIME       bool    `json:"use_default_ime"`
+	SoftwareTiling      int     `json:"software_tiling"`
+	ShadowLevel         int     `json:"shadow_level"`
+}
+
 func defaultSettings() GameSettings {
 	return GameSettings{
 		ScreenWidth: 1920, ScreenHeight: 1080, DisplayMode: displayFullscreen,
@@ -655,6 +695,188 @@ func (a *App) SaveSettings(card GameCard, s GameSettings) error {
 	// Remember the windowed/borderless choice the INI can't represent.
 	writeDisplayMode(card.AppID, mode)
 	return nil
+}
+
+func defaultMetin2Settings() Metin2Settings {
+	return Metin2Settings{
+		ScreenWidth: 1366, ScreenHeight: 708, BPP: 32, Frequency: 60,
+		Visibility: 3, MusicVolume: 0.6, SoundVolume: 2, Gamma: 1,
+		PreLoadingDelay: 20, EffectLevel: 0, PrivateShopLevel: 0,
+		DropItemLevel: 0, SoftwareTiling: 0, ShadowLevel: 3,
+	}
+}
+
+func (a *App) GetMetin2Settings(card GameCard) (Metin2Settings, error) {
+	settings := defaultMetin2Settings()
+	path, err := a.iniPath(card)
+	if err != nil {
+		return settings, err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return settings, fmt.Errorf("instale o jogo primeiro")
+	}
+	return parseMetin2Settings(string(content), settings), nil
+}
+
+func (a *App) SaveMetin2Settings(card GameCard, settings Metin2Settings) error {
+	path, err := a.iniPath(card)
+	if err != nil {
+		return err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("instale o jogo primeiro")
+	}
+	updated := writeMetin2Config(string(content), settings)
+	_ = os.Chmod(path, 0o644)
+	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+		return fmt.Errorf("falha ao salvar as configurações do Metin2: %w", err)
+	}
+	return nil
+}
+
+func parseMetin2Settings(content string, settings Metin2Settings) Metin2Settings {
+	settings.ScreenWidth = configInt(content, "WIDTH", settings.ScreenWidth)
+	settings.ScreenHeight = configInt(content, "HEIGHT", settings.ScreenHeight)
+	settings.BPP = configInt(content, "BPP", settings.BPP)
+	settings.Frequency = configInt(content, "FREQUENCY", settings.Frequency)
+	settings.Windowed = configBool(content, "WINDOWED")
+	settings.SoftwareCursor = configBool(content, "SOFTWARE_CURSOR")
+	settings.ObjectCulling = configBool(content, "OBJECT_CULLING")
+	settings.Visibility = configInt(content, "VISIBILITY", settings.Visibility)
+	settings.MusicVolume = configFloat(content, "MUSIC_VOLUME", settings.MusicVolume)
+	settings.SoundVolume = configInt(content, "VOICE_VOLUME", settings.SoundVolume)
+	settings.Gamma = configInt(content, "GAMMA", settings.Gamma)
+	settings.PreLoadingDelay = configInt(content, "PRE_LOADING_DELAY_TIME", settings.PreLoadingDelay)
+	settings.DecompressedTexture = configBool(content, "DECOMPRESSED_TEXTURE")
+	settings.AlwaysViewName = configBool(content, "ALWAYS_VIEW_NAME")
+	settings.ShowRefineDialog = configBool(content, "SHOW_REFINE_DIALOG")
+	settings.FogMode = configBool(content, "FOG_MODE_ON")
+	settings.NightMode = configBool(content, "NIGHT_MODE_ON")
+	settings.SnowMode = configBool(content, "SNOW_MODE_ON")
+	settings.SnowTexture = configBool(content, "SNOW_TEXTURE_MODE")
+	settings.ShowMobLevel = configBool(content, "SHOW_MOBLEVEL")
+	settings.ShowMobAIFlag = configBool(content, "SHOW_MOBAIFLAG")
+	settings.AutoPickup = configBool(content, "AUTO_PICKUP")
+	settings.ExtendedFOV = configBool(content, "EXTENDED_FOV")
+	settings.EffectLevel = configInt(content, "EFFECT_LEVEL", settings.EffectLevel)
+	settings.PrivateShopLevel = configInt(content, "PRIVATE_SHOP_LEVEL", settings.PrivateShopLevel)
+	settings.DropItemLevel = configInt(content, "DROP_ITEM_LEVEL", settings.DropItemLevel)
+	settings.PetStatus = configBool(content, "PET_STATUS")
+	settings.NPCNameStatus = configBool(content, "NPC_NAME_STATUS")
+	settings.ShowDiceInfo = configBool(content, "SHOW_DICEINFO")
+	settings.PolyDogMode = configBool(content, "POLY_DOG_MODE")
+	settings.PremiumAffect = configBool(content, "PREMIUM_AFFECT")
+	settings.TimeSystem = configBool(content, "TIME_SYSTEM")
+	settings.ENBModeStatus = configBool(content, "ENB_MODE_STATUS")
+	settings.UseDefaultIME = configBool(content, "USE_DEFAULT_IME")
+	settings.SoftwareTiling = configInt(content, "SOFTWARE_TILING", settings.SoftwareTiling)
+	settings.ShadowLevel = configInt(content, "SHADOW_LEVEL", settings.ShadowLevel)
+	return settings
+}
+
+func writeMetin2Config(content string, settings Metin2Settings) string {
+	values := []struct{ key, value string }{
+		{"WIDTH", strconv.Itoa(clamp(settings.ScreenWidth, 800, 7680))},
+		{"HEIGHT", strconv.Itoa(clamp(settings.ScreenHeight, 600, 4320))},
+		{"FREQUENCY", strconv.Itoa(clamp(settings.Frequency, 30, 240))},
+		{"SOFTWARE_CURSOR", boolIdx(settings.SoftwareCursor)},
+		{"OBJECT_CULLING", boolIdx(settings.ObjectCulling)},
+		{"VISIBILITY", strconv.Itoa(clamp(settings.Visibility, 0, 3))},
+		{"MUSIC_VOLUME", ftoa(clampFloat(settings.MusicVolume, 0, 1))},
+		{"VOICE_VOLUME", strconv.Itoa(clamp(settings.SoundVolume, 0, 5))},
+		{"GAMMA", strconv.Itoa(clamp(settings.Gamma, 0, 3))},
+		{"PRE_LOADING_DELAY_TIME", strconv.Itoa(clamp(settings.PreLoadingDelay, 0, 60))},
+		{"DECOMPRESSED_TEXTURE", boolIdx(settings.DecompressedTexture)},
+		{"WINDOWED", boolIdx(settings.Windowed)},
+		{"ALWAYS_VIEW_NAME", boolIdx(settings.AlwaysViewName)},
+		{"SHOW_REFINE_DIALOG", boolIdx(settings.ShowRefineDialog)},
+		{"FOG_MODE_ON", boolIdx(settings.FogMode)},
+		{"NIGHT_MODE_ON", boolIdx(settings.NightMode)},
+		{"SNOW_MODE_ON", boolIdx(settings.SnowMode)},
+		{"SNOW_TEXTURE_MODE", boolIdx(settings.SnowTexture)},
+		{"SHOW_MOBLEVEL", boolIdx(settings.ShowMobLevel)},
+		{"SHOW_MOBAIFLAG", boolIdx(settings.ShowMobAIFlag)},
+		{"AUTO_PICKUP", boolIdx(settings.AutoPickup)},
+		{"EXTENDED_FOV", boolIdx(settings.ExtendedFOV)},
+		{"EFFECT_LEVEL", strconv.Itoa(clamp(settings.EffectLevel, 0, 4))},
+		{"PRIVATE_SHOP_LEVEL", strconv.Itoa(clamp(settings.PrivateShopLevel, 0, 4))},
+		{"DROP_ITEM_LEVEL", strconv.Itoa(clamp(settings.DropItemLevel, 0, 4))},
+		{"PET_STATUS", boolIdx(settings.PetStatus)},
+		{"NPC_NAME_STATUS", boolIdx(settings.NPCNameStatus)},
+		{"SHOW_DICEINFO", boolIdx(settings.ShowDiceInfo)},
+		{"POLY_DOG_MODE", boolIdx(settings.PolyDogMode)},
+		{"PREMIUM_AFFECT", boolIdx(settings.PremiumAffect)},
+		{"TIME_SYSTEM", boolIdx(settings.TimeSystem)},
+		{"ENB_MODE_STATUS", boolIdx(settings.ENBModeStatus)},
+		{"USE_DEFAULT_IME", boolIdx(settings.UseDefaultIME)},
+		{"SOFTWARE_TILING", strconv.Itoa(clamp(settings.SoftwareTiling, 0, 2))},
+		{"SHADOW_LEVEL", strconv.Itoa(clamp(settings.ShadowLevel, 0, 3))},
+	}
+	for _, item := range values {
+		content = setConfigValue(content, item.key, item.value)
+	}
+	return content
+}
+
+func configValue(content, key string) string {
+	re := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(key) + `[ \t]+([^\r\n \t]+)`)
+	match := re.FindStringSubmatch(content)
+	if len(match) == 2 {
+		return match[1]
+	}
+	return ""
+}
+
+func configInt(content, key string, fallback int) int {
+	if value, err := strconv.Atoi(configValue(content, key)); err == nil {
+		return value
+	}
+	return fallback
+}
+
+func configFloat(content, key string, fallback float64) float64 {
+	if value, err := strconv.ParseFloat(configValue(content, key), 64); err == nil {
+		return value
+	}
+	return fallback
+}
+
+func configBool(content, key string) bool {
+	return configInt(content, key, 0) == 1
+}
+
+func setConfigValue(content, key, value string) string {
+	re := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(key) + `[ \t]+[^\r\n]*`)
+	line := key + "\t\t" + value
+	if re.MatchString(content) {
+		return re.ReplaceAllString(content, line)
+	}
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	return content + line + "\n"
+}
+
+func clamp(value, min, max int) int {
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
+}
+
+func clampFloat(value, min, max float64) float64 {
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
 }
 
 func symbolValue(content, name string) (string, bool) {

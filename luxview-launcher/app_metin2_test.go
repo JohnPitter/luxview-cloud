@@ -17,6 +17,9 @@ func TestMetin2LaunchSpecUsesLegacyClientLayout(t *testing.T) {
 	if spec.loginPath != "" || spec.registerPath != "" {
 		t.Fatalf("Metin2 must authenticate inside the game, got login=%q register=%q", spec.loginPath, spec.registerPath)
 	}
+	if spec.settingsINI != "metin2.cfg" {
+		t.Fatalf("Metin2 settings file = %q, want metin2.cfg", spec.settingsINI)
+	}
 }
 
 func TestMetin2InstallRequiresRuntimeFiles(t *testing.T) {
@@ -41,5 +44,23 @@ func TestMetin2InstallRequiresRuntimeFiles(t *testing.T) {
 	}
 	if clientFilesReady(root, "metin2", spec) {
 		t.Fatal("Metin2 client without python27.dll was recognized as ready")
+	}
+}
+
+func TestMetin2SettingsRoundTrip(t *testing.T) {
+	content := "WIDTH\t1366\nHEIGHT\t708\nMUSIC_VOLUME\t0.361\nWINDOWED\t1\nSHADOW_LEVEL\t3\n"
+	settings := parseMetin2Settings(content, defaultMetin2Settings())
+	if settings.ScreenWidth != 1366 || settings.ScreenHeight != 708 || !settings.Windowed {
+		t.Fatalf("parsed settings = %+v", settings)
+	}
+
+	settings.ScreenWidth = 1920
+	settings.MusicVolume = 0.8
+	settings.Windowed = false
+	settings.ShadowLevel = 1
+	updated := writeMetin2Config(content, settings)
+	parsed := parseMetin2Settings(updated, defaultMetin2Settings())
+	if parsed.ScreenWidth != 1920 || parsed.MusicVolume != 0.8 || parsed.Windowed || parsed.ShadowLevel != 1 {
+		t.Fatalf("round-trip settings = %+v", parsed)
 	}
 }

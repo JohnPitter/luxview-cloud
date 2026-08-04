@@ -8,6 +8,8 @@ export function CheckForUpdate():Promise<main.UpdateInfo>;
 
 export function GetGames():Promise<Array<main.GameCard>>;
 
+export function GetMetin2Settings(arg1:main.GameCard):Promise<main.Metin2Settings>;
+
 export function GetSettings(arg1:main.GameCard):Promise<main.GameSettings>;
 
 export function InstallGame(arg1:main.GameCard):Promise<void>;
@@ -23,6 +25,8 @@ export function OpenInstallFolder(arg1:string):Promise<void>;
 export function Play(arg1:main.GameCard,arg2:string,arg3:string):Promise<void>;
 
 export function Register(arg1:main.GameCard,arg2:string,arg3:string,arg4:string):Promise<void>;
+
+export function SaveMetin2Settings(arg1:main.GameCard,arg2:main.Metin2Settings):Promise<void>;
 
 export function SaveSettings(arg1:main.GameCard,arg2:main.GameSettings):Promise<void>;
 

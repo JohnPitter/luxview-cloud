@@ -1,6 +1,6 @@
 import './style.css';
 import './app.css';
-import { GetGames, InstallGame, Play, GetSettings, SaveSettings, OpenInstallFolder, Version, IsGameRunning, IsInstalled, CheckForUpdate, ApplyUpdate, Register } from '../wailsjs/go/main/App';
+import { GetGames, InstallGame, Play, GetSettings, SaveSettings, GetMetin2Settings, SaveMetin2Settings, OpenInstallFolder, Version, IsGameRunning, IsInstalled, CheckForUpdate, ApplyUpdate, Register } from '../wailsjs/go/main/App';
 import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
 import rakionImg from './assets/games/rakion.jpg';
 import muImg from './assets/games/mu.jpg';
@@ -31,6 +31,19 @@ type Settings = {
   screen_width: number; screen_height: number; display_mode: string;
   mouse_sensitivity: number; invert_mouse: boolean; mouse_accel: boolean;
   sound_volume: number; music_volume: number; gamma: number;
+};
+
+type Metin2Settings = {
+  screen_width: number; screen_height: number; bpp: number; frequency: number;
+  windowed: boolean; software_cursor: boolean; object_culling: boolean; visibility: number;
+  music_volume: number; sound_volume: number; gamma: number; pre_loading_delay: number;
+  decompressed_texture: boolean; always_view_name: boolean; show_refine_dialog: boolean;
+  fog_mode: boolean; night_mode: boolean; snow_mode: boolean; snow_texture: boolean;
+  show_mob_level: boolean; show_mob_ai_flag: boolean; auto_pickup: boolean; extended_fov: boolean;
+  effect_level: number; private_shop_level: number; drop_item_level: number;
+  pet_status: boolean; npc_name_status: boolean; show_dice_info: boolean; poly_dog_mode: boolean;
+  premium_affect: boolean; time_system: boolean; enb_mode_status: boolean; use_default_ime: boolean;
+  software_tiling: number; shadow_level: number;
 };
 
 type Theme = { grad: string; accent: string; tag: string; initials: string };
@@ -291,7 +304,7 @@ function paintFooter() {
   if (!installing) { bar.classList.remove('active', 'indet'); fill.style.width = '0%'; }
   const actions = document.getElementById('actions')!;
   actions.innerHTML = `
-    ${g && g.installed && g.game === 'rakion' ? `<button class="btn icon" id="optionsBtn" title="Opções (mouse, resolução, som)">⚙</button>` : ''}
+    ${g && g.installed && (g.game === 'rakion' || g.game === 'metin2') ? `<button class="btn icon" id="optionsBtn" title="Configurações do jogo">⚙</button>` : ''}
     <button class="btn icon" id="folderBtn" title="Abrir pasta de instalação" ${g && g.installed ? '' : 'disabled'}>📁</button>
     ${actionBtn(g)}`;
   document.getElementById('actionBtn')?.addEventListener('click', doAction);
@@ -470,6 +483,9 @@ function openRegister(g: Card) {
 const RESOLUTIONS = [[1280,720],[1366,768],[1600,900],[1920,1080],[2560,1440],[3840,2160]];
 
 async function openOptions(g: Card) {
+  if (g.game === 'metin2') {
+    return openMetin2Options(g);
+  }
   let s: Settings;
   try { s = (await GetSettings(g as any)) as unknown as Settings; }
   catch (e) { toast(String(e), true); return; }
@@ -550,6 +566,104 @@ async function openOptions(g: Card) {
     } catch (e) {
       document.getElementById('optErr')!.textContent = String(e).replace(/^Error:\s*/, '');
     }
+  };
+}
+
+async function openMetin2Options(g: Card) {
+  let s: Metin2Settings;
+  try { s = (await GetMetin2Settings(g as any)) as unknown as Metin2Settings; }
+  catch (e) { toast(String(e), true); return; }
+
+  const resolutions = [[1280, 720], [1366, 708], [1600, 900], [1920, 1080], [2560, 1440]];
+  const selectOptions = (items: Array<[number, string]>, selected: number) =>
+    items.map(([value, label]) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${label}</option>`).join('');
+  const toggle = (id: string, label: string, checked: boolean) => `
+    <label class="metin-toggle"><span>${label}</span><span class="sw"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''}><span></span></span></label>`;
+
+  showModal(`
+    <h3>Configurações — ${esc(niceName(g))}</h3>
+    <div class="metin-options">
+      <div class="metin-heading">Vídeo</div>
+      <label>Resolução</label>
+      <select id="m2Resolution">
+        ${resolutions.map(([w, h]) => `<option value="${w}x${h}" ${w === s.screen_width && h === s.screen_height ? 'selected' : ''}>${w} × ${h}</option>`).join('')}
+        ${resolutions.some(([w, h]) => w === s.screen_width && h === s.screen_height) ? '' : `<option value="${s.screen_width}x${s.screen_height}" selected>${s.screen_width} × ${s.screen_height} (atual)</option>`}
+      </select>
+      <label>Frequência</label>
+      <select id="m2Frequency">${selectOptions([[60, '60 Hz'], [75, '75 Hz'], [120, '120 Hz'], [144, '144 Hz'], [165, '165 Hz']], s.frequency)}</select>
+      <label>Modo de exibição</label>
+      <select id="m2Windowed"><option value="0" ${!s.windowed ? 'selected' : ''}>Tela cheia</option><option value="1" ${s.windowed ? 'selected' : ''}>Janela</option></select>
+      <label>Distância de visão</label>
+      <select id="m2Visibility">${selectOptions([[0, 'Muito baixa'], [1, 'Baixa'], [2, 'Média'], [3, 'Alta']], s.visibility)}</select>
+      <label>Sombras</label>
+      <select id="m2Shadow">${selectOptions([[0, 'Desligadas'], [1, 'Baixas'], [2, 'Médias'], [3, 'Altas']], s.shadow_level)}</select>
+      <label>Nível de efeitos</label>
+      <select id="m2Effects">${selectOptions([[0, 'Todos'], [1, 'Meus e monstros'], [2, 'Meus e outros'], [3, 'Somente meus'], [4, 'Nenhum']], s.effect_level)}</select>
+      <label>Lojas privadas</label>
+      <select id="m2Shops">${selectOptions([[0, 'Todas'], [1, 'Próximas'], [2, 'Médio alcance'], [3, 'Mais próximas'], [4, 'Ao redor']], s.private_shop_level)}</select>
+      <label>Itens no chão</label>
+      <select id="m2Drops">${selectOptions([[0, 'Efeito e nome'], [1, 'Ocultar efeito'], [2, 'Ocultar nome'], [3, 'Somente ao passar o mouse'], [4, 'Não mostrar']], s.drop_item_level)}</select>
+      ${toggle('m2SoftwareCursor', 'Cursor de software', s.software_cursor)}
+      ${toggle('m2ObjectCulling', 'Otimizar objetos distantes', s.object_culling)}
+      ${toggle('m2Decompress', 'Descomprimir texturas', s.decompressed_texture)}
+
+      <div class="metin-heading">Áudio e interface</div>
+      <label>Volume da música <b id="m2MusicLabel">${Math.round(s.music_volume * 100)}%</b></label>
+      <input type="range" id="m2Music" min="0" max="1" step="0.01" value="${s.music_volume}">
+      <label>Volume dos efeitos <b id="m2SoundLabel">${s.sound_volume}</b></label>
+      <input type="range" id="m2Sound" min="0" max="5" step="1" value="${s.sound_volume}">
+      <label>Gamma <b id="m2GammaLabel">${s.gamma}</b></label>
+      <input type="range" id="m2Gamma" min="0" max="3" step="1" value="${s.gamma}">
+      ${toggle('m2AlwaysName', 'Mostrar nomes sempre', s.always_view_name)}
+      ${toggle('m2MobLevel', 'Mostrar nível dos monstros', s.show_mob_level)}
+      ${toggle('m2MobAI', 'Mostrar indicador dos monstros', s.show_mob_ai_flag)}
+      ${toggle('m2NPCName', 'Mostrar nomes dos NPCs', s.npc_name_status)}
+      ${toggle('m2Pets', 'Mostrar pets', s.pet_status)}
+      ${toggle('m2AutoPickup', 'Coleta automática', s.auto_pickup)}
+
+      <div class="metin-heading">Ambiente e avançado</div>
+      ${toggle('m2Fog', 'Névoa', s.fog_mode)}
+      ${toggle('m2Night', 'Modo noturno', s.night_mode)}
+      ${toggle('m2Snow', 'Neve', s.snow_mode)}
+      ${toggle('m2SnowTexture', 'Textura de neve', s.snow_texture)}
+      ${toggle('m2Refine', 'Confirmar refinamento', s.show_refine_dialog)}
+      ${toggle('m2FOV', 'Campo de visão estendido', s.extended_fov)}
+      ${toggle('m2IME', 'IME padrão do Windows', s.use_default_ime)}
+      <label>Modo de renderização</label>
+      <select id="m2Tiling">${selectOptions([[0, 'Automático'], [1, 'CPU'], [2, 'GPU']], s.software_tiling)}</select>
+      <label>Tempo de pré-carregamento <b id="m2PreloadLabel">${s.pre_loading_delay}s</b></label>
+      <input type="range" id="m2Preload" min="0" max="60" step="1" value="${s.pre_loading_delay}">
+    </div>
+    <div class="modal-err" id="m2Err"></div>
+    <div class="modal-actions"><button class="btn" id="m2Cancel">Cancelar</button><button class="btn primary" id="m2Save">Salvar</button></div>
+    <div class="modal-hint">As alterações entram em vigor na próxima abertura do jogo.</div>
+  `);
+
+  const input = (id: string) => document.getElementById(id) as HTMLInputElement;
+  const select = (id: string) => document.getElementById(id) as HTMLSelectElement;
+  const bool = (id: string) => input(id).checked;
+  input('m2Music').oninput = () => { document.getElementById('m2MusicLabel')!.textContent = `${Math.round(parseFloat(input('m2Music').value) * 100)}%`; };
+  input('m2Sound').oninput = () => { document.getElementById('m2SoundLabel')!.textContent = input('m2Sound').value; };
+  input('m2Gamma').oninput = () => { document.getElementById('m2GammaLabel')!.textContent = input('m2Gamma').value; };
+  input('m2Preload').oninput = () => { document.getElementById('m2PreloadLabel')!.textContent = `${input('m2Preload').value}s`; };
+  document.getElementById('m2Cancel')!.onclick = closeModal;
+  document.getElementById('m2Save')!.onclick = async () => {
+    const [width, height] = select('m2Resolution').value.split('x').map(Number);
+    const out: Metin2Settings = {
+      ...s, screen_width: width, screen_height: height, frequency: Number(select('m2Frequency').value),
+      windowed: select('m2Windowed').value === '1', visibility: Number(select('m2Visibility').value),
+      shadow_level: Number(select('m2Shadow').value), effect_level: Number(select('m2Effects').value),
+      private_shop_level: Number(select('m2Shops').value), drop_item_level: Number(select('m2Drops').value),
+      software_cursor: bool('m2SoftwareCursor'), object_culling: bool('m2ObjectCulling'), decompressed_texture: bool('m2Decompress'),
+      music_volume: Number(input('m2Music').value), sound_volume: Number(input('m2Sound').value), gamma: Number(input('m2Gamma').value),
+      always_view_name: bool('m2AlwaysName'), show_mob_level: bool('m2MobLevel'), show_mob_ai_flag: bool('m2MobAI'),
+      npc_name_status: bool('m2NPCName'), pet_status: bool('m2Pets'), auto_pickup: bool('m2AutoPickup'), fog_mode: bool('m2Fog'),
+      night_mode: bool('m2Night'), snow_mode: bool('m2Snow'), snow_texture: bool('m2SnowTexture'), show_refine_dialog: bool('m2Refine'),
+      extended_fov: bool('m2FOV'), use_default_ime: bool('m2IME'), software_tiling: Number(select('m2Tiling').value),
+      pre_loading_delay: Number(input('m2Preload').value),
+    };
+    try { await SaveMetin2Settings(g as any, out as any); closeModal(); toast('Configurações do Metin2 salvas!'); }
+    catch (e) { document.getElementById('m2Err')!.textContent = String(e).replace(/^Error:\s*/, ''); }
   };
 }
 

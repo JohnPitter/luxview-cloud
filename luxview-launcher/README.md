@@ -10,8 +10,8 @@ launchers proprietários (ex.: o NyxLauncher do Rakion).
 - **Instalar** — baixa o zip do client (`/api/public/game-client/{id}`) e extrai em
   `%APPDATA%\LuxViewLauncher\installs\<appId>`. Retry + progresso.
 - **Login + launch** — login na nossa UI; lança o jogo direto (sem o launcher proprietário).
-- **Opções** — resolução, modo janela/tela cheia, sensibilidade/inverter/aceleração do mouse,
-  volumes e gamma (editando o `PersistentSymbols.ini`, travado read-only pra persistir).
+- **Opções** — Rakion usa `PersistentSymbols.ini`; Metin2 usa `metin2.cfg` para resolução,
+  frequência, áudio, sombras, efeitos, visibilidade, neve, nomes, coleta automática e interface.
 - **Modo janela** — re-emoldura e centraliza a janela do jogo (a engine a prende no canto).
 - **"Em execução"** — o botão JOGAR desabilita enquanto o jogo está aberto (checa o processo).
 - Janela **frameless** com controles próprios, ícone LuxView, design system LuxView (âmbar/dark).
