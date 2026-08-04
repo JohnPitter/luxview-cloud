@@ -14,6 +14,26 @@ ele não deve ser apontado diretamente como imagem do template.
 
 Nome esperado: `luxview-cloud-metin2-legacy:latest`.
 
+O `Dockerfile` compila o servidor legado e empacota MariaDB no mesmo container.
+O engine do LuxView não inicia o `docker-compose.yml` do workspace OpenMetin;
+ele precisa desta imagem única.
+
+Estrutura mínima de `assets/` para o build:
+
+```text
+assets/05062349source.tar.gz
+assets/05062349game.tar.gz
+assets/29052339mysql.tar.gz
+assets/build/               # patches e compat.h do build legado
+assets/localization/server-pt-BR/game/share/
+```
+
+Build:
+
+```bash
+docker build --platform linux/386 -t luxview-cloud-metin2-legacy:latest .
+```
+
 Portas publicadas pelo template:
 
 | Porta | Uso |
