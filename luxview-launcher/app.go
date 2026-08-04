@@ -190,8 +190,29 @@ func (a *App) isInstalled(c GameCard) bool {
 		entries, _ := os.ReadDir(dir)
 		return len(entries) > 0
 	}
-	_, err = os.Stat(filepath.Join(dir, spec.clientDir, spec.gameExe))
-	return err == nil
+	return clientFilesReady(dir, c.Game, spec)
+}
+
+func clientFilesReady(installRoot, game string, spec launchSpec) bool {
+	for _, relativePath := range requiredClientFiles(game, spec) {
+		if _, err := os.Stat(filepath.Join(installRoot, spec.clientDir, relativePath)); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func requiredClientFiles(game string, spec launchSpec) []string {
+	files := []string{spec.gameExe}
+	if game == "metin2" {
+		files = append(files,
+			"python27.dll",
+			"SpeedTreeRT.dll",
+			filepath.Join("pack", "root.data"),
+			"locale.cfg",
+		)
+	}
+	return files
 }
 
 // IsInstalled is exposed to the frontend for quick checks.
@@ -388,7 +409,7 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	}
 	clientDir := filepath.Join(dir, spec.clientDir)
 	exePath := filepath.Join(clientDir, spec.gameExe)
-	if _, err := os.Stat(exePath); err != nil {
+	if !clientFilesReady(dir, card.Game, spec) {
 		return fmt.Errorf("jogo não encontrado — instale primeiro")
 	}
 	if card.Game == "metin2" {
