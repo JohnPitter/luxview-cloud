@@ -35,16 +35,11 @@ certificatesResolvers:
 
 # -- Providers ----------------------------------------------------------------
 providers:
-  # File provider for platform routes + middleware
   file:
     directory: /etc/traefik/dynamic
     watch: true
-
   # HTTP provider is configured via compose CLI so Authorization can come
   # from INTERNAL_TOKEN (static YAML cannot interpolate env).
-  file:
-    directory: /etc/traefik/dynamic
-    watch: true
 
 # -- API / Dashboard (disabled in production) ---------------------------------
 api:
