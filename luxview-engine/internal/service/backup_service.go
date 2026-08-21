@@ -29,6 +29,8 @@ type ContainerConfig struct {
 	MongoPassword       string
 	RedisContainer      string
 	RedisPassword       string
+	MySQLContainer      string
+	MySQLPassword       string
 }
 
 type BackupService struct {
@@ -361,6 +363,15 @@ func execDump(db string, backupPath string, cfg ContainerConfig) error {
 			return fmt.Errorf("redis copy rdb: %w — %s", err, string(out))
 		}
 		return nil
+	case "mysql-shared":
+		if cfg.MySQLContainer == "" {
+			return fmt.Errorf("mysql-shared container not configured")
+		}
+		return pipeToGzip(
+			exec.Command("docker", "exec", "-e", "MYSQL_PWD="+cfg.MySQLPassword, cfg.MySQLContainer,
+				"mysqldump", "-uroot", "--all-databases", "--single-transaction", "--routines"),
+			filepath.Join(backupPath, "mysql-shared.sql.gz"),
+		)
 	}
 	return fmt.Errorf("unknown database: %s", db)
 }
@@ -405,6 +416,14 @@ func execRestore(db string, backupPath string, cfg ContainerConfig) error {
 			return fmt.Errorf("redis restart: %w — %s", err, string(out))
 		}
 		return nil
+	case "mysql-shared":
+		if cfg.MySQLContainer == "" {
+			return fmt.Errorf("mysql-shared container not configured")
+		}
+		return gunzipPipeTo(
+			filepath.Join(backupPath, "mysql-shared.sql.gz"),
+			exec.Command("docker", "exec", "-i", "-e", "MYSQL_PWD="+cfg.MySQLPassword, cfg.MySQLContainer, "mysql", "-uroot"),
+		)
 	}
 	return fmt.Errorf("unknown database: %s", db)
 }

@@ -151,6 +151,26 @@ func (p *Provisioner) Provision(ctx context.Context, appID uuid.UUID, serviceTyp
 		}
 		log.Info().Str("name", dbName).Msg("email service provisioned")
 
+	case model.ServiceMySQL:
+		short := strings.ReplaceAll(appID.String(), "-", "")
+		if len(short) > 16 {
+			short = short[:16]
+		}
+		dbName = "g" + short
+		userName := "u" + short
+		if err := p.provisionMySQL(ctx, dbName, userName, password); err != nil {
+			return nil, fmt.Errorf("provision mysql: %w", err)
+		}
+		creds = map[string]string{
+			"host":     p.cfg.SharedMySQLHost,
+			"port":     fmt.Sprintf("%d", p.cfg.SharedMySQLPort),
+			"database": dbName,
+			"username": userName,
+			"password": password,
+			"url":      fmt.Sprintf("mysql://%s:%s@%s:%d/%s", userName, password, p.cfg.SharedMySQLHost, p.cfg.SharedMySQLPort, dbName),
+		}
+		log.Info().Str("db", dbName).Msg("mysql provisioned")
+
 	default:
 		return nil, fmt.Errorf("unsupported service type: %s", serviceType)
 	}
@@ -265,6 +285,10 @@ func (p *Provisioner) Deprovision(ctx context.Context, svc *model.AppService) er
 	case model.ServiceEmail:
 		if err := p.deprovisionEmail(ctx, svc.ID); err != nil {
 			log.Warn().Err(err).Str("email", svc.DBName).Msg("failed to deprovision email")
+		}
+	case model.ServiceMySQL:
+		if err := p.deprovisionMySQL(ctx, svc.DBName); err != nil {
+			log.Warn().Err(err).Str("db", svc.DBName).Msg("failed to deprovision mysql")
 		}
 	}
 
@@ -511,6 +535,50 @@ func (p *Provisioner) MailserverUpdatePassword(ctx context.Context, address, pas
 	return nil
 }
 
+func (p *Provisioner) mysqlExec(ctx context.Context, sql string) error {
+	container := p.cfg.SharedMySQLContainer
+	if container == "" {
+		container = "luxview-mysql-shared"
+	}
+	cmd := exec.CommandContext(ctx, "docker", "exec", "-e", "MYSQL_PWD="+p.cfg.SharedMySQLPassword,
+		container, "mysql", "-uroot", "-e", sql)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("mysql: %w — %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func (p *Provisioner) provisionMySQL(ctx context.Context, dbName, userName, password string) error {
+	db, user := quoteIdent(dbName), quoteIdent(userName)
+	pass := strings.ReplaceAll(password, "'", "")
+	sql := fmt.Sprintf(
+		"CREATE DATABASE IF NOT EXISTS `%s`; CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY '%s'; GRANT ALL PRIVILEGES ON `%s`.* TO '%s'@'%%'; FLUSH PRIVILEGES;",
+		db, user, pass, db, user)
+	return p.mysqlExec(ctx, sql)
+}
+
+func (p *Provisioner) deprovisionMySQL(ctx context.Context, dbName string) error {
+	db := quoteIdent(dbName)
+	user := quoteIdent(dbName)
+	if strings.HasPrefix(dbName, "g") && len(dbName) == 17 {
+		user = "u" + dbName[1:]
+	}
+	sql := fmt.Sprintf("DROP DATABASE IF EXISTS `%s`; DROP USER IF EXISTS '%s'@'%%';", db, quoteIdent(user))
+	return p.mysqlExec(ctx, sql)
+}
+
+func (p *Provisioner) EnsureMySQLDatabases(ctx context.Context, creds map[string]string, names []string) error {
+	user := quoteIdent(creds["username"])
+	var b strings.Builder
+	for _, name := range names {
+		db := quoteIdent(name)
+		fmt.Fprintf(&b, "CREATE DATABASE IF NOT EXISTS `%s`; GRANT ALL PRIVILEGES ON `%s`.* TO '%s'@'%%';", db, db, user)
+	}
+	b.WriteString(" FLUSH PRIVILEGES;")
+	return p.mysqlExec(ctx, b.String())
+}
+
 func (p *Provisioner) deprovisionPostgres(ctx context.Context, dbName string) error {
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/postgres?sslmode=disable",
 		p.cfg.SharedPGUser, p.cfg.SharedPGPassword, p.cfg.SharedPGHost, p.cfg.SharedPGPort)
@@ -562,6 +630,13 @@ func (p *Provisioner) GetEnvVarsForService(svc *model.AppService, creds map[stri
 		envVars["SMTP_PORT"] = creds["smtp_port"]
 		envVars["IMAP_HOST"] = creds["imap_host"]
 		envVars["IMAP_PORT"] = creds["imap_port"]
+	case model.ServiceMySQL:
+		envVars["MYSQL_HOST"] = creds["host"]
+		envVars["MYSQL_PORT"] = creds["port"]
+		envVars["MYSQL_DATABASE"] = creds["database"]
+		envVars["MYSQL_USER"] = creds["username"]
+		envVars["MYSQL_PASSWORD"] = creds["password"]
+		envVars["MYSQL_URL"] = creds["url"]
 	}
 	return envVars
 }

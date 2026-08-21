@@ -7,8 +7,21 @@ PGDATA="$DATA_DIR/pgdata"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-openmu}"
 OPENMU_ADMIN_USER="${OPENMU_ADMIN_USER:-admin}"
 OPENMU_ADMIN_PASS="${OPENMU_ADMIN_PASS:-openmu}"
+PGHOST="${PGHOST:-}"
 
 mkdir -p "$DATA_DIR"
+
+if [ -n "$PGHOST" ] && [ "$PGHOST" != "127.0.0.1" ] && [ "$PGHOST" != "localhost" ]; then
+    echo "[openmu] usando pg-shared em $PGHOST"
+    conf=/tmp/openmu-supervisord.conf
+    awk '
+      /^\[program:postgresql\]/ {skip=1; next}
+      /^\[program:/ {skip=0}
+      skip==1 {next}
+      {print}
+    ' /etc/supervisor/conf.d/openmu.conf | sed "s/DB_HOST=\"localhost\"/DB_HOST=\"$PGHOST\"/" > "$conf"
+    exec /usr/bin/supervisord -c "$conf"
+fi
 
 # Initialize PostgreSQL data directory if first run
 if [ ! -f "$PGDATA/PG_VERSION" ]; then

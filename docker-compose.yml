@@ -13,6 +13,11 @@ services:
     image: traefik:v3.4
     container_name: luxview-traefik
     restart: unless-stopped
+    environment:
+      - INTERNAL_TOKEN=${INTERNAL_TOKEN}
+    command:
+      - --configFile=/etc/traefik/traefik.yml
+      - --providers.http.headers.Authorization=Bearer ${INTERNAL_TOKEN}
     ports:
       - "80:80"
       - "443:443"
@@ -86,6 +91,11 @@ services:
       - SMTP_FROM=${SMTP_FROM:-alerts@luxview.cloud}
       - VPS_PUBLIC_IP=${VPS_PUBLIC_IP:-}
       - ACME_STORE_PATH=/letsencrypt/acme.json
+      - INTERNAL_TOKEN=${INTERNAL_TOKEN}
+      - SHARED_MYSQL_HOST=mysql-shared
+      - SHARED_MYSQL_PORT=3306
+      - SHARED_MYSQL_PASSWORD=${SHARED_MYSQL_PASSWORD}
+      - SHARED_MYSQL_CONTAINER=luxview-mysql-shared
       # Global client assets live in the central storage tab; each game app
       # receives its own seeded copy in its storage service on first use.
       - OPENMU_CLIENT_BASE_ZIP=${OPENMU_CLIENT_BASE_ZIP:-/data/luxview/storage/_global/openmu-assets/openmu-s6-base.zip}
@@ -167,6 +177,24 @@ services:
       timeout: 5s
       retries: 5
 
+  mysql-shared:
+    image: mariadb:11
+    container_name: luxview-mysql-shared
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${SHARED_MYSQL_PASSWORD}
+    command: --bind-address=0.0.0.0 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --lower-case-table-names=1
+    volumes:
+      - mysql-shared-data:/var/lib/mysql
+    networks:
+      - luxview-net
+      - game-net
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   # ---------------------------------------------------------------------------
   # Redis — Shared (User Apps)
   # ---------------------------------------------------------------------------
@@ -192,6 +220,7 @@ services:
     image: mongo:7
     container_name: luxview-mongo-shared
     restart: unless-stopped
+    profiles: ["shared-extras"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: luxview_admin
       MONGO_INITDB_ROOT_PASSWORD: ${SHARED_MONGO_PASSWORD}
@@ -212,6 +241,7 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: luxview-rabbitmq-shared
     restart: unless-stopped
+    profiles: ["shared-extras"]
     environment:
       RABBITMQ_DEFAULT_USER: ${SHARED_RABBITMQ_USER:-luxview_admin}
       RABBITMQ_DEFAULT_PASS: ${SHARED_RABBITMQ_PASSWORD}
@@ -308,6 +338,7 @@ networks:
 volumes:
   pg-platform-data:
   pg-shared-data:
+  mysql-shared-data:
   redis-shared-data:
   mongo-shared-data:
   rabbitmq-shared-data:

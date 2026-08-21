@@ -47,6 +47,11 @@ type Config struct {
 	SharedRabbitUser     string
 	SharedRabbitPassword string
 
+	SharedMySQLHost      string
+	SharedMySQLPort      int
+	SharedMySQLPassword  string
+	SharedMySQLContainer string
+
 	StorageBasePath    string // base path for local storage volumes
 	RepositoryBasePath string // base path for LuxView-hosted Git repositories
 	RepositoryMaxBytes int64  // maximum size of one hosted Git repository
@@ -132,6 +137,11 @@ func Load() (*Config, error) {
 		SharedRabbitPort:     envInt("SHARED_RABBIT_PORT", 5672),
 		SharedRabbitUser:     envStr("SHARED_RABBIT_USER", "luxview_admin"),
 		SharedRabbitPassword: envStr("SHARED_RABBIT_PASSWORD", ""),
+
+		SharedMySQLHost:      envStr("SHARED_MYSQL_HOST", "mysql-shared"),
+		SharedMySQLPort:      envInt("SHARED_MYSQL_PORT", 3306),
+		SharedMySQLPassword:  envStr("SHARED_MYSQL_PASSWORD", ""),
+		SharedMySQLContainer: envStr("SHARED_MYSQL_CONTAINER", "luxview-mysql-shared"),
 
 		StorageBasePath:    envStr("STORAGE_BASE_PATH", "/data/luxview/storage"),
 		RepositoryBasePath: envStr("REPOSITORY_BASE_PATH", "/data/luxview/repositories"),

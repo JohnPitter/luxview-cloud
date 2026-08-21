@@ -83,4 +83,19 @@ type GameTemplate struct {
 	// Traefik in PLAIN HTTP (no TLS/redirect) — required by legacy game clients
 	// that only speak http:// on port 80. 0 = no web service.
 	WebPort int `json:"web_port,omitempty"`
+	// DefaultCPU / DefaultMemory are applied on create. Empty falls back in Limits().
+	DefaultCPU    string      `json:"default_cpu,omitempty"`
+	DefaultMemory string      `json:"default_memory,omitempty"`
+	DBService     ServiceType `json:"db_service,omitempty"`
+}
+
+func (t GameTemplate) Limits() ResourceLimits {
+	cpu, mem := t.DefaultCPU, t.DefaultMemory
+	if cpu == "" {
+		cpu = "0.5"
+	}
+	if mem == "" {
+		mem = "1g"
+	}
+	return ResourceLimits{CPU: cpu, Memory: mem, Disk: "1g"}
 }

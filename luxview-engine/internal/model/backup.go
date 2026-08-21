@@ -25,10 +25,11 @@ const (
 type BackupDatabase string
 
 const (
-	DBPGPlatform  BackupDatabase = "pg-platform"
-	DBPGShared    BackupDatabase = "pg-shared"
-	DBMongoShared BackupDatabase = "mongo-shared"
-	DBRedisShared BackupDatabase = "redis-shared"
+	DBPGPlatform   BackupDatabase = "pg-platform"
+	DBPGShared     BackupDatabase = "pg-shared"
+	DBMongoShared  BackupDatabase = "mongo-shared"
+	DBRedisShared  BackupDatabase = "redis-shared"
+	DBMySQLShared  BackupDatabase = "mysql-shared"
 )
 
 var validDatabases = map[string]bool{
@@ -36,6 +37,7 @@ var validDatabases = map[string]bool{
 	"pg-shared":    true,
 	"mongo-shared": true,
 	"redis-shared": true,
+	"mysql-shared": true,
 }
 
 var validSchedules = map[string]bool{

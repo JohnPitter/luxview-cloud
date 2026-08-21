@@ -3,9 +3,9 @@ package service
 import "testing"
 
 func TestMetin2TemplateRegistered(t *testing.T) {
-	tmpl := GetGameTemplate(metin2TemplateID)
+	tmpl := Template(metin2TemplateID)
 	if tmpl == nil {
-		t.Fatal("metin2 template not registered in GetGameTemplates()")
+		t.Fatal("metin2 template not registered in Templates()")
 	}
 	if tmpl.DefaultGamePort != 11000 || tmpl.DefaultQueryPort != 13001 {
 		t.Fatalf("ports = %d/%d, want 11000/13001", tmpl.DefaultGamePort, tmpl.DefaultQueryPort)

@@ -24,6 +24,16 @@ export function OpenInstallFolder(arg1:string):Promise<void>;
 
 export function Play(arg1:main.GameCard,arg2:string,arg3:string):Promise<void>;
 
+export function PlayerLink(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function PlayerLogin(arg1:string,arg2:string):Promise<main.PlayerSession>;
+
+export function PlayerLogout():Promise<void>;
+
+export function PlayerMe():Promise<main.PlayerSession>;
+
+export function PlayerRegister(arg1:string,arg2:string):Promise<main.PlayerSession>;
+
 export function Register(arg1:main.GameCard,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function SaveMetin2Settings(arg1:main.GameCard,arg2:main.Metin2Settings):Promise<void>;

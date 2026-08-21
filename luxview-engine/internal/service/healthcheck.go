@@ -63,8 +63,25 @@ func (hc *HealthChecker) CheckAll(ctx context.Context) {
 	}
 
 	for _, app := range apps {
-		// Skip health checks for maintenance/building/deploying apps and game servers (UDP only)
-		if app.Status == model.AppStatusMaintenance || app.Status == model.AppStatusBuilding || app.Status == "deploying" || app.AppType == model.AppTypeGame {
+		if app.Status == model.AppStatusMaintenance || app.Status == model.AppStatusBuilding || app.Status == "deploying" {
+			continue
+		}
+		if app.AppType == model.AppTypeGame {
+			running, err := hc.container.IsRunning(ctx, app.ContainerID)
+			healthy := err == nil && running
+			if healthy {
+				hc.resetFailures(app.ID)
+				if app.Status == model.AppStatusError {
+					log.Info().Str("app", app.Subdomain).Msg("game recovered, marking as running")
+					_ = hc.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusRunning, app.ContainerID)
+				}
+				continue
+			}
+			count := hc.recordFailure(app.ID)
+			if app.Status == model.AppStatusRunning && count >= unhealthyThreshold {
+				log.Warn().Str("app", app.Subdomain).Msg("game container is down, marking as error")
+				_ = hc.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusError, app.ContainerID)
+			}
 			continue
 		}
 		outcome := hc.checkApp(ctx, &app)

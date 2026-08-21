@@ -1,6 +1,6 @@
 import './style.css';
 import './app.css';
-import { GetGames, InstallGame, Play, GetSettings, SaveSettings, GetMetin2Settings, SaveMetin2Settings, OpenInstallFolder, Version, IsGameRunning, IsInstalled, CheckForUpdate, ApplyUpdate, Register } from '../wailsjs/go/main/App';
+import { GetGames, InstallGame, Play, GetSettings, SaveSettings, GetMetin2Settings, SaveMetin2Settings, OpenInstallFolder, Version, IsGameRunning, IsInstalled, CheckForUpdate, ApplyUpdate, Register, PlayerRegister, PlayerLogin, PlayerMe, PlayerLogout } from '../wailsjs/go/main/App';
 import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
 import rakionImg from './assets/games/rakion.jpg';
 import muImg from './assets/games/mu.jpg';
@@ -111,6 +111,7 @@ let runningGame = ''; // game id em execução (botão "● Em execução")
 let loadingGame = ''; // game id carregando (botão "Carregando Rakion…")
 let update: { version: string; url: string; notes: string } | null = null; // nova versão disponível
 let updating = false; // aplicando atualização
+let player: { username: string; cash_points: number; reward_points: number } | null = null;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -163,6 +164,7 @@ async function load() {
   paintStatus();
   void checkUpdate(true);
   startUpdateWatcher();
+  void refreshPlayer();
 }
 
 function applyCatalog(real: Card[], pickDefault: boolean) {
@@ -196,6 +198,66 @@ function paintStatus() {
   if (!el) return;
   el.className = 'status' + (online ? '' : ' off');
   el.innerHTML = `<span class="dot"></span>${online ? 'Conectado' : 'Offline'}`;
+  const acct = document.getElementById('acctBtn');
+  if (acct) acct.textContent = player ? player.username : 'Conta';
+}
+
+async function refreshPlayer() {
+  try {
+    const me = await PlayerMe();
+    player = me && me.username ? { username: me.username, cash_points: me.cash_points, reward_points: me.reward_points } : null;
+  } catch {
+    player = null;
+  }
+  paintStatus();
+}
+
+function openPlayerAccount() {
+  if (player) {
+    showModal(`
+      <h3>Conta LuxView</h3>
+      <p class="modal-hint">${esc(player.username)} · cash ${player.cash_points} · prêmios ${player.reward_points}</p>
+      <div class="modal-actions">
+        <button class="btn" id="acctOut">Sair</button>
+        <button class="btn primary" id="acctOk">Ok</button>
+      </div>
+    `);
+    document.getElementById('acctOk')!.onclick = closeModal;
+    document.getElementById('acctOut')!.onclick = async () => {
+      try { await PlayerLogout(); } catch { /* ignore */ }
+      player = null;
+      closeModal();
+      paintStatus();
+    };
+    return;
+  }
+  showModal(`
+    <h3>Conta LuxView</h3>
+    <div class="field"><label>Usuário</label><input id="pUser" type="text" maxlength="32"></div>
+    <div class="field"><label>Senha</label><input id="pPass" type="password" maxlength="64"></div>
+    <div class="modal-err" id="pErr"></div>
+    <div class="modal-actions">
+      <button class="btn" id="pReg">Criar conta</button>
+      <button class="btn primary" id="pGo">Entrar</button>
+    </div>
+  `);
+  const userEl = document.getElementById('pUser') as HTMLInputElement;
+  const passEl = document.getElementById('pPass') as HTMLInputElement;
+  const errEl = document.getElementById('pErr')!;
+  const apply = async (fn: typeof PlayerLogin) => {
+    errEl.textContent = '';
+    try {
+      const me = await fn(userEl.value.trim(), passEl.value);
+      player = { username: me.username, cash_points: me.cash_points, reward_points: me.reward_points };
+      closeModal();
+      paintStatus();
+      toast('Conta conectada.');
+    } catch (e) {
+      errEl.textContent = String(e).replace(/^Error:\s*/, '');
+    }
+  };
+  document.getElementById('pGo')!.onclick = () => apply(PlayerLogin);
+  document.getElementById('pReg')!.onclick = () => apply(PlayerRegister);
 }
 
 function mount() {
@@ -206,6 +268,7 @@ function mount() {
         <div class="brand-text"><b>LuxView Cloud</b><span>Games</span></div>
         <div class="spacer"></div>
         <div class="status ${online ? '' : 'off'}"><span class="dot"></span>${online ? 'Conectado' : 'Offline'}</div>
+        <button class="acct" id="acctBtn" style="--wails-draggable:no-drag">${player ? esc(player.username) : 'Conta'}</button>
         ${version ? `<span class="ver">${esc(version)}</span>` : ''}
         <div class="wctrls" style="--wails-draggable:no-drag">
           <button class="wbtn" id="winMin" title="Minimizar" aria-label="Minimizar"></button>
@@ -234,6 +297,7 @@ function mount() {
   document.getElementById('winClose')?.addEventListener('click', () => Quit());
   document.getElementById('carPrev')?.addEventListener('click', () => scrollCarousel(-1));
   document.getElementById('carNext')?.addEventListener('click', () => scrollCarousel(1));
+  document.getElementById('acctBtn')?.addEventListener('click', openPlayerAccount);
   document.getElementById('strip')?.addEventListener('scroll', updateCarousel, { passive: true });
   window.removeEventListener('resize', updateCarousel);
   window.addEventListener('resize', updateCarousel);

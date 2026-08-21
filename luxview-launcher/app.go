@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.61"
+var appVersion = "v1.62"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -47,15 +47,6 @@ func validDisplayMode(m string) string {
 	default:
 		return displayFullscreen
 	}
-}
-
-// baseURL is the LuxView platform origin the launcher talks to. Overridable via
-// the LUXVIEW_BASE_URL env var (handy for testing against the VPS directly).
-func baseURL() string {
-	if v := strings.TrimRight(os.Getenv("LUXVIEW_BASE_URL"), "/"); v != "" {
-		return v
-	}
-	return "https://luxview.cloud"
 }
 
 // GameCard mirrors the engine's /api/public/games payload, plus local state.
@@ -156,6 +147,7 @@ type App struct {
 }
 
 func NewApp() *App {
+	loadLauncherDotEnv()
 	return &App{
 		client: &http.Client{Timeout: 30 * time.Second},
 		// Sem Timeout total (300MB+ pode levar minutos); ainda falha rápido se a
@@ -196,7 +188,11 @@ func installDir(appID string) (string, error) {
 // GetGames fetches the public catalog and annotates each card with local
 // install state.
 func (a *App) GetGames() ([]GameCard, error) {
-	resp, err := a.client.Get(baseURL() + "/api/public/games")
+	origin, err := platformOrigin()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := a.client.Get(origin + "/api/public/games")
 	if err != nil {
 		return nil, fmt.Errorf("não consegui contatar a LuxView Cloud: %w", err)
 	}
@@ -350,9 +346,9 @@ func (a *App) InstallGame(card GameCard) error {
 	if spec, ok := launchSpecForGame(game); ok && !clientFilesReady(dir, game, spec) {
 		return fmt.Errorf("client extraído incompleto — arquivos obrigatórios não encontrados")
 	}
-	// Sempre regrava o modo de vídeo do Rakion. O zip base vem windowed, e em
-	// janela o overlay do Discord/NVIDIA pinta uma camada preta por cima.
-	a.applyDefaultDisplay(card)
+	if !updating {
+		a.applyDefaultDisplay(card)
+	}
 	if err := saveInstalledClientHash(card.AppID, card.ClientHash); err != nil {
 		return fmt.Errorf("client instalado, mas não gravei a versão local: %w", err)
 	}
@@ -437,10 +433,10 @@ func (a *App) Login(card GameCard, user, pass string) (string, error) {
 		return "", fmt.Errorf("servidor sem host de login configurado")
 	}
 	// Web auth expects the password hex-encoded (matches the game's own scheme).
-	passHex := hex.EncodeToString([]byte(pass))
-	u := fmt.Sprintf("https://%s%s?user=%s&pass=%s", card.AuthHost, spec.loginPath,
-		url.QueryEscape(user), passHex)
-	resp, err := a.client.Get(u)
+	form := url.Values{}
+	form.Set("user", user)
+	form.Set("pass", hex.EncodeToString([]byte(pass)))
+	resp, err := a.client.PostForm(fmt.Sprintf("https://%s%s", card.AuthHost, spec.loginPath), form)
 	if err != nil {
 		return "", fmt.Errorf("não consegui contatar o servidor: %w", err)
 	}

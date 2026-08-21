@@ -68,6 +68,7 @@ func main() {
 	mailboxRepo := repository.NewMailboxRepo(db)
 	backupRepo := repository.NewBackupRepo(db)
 	gameConfigRepo := repository.NewGameServerConfigRepo(db)
+	playerRepo := repository.NewPlayerRepo(db)
 
 	// Services
 	portManager := service.NewPortManager(appRepo, cfg.PortRangeStart, cfg.PortRangeEnd)
@@ -96,6 +97,8 @@ func main() {
 		MongoPassword:       cfg.SharedMongoPassword,
 		RedisContainer:      "luxview-redis-shared",
 		RedisPassword:       cfg.SharedRedisPassword,
+		MySQLContainer:      "luxview-mysql-shared",
+		MySQLPassword:       cfg.SharedMySQLPassword,
 	})
 
 	// Workers
@@ -206,6 +209,7 @@ func main() {
 		BranchProtectionRepo: branchProtectionRepo,
 		GameConfigRepo:       gameConfigRepo,
 		GameServerSvc:        gameServerSvc,
+		PlayerRepo:           playerRepo,
 	})
 
 	// HTTP server

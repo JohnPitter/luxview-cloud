@@ -536,6 +536,36 @@ func (db *DB) migrate(ctx context.Context) error {
 			UNIQUE(repository_id, branch)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_branch_protection_repo ON branch_protection_rules(repository_id)`,
+
+		`CREATE TABLE IF NOT EXISTS player_accounts (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			username VARCHAR(32) UNIQUE NOT NULL,
+			password_hash TEXT NOT NULL,
+			cash_points BIGINT NOT NULL DEFAULT 0,
+			reward_points BIGINT NOT NULL DEFAULT 0,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE TABLE IF NOT EXISTS player_game_links (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			player_id UUID NOT NULL REFERENCES player_accounts(id) ON DELETE CASCADE,
+			app_id UUID NOT NULL,
+			template_id VARCHAR(50) NOT NULL,
+			in_game_nick VARCHAR(50) NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			UNIQUE(player_id, app_id),
+			UNIQUE(app_id, in_game_nick)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_player_game_links_player ON player_game_links(player_id)`,
+		`CREATE TABLE IF NOT EXISTS player_ledger (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			player_id UUID NOT NULL REFERENCES player_accounts(id) ON DELETE CASCADE,
+			kind VARCHAR(16) NOT NULL,
+			delta BIGINT NOT NULL,
+			reason TEXT NOT NULL DEFAULT '',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			CONSTRAINT chk_player_ledger_kind CHECK (kind IN ('cash','reward'))
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_player_ledger_player ON player_ledger(player_id, created_at)`,
 	}
 
 	for i, m := range migrations {

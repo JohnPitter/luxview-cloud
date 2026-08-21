@@ -25,7 +25,11 @@ INIT_SOCKET="/tmp/tibia-mysql-init.sock"
 INIT_PID="/tmp/tibia-mysql-init.pid"
 MAP_PATH="$CANARY_DIR/$DATA_PACK/world/otservbr.otbm"
 
-mysql_password="${TIBIA_DB_PASSWORD:-canary}"
+mysql_password="${TIBIA_DB_PASSWORD:-${MYSQL_PASSWORD:-canary}}"
+mysql_host="${MYSQL_HOST:-127.0.0.1}"
+mysql_port="${MYSQL_PORT:-3306}"
+mysql_user="${MYSQL_USER:-canary}"
+mysql_database="${MYSQL_DATABASE:-canary}"
 root_password="${MYSQL_ROOT_PASSWORD:-root}"
 public_ip="${LUXVIEW_PUBLIC_IP:-${TIBIA_SERVER_IP:-127.0.0.1}}"
 server_name="${TIBIA_SERVER_NAME:-OpenTibiaBR Canary}"
@@ -99,11 +103,11 @@ wait_for_socket() {
 wait_for_db() {
     local i
     for i in $(seq 1 60); do
-        if (exec 3<>/dev/tcp/127.0.0.1/3306) 2>/dev/null; then
+        if (exec 3<>/dev/tcp/${mysql_host}/${mysql_port}) 2>/dev/null; then
             exec 3>&- 2>/dev/null || true
             return 0
         fi
-        if ! kill -0 "$db_pid" 2>/dev/null; then
+        if [[ -n "${db_pid:-}" ]] && ! kill -0 "$db_pid" 2>/dev/null; then
             exit 1
         fi
         sleep 1
@@ -174,7 +178,7 @@ SQL
 start_database() {
     mkdir -p /run/mysqld
     chown mysql:mysql /run/mysqld
-    mariadbd --user=mysql --datadir="$MYSQL_DATADIR" --bind-address=0.0.0.0 \
+    mariadbd --user=mysql --datadir="$MYSQL_DATADIR" --bind-address=127.0.0.1 \
         --port=3306 --socket=/run/mysqld/mysqld.sock >>/tmp/tibia-mariadb.log 2>&1 &
     db_pid=$!
 }
@@ -221,10 +225,10 @@ configure_canary() {
     set_lua_number "gameProtocolPort" "$game_port"
     set_lua_number "statusProtocolPort" "$status_port"
     set_lua_number "maxPlayers" "$max_players"
-    set_lua_string "mysqlHost" "127.0.0.1"
-    set_lua_string "mysqlUser" "canary"
+    set_lua_string "mysqlHost" "$mysql_host"
+    set_lua_string "mysqlUser" "$mysql_user"
     set_lua_string "mysqlPass" "$mysql_password"
-    set_lua_string "mysqlDatabase" "canary"
+    set_lua_string "mysqlDatabase" "$mysql_database"
     set_lua_string "dataPackDirectory" "$DATA_PACK"
     set_lua_number "rateExp" "$rate_exp"
     set_lua_number "rateSkill" "$rate_skill"
@@ -240,10 +244,10 @@ start_login_server() {
     log "Iniciando login-server (HTTP :$login_http_port)..."
     LOGIN_HTTP_PORT="$login_http_port" \
     LOGIN_GRPC_PORT="$login_grpc_port" \
-    MYSQL_HOST="127.0.0.1" \
-    MYSQL_PORT="3306" \
-    MYSQL_DBNAME="canary" \
-    MYSQL_USER="canary" \
+    MYSQL_HOST="$mysql_host" \
+    MYSQL_PORT="$mysql_port" \
+    MYSQL_DBNAME="$mysql_database" \
+    MYSQL_USER="$mysql_user" \
     MYSQL_PASS="$mysql_password" \
     SERVER_NAME="$server_name" \
     SERVER_IP="$public_ip" \
@@ -273,13 +277,17 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-if [[ ! -f "$MYSQL_DATADIR/.canary-imported" ]]; then
-    initialize_database
+if [[ "$mysql_host" != "127.0.0.1" && "$mysql_host" != "localhost" ]]; then
+    log "usando mysql-shared em ${mysql_host}:${mysql_port}"
+    wait_for_db
+else
+    if [[ ! -f "$MYSQL_DATADIR/.canary-imported" ]]; then
+        initialize_database
+    fi
+    start_database
+    wait_for_db
+    ensure_database_user
 fi
-
-start_database
-wait_for_db
-ensure_database_user
 download_map
 configure_canary
 start_login_server

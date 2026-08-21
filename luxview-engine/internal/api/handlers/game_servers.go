@@ -25,7 +25,7 @@ type GameServerHandler struct {
 	appRepo           *repository.AppRepo
 	gameConfigRepo    *repository.GameServerConfigRepo
 	gameServerSvc     *service.GameServerService
-	gameClientStorage *service.GameClientStorageService
+	gameClientStorage *service.ClientStore
 	serverIP          string
 	domain            string
 	clientBaseZips    map[string]string // templateID -> base client zip path
@@ -35,7 +35,7 @@ func NewGameServerHandler(
 	appRepo *repository.AppRepo,
 	gameConfigRepo *repository.GameServerConfigRepo,
 	gameServerSvc *service.GameServerService,
-	gameClientStorage *service.GameClientStorageService,
+	gameClientStorage *service.ClientStore,
 	serverIP string,
 	domain string,
 	clientBaseZips map[string]string,
@@ -53,37 +53,46 @@ func NewGameServerHandler(
 
 // ListTemplates returns all available game templates.
 func (h *GameServerHandler) ListTemplates(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, service.GetGameTemplates())
+	writeJSON(w, http.StatusOK, service.Templates())
+}
+
+func (h *GameServerHandler) loadGame(w http.ResponseWriter, r *http.Request) (*model.App, *model.GameServerConfig, bool) {
+	ctx := r.Context()
+	userID := middleware.GetUserID(ctx)
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app id")
+		return nil, nil, false
+	}
+	app, err := h.appRepo.FindByID(ctx, appID)
+	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return nil, nil, false
+	}
+	if app.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return nil, nil, false
+	}
+	if app.AppType != model.AppTypeGame {
+		writeError(w, http.StatusBadRequest, "app is not a game server")
+		return nil, nil, false
+	}
+	cfg, err := h.gameConfigRepo.GetByAppID(ctx, app.ID)
+	if err != nil || cfg == nil {
+		writeError(w, http.StatusNotFound, "game config not found")
+		return nil, nil, false
+	}
+	return app, cfg, true
+}
+
+func gameListed(cfg *model.GameServerConfig) bool {
+	return strings.ToLower(cfg.ConfigFields["LUXVIEW_LISTED"]) == "true"
 }
 
 // GetConfig returns the game server config for an app.
 func (h *GameServerHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := middleware.GetUserID(ctx)
-
-	appID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid app id")
-		return
-	}
-
-	app, err := h.appRepo.FindByID(ctx, appID)
-	if err != nil || app == nil {
-		writeError(w, http.StatusNotFound, "app not found")
-		return
-	}
-	if app.UserID != userID {
-		writeError(w, http.StatusForbidden, "forbidden")
-		return
-	}
-	if app.AppType != model.AppTypeGame {
-		writeError(w, http.StatusBadRequest, "app is not a game server")
-		return
-	}
-
-	cfg, err := h.gameConfigRepo.GetByAppID(ctx, appID)
-	if err != nil || cfg == nil {
-		writeError(w, http.StatusNotFound, "game config not found")
+	app, cfg, ok := h.loadGame(w, r)
+	if !ok {
 		return
 	}
 
@@ -111,41 +120,18 @@ func (h *GameServerHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		GameServerConfig:  responseConfig,
 		Template:          tmpl,
 		ServerIP:          h.serverIP,
-		ClientDownloadURL: gameClientDownloadURL(appID.String(), cfg.TemplateID),
-		ClientPublicURL:   gameClientPublicURL("https://"+h.domain, appID.String(), cfg.TemplateID),
+		ClientDownloadURL: gameClientDownloadURL(app.ID.String(), cfg.TemplateID),
+		ClientPublicURL:   gameClientPublicURL("https://"+h.domain, app.ID.String(), cfg.TemplateID),
 	})
 }
 
 // UpdateConfig saves new game settings and restarts the container.
 func (h *GameServerHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
+	app, cfg, ok := h.loadGame(w, r)
+	if !ok {
+		return
+	}
 	ctx := r.Context()
-	userID := middleware.GetUserID(ctx)
-
-	appID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid app id")
-		return
-	}
-
-	app, err := h.appRepo.FindByID(ctx, appID)
-	if err != nil || app == nil {
-		writeError(w, http.StatusNotFound, "app not found")
-		return
-	}
-	if app.UserID != userID {
-		writeError(w, http.StatusForbidden, "forbidden")
-		return
-	}
-	if app.AppType != model.AppTypeGame {
-		writeError(w, http.StatusBadRequest, "app is not a game server")
-		return
-	}
-
-	cfg, err := h.gameConfigRepo.GetByAppID(ctx, appID)
-	if err != nil || cfg == nil {
-		writeError(w, http.StatusNotFound, "game config not found")
-		return
-	}
 
 	var body struct {
 		ConfigFields map[string]string `json:"config_fields"`
@@ -190,30 +176,11 @@ func (h *GameServerHandler) UpdateConfig(w http.ResponseWriter, r *http.Request)
 
 // GetStatus queries live player count via A2S.
 func (h *GameServerHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
+	app, cfg, ok := h.loadGame(w, r)
+	if !ok {
+		return
+	}
 	ctx := r.Context()
-	userID := middleware.GetUserID(ctx)
-
-	appID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid app id")
-		return
-	}
-
-	app, err := h.appRepo.FindByID(ctx, appID)
-	if err != nil || app == nil {
-		writeError(w, http.StatusNotFound, "app not found")
-		return
-	}
-	if app.UserID != userID {
-		writeError(w, http.StatusForbidden, "forbidden")
-		return
-	}
-
-	cfg, err := h.gameConfigRepo.GetByAppID(ctx, appID)
-	if err != nil || cfg == nil {
-		writeError(w, http.StatusNotFound, "game config not found")
-		return
-	}
 
 	// OpenMU has no A2S query protocol; estimate online players by counting
 	// established connections on its game-server ports inside the container.
@@ -222,7 +189,7 @@ func (h *GameServerHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if status := staticGameServerStatus(app, service.GetGameTemplate(cfg.TemplateID)); status != nil {
+	if status := staticGameServerStatus(app, service.Template(cfg.TemplateID)); status != nil {
 		writeJSON(w, http.StatusOK, status)
 		return
 	}
@@ -236,30 +203,11 @@ func (h *GameServerHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 
 // GetPlayers returns the list of connected players via A2S_PLAYER.
 func (h *GameServerHandler) GetPlayers(w http.ResponseWriter, r *http.Request) {
+	app, cfg, ok := h.loadGame(w, r)
+	if !ok {
+		return
+	}
 	ctx := r.Context()
-	userID := middleware.GetUserID(ctx)
-
-	appID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid app id")
-		return
-	}
-
-	app, err := h.appRepo.FindByID(ctx, appID)
-	if err != nil || app == nil {
-		writeError(w, http.StatusNotFound, "app not found")
-		return
-	}
-	if app.UserID != userID {
-		writeError(w, http.StatusForbidden, "forbidden")
-		return
-	}
-
-	cfg, err := h.gameConfigRepo.GetByAppID(ctx, appID)
-	if err != nil || cfg == nil {
-		writeError(w, http.StatusNotFound, "game config not found")
-		return
-	}
 
 	containerAddr := service.ContainerName(app.Subdomain)
 	players, err := h.gameServerSvc.QueryPlayers(ctx, cfg, containerAddr)
@@ -272,22 +220,8 @@ func (h *GameServerHandler) GetPlayers(w http.ResponseWriter, r *http.Request) {
 
 // DownloadClient serves the per-server game client to the authenticated owner.
 func (h *GameServerHandler) DownloadClient(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := middleware.GetUserID(ctx)
-
-	appID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid app id")
-		return
-	}
-
-	app, err := h.appRepo.FindByID(ctx, appID)
-	if err != nil || app == nil {
-		writeError(w, http.StatusNotFound, "app not found")
-		return
-	}
-	if app.UserID != userID {
-		writeError(w, http.StatusForbidden, "forbidden")
+	app, _, ok := h.loadGame(w, r)
+	if !ok {
 		return
 	}
 	h.serveGameClient(w, r, app)
@@ -306,6 +240,11 @@ func (h *GameServerHandler) DownloadClientPublic(w http.ResponseWriter, r *http.
 	}
 	app, err := h.appRepo.FindByID(ctx, appID)
 	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	cfg, err := h.gameConfigRepo.GetByAppID(ctx, app.ID)
+	if err != nil || cfg == nil || !gameListed(cfg) {
 		writeError(w, http.StatusNotFound, "app not found")
 		return
 	}
@@ -347,7 +286,7 @@ func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Reque
 		if err != nil || cfg == nil {
 			continue
 		}
-		if strings.ToLower(cfg.ConfigFields["LUXVIEW_LISTED"]) != "true" {
+		if !gameListed(cfg) {
 			continue
 		}
 		clientReady := true
@@ -370,7 +309,7 @@ func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Reque
 			}
 		}
 		display, desc := cfg.TemplateID, ""
-		if tmpl := service.GetGameTemplate(cfg.TemplateID); tmpl != nil {
+		if tmpl := service.Template(cfg.TemplateID); tmpl != nil {
 			display = tmpl.DisplayName
 			desc = tmpl.Description
 		}
@@ -487,7 +426,7 @@ func (h *GameServerHandler) serveGameClient(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *GameServerHandler) configTemplate(templateID string) *model.GameTemplate {
-	tmpl := service.GetGameTemplate(templateID)
+	tmpl := service.Template(templateID)
 	if tmpl == nil || h.gameClientStorage == nil || !gameClientWithDownload[templateID] {
 		return tmpl
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
+	"github.com/docker/go-units"
 	"github.com/luxview/engine/internal/model"
 	"github.com/luxview/engine/internal/repository"
 	dockerclient "github.com/luxview/engine/pkg/docker"
@@ -69,102 +70,39 @@ func (s *GameServerService) Start(ctx context.Context, app *model.App, cfg *mode
 	log := logger.With("game-server")
 	containerName := ContainerName(app.Subdomain)
 
-	protocol := cfg.Protocol
-	if protocol == "" {
-		protocol = "udp"
+	portSet, portMap, err := s.gamePorts(ctx, app, cfg)
+	if err != nil {
+		return "", err
 	}
-	gamePortStr := fmt.Sprintf("%d/%s", cfg.GamePort, protocol)
-	gamePort := nat.Port(gamePortStr)
-
-	portSet := nat.PortSet{gamePort: struct{}{}}
-	portMap := nat.PortMap{
-		gamePort: []nat.PortBinding{
-			{HostIP: "0.0.0.0", HostPort: strconv.Itoa(cfg.GamePort)},
-		},
-	}
-
-	if cfg.QueryPort > 0 {
-		queryPortStr := fmt.Sprintf("%d/%s", cfg.QueryPort, protocol)
-		queryPort := nat.Port(queryPortStr)
-		portSet[queryPort] = struct{}{}
-		portMap[queryPort] = []nat.PortBinding{
-			{HostIP: "0.0.0.0", HostPort: strconv.Itoa(cfg.QueryPort)},
-		}
-	}
-
-	for _, ep := range cfg.ExtraPorts {
-		epProto := ep.Protocol
-		if epProto == "" {
-			epProto = protocol
-		}
-		epStr := fmt.Sprintf("%d/%s", ep.Port, epProto)
-		epNat := nat.Port(epStr)
-		portSet[epNat] = struct{}{}
-		portMap[epNat] = []nat.PortBinding{
-			{HostIP: "0.0.0.0", HostPort: strconv.Itoa(ep.Port)},
-		}
-	}
-
-	// HTTP web service (auth/admin panel) routed via Traefik subdomain. The
-	// template's WebPort (container side) is published to the app's AssignedPort
-	// (host side); router.go then routes "<subdomain>.<domain>" to it in plain
-	// HTTP. Allocate AssignedPort on first start if the app doesn't have one.
-	if tmpl := GetGameTemplate(cfg.TemplateID); tmpl != nil && tmpl.WebPort > 0 {
-		if app.AssignedPort == 0 && s.portManager != nil && s.appRepo != nil {
-			port, err := s.portManager.Allocate(ctx)
-			if err != nil {
-				return "", fmt.Errorf("allocate web port: %w", err)
-			}
-			if err := s.appRepo.UpdatePort(ctx, app.ID, port); err != nil {
-				s.portManager.Release(port)
-				return "", fmt.Errorf("persist web port: %w", err)
-			}
-			app.AssignedPort = port
-		}
-		if app.AssignedPort > 0 {
-			webNat := nat.Port(fmt.Sprintf("%d/tcp", tmpl.WebPort))
-			portSet[webNat] = struct{}{}
-			portMap[webNat] = []nat.PortBinding{
-				{HostIP: "0.0.0.0", HostPort: strconv.Itoa(app.AssignedPort)},
-			}
-		}
-	}
-
-	var envList []string
-	for k, v := range cfg.ConfigFields {
-		envList = append(envList, fmt.Sprintf("%s=%s", k, v))
-	}
-	// Public IP so game entrypoints can advertise the server to remote clients
-	// (e.g. Rakion's broker GameServers.ini wan=<public ip>).
-	if s.serverIP != "" {
-		envList = append(envList, "LUXVIEW_PUBLIC_IP="+s.serverIP)
-	}
-
-	// Build mount list. Prefer the multi-volume Volumes field; fall back to the legacy
-	// single DataVolume/DataDir pair when Volumes is empty (older game configs).
 	mounts := buildMounts(app.Subdomain, cfg)
-
 	nanoCPUs, memory := parseResourceLimits(app.ResourceLimits)
+	pids := int64(512)
 
 	containerCfg := &container.Config{
-		Image: cfg.Image,
-		Env:   envList,
+		Image:        cfg.Image,
+		Env:          gameEnv(cfg, s.serverIP),
 		ExposedPorts: portSet,
 		Labels: map[string]string{
-			"luxview.app":          app.Subdomain,
-			"luxview.app.id":       app.ID.String(),
-			"luxview.app.type":     "game",
+			"luxview.app":           app.Subdomain,
+			"luxview.app.id":        app.ID.String(),
+			"luxview.app.type":      "game",
 			"luxview.game.template": cfg.TemplateID,
-			"luxview.managed":      "true",
+			"luxview.managed":       "true",
 		},
 	}
-
 	hostCfg := &container.HostConfig{
 		PortBindings:  portMap,
 		RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
 		Resources: container.Resources{
-			NanoCPUs: nanoCPUs,
-			Memory:   memory,
+			NanoCPUs:   nanoCPUs,
+			Memory:     memory,
+			MemorySwap: memory,
+			PidsLimit:  &pids,
+			Ulimits:    []*units.Ulimit{{Name: "nofile", Soft: 65535, Hard: 65535}},
+		},
+		LogConfig: container.LogConfig{
+			Type:   "json-file",
+			Config: map[string]string{"max-size": "10m", "max-file": "3"},
 		},
 		Mounts: mounts,
 	}
@@ -176,20 +114,75 @@ func (s *GameServerService) Start(ctx context.Context, app *model.App, cfg *mode
 	if err != nil {
 		return "", fmt.Errorf("create game container: %w", err)
 	}
-
 	if err := s.docker.StartContainer(ctx, containerID); err != nil {
 		_ = s.docker.RemoveContainer(ctx, containerID, true)
 		return "", fmt.Errorf("start game container: %w", err)
 	}
-
 	if s.gameNetwork != "" {
 		if err := s.docker.ConnectNetwork(ctx, s.gameNetwork, containerID); err != nil {
 			log.Warn().Err(err).Str("network", s.gameNetwork).Msg("failed to connect game container to network")
 		}
 	}
-
 	log.Info().Str("container", containerID[:12]).Str("app", app.Subdomain).Msg("game server started")
 	return containerID, nil
+}
+
+func bindPort(set nat.PortSet, m nat.PortMap, port int, proto string) {
+	p := nat.Port(fmt.Sprintf("%d/%s", port, proto))
+	set[p] = struct{}{}
+	m[p] = []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: strconv.Itoa(port)}}
+}
+
+func (s *GameServerService) gamePorts(ctx context.Context, app *model.App, cfg *model.GameServerConfig) (nat.PortSet, nat.PortMap, error) {
+	protocol := cfg.Protocol
+	if protocol == "" {
+		protocol = "udp"
+	}
+	portSet := nat.PortSet{}
+	portMap := nat.PortMap{}
+	bindPort(portSet, portMap, cfg.GamePort, protocol)
+	if cfg.QueryPort > 0 {
+		bindPort(portSet, portMap, cfg.QueryPort, protocol)
+	}
+	for _, ep := range cfg.ExtraPorts {
+		epProto := ep.Protocol
+		if epProto == "" {
+			epProto = protocol
+		}
+		bindPort(portSet, portMap, ep.Port, epProto)
+	}
+	tmpl := Template(cfg.TemplateID)
+	if tmpl == nil || tmpl.WebPort <= 0 {
+		return portSet, portMap, nil
+	}
+	if app.AssignedPort == 0 && s.portManager != nil && s.appRepo != nil {
+		port, err := s.portManager.Allocate(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("allocate web port: %w", err)
+		}
+		if err := s.appRepo.UpdatePort(ctx, app.ID, port); err != nil {
+			s.portManager.Release(port)
+			return nil, nil, fmt.Errorf("persist web port: %w", err)
+		}
+		app.AssignedPort = port
+	}
+	if app.AssignedPort > 0 {
+		webNat := nat.Port(fmt.Sprintf("%d/tcp", tmpl.WebPort))
+		portSet[webNat] = struct{}{}
+		portMap[webNat] = []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: strconv.Itoa(app.AssignedPort)}}
+	}
+	return portSet, portMap, nil
+}
+
+func gameEnv(cfg *model.GameServerConfig, publicIP string) []string {
+	envList := make([]string, 0, len(cfg.ConfigFields)+1)
+	for k, v := range cfg.ConfigFields {
+		envList = append(envList, fmt.Sprintf("%s=%s", k, v))
+	}
+	if publicIP != "" {
+		envList = append(envList, "LUXVIEW_PUBLIC_IP="+publicIP)
+	}
+	return envList
 }
 
 // QueryStatus queries live player count via the A2S Steam protocol.
@@ -253,12 +246,12 @@ func (s *GameServerService) CountConnections(ctx context.Context, containerNameO
 }
 
 // GetTemplates returns all available game server templates.
-func GetGameTemplates() []model.GameTemplate {
+func Templates() []model.GameTemplate {
 	return []model.GameTemplate{vrisingTemplate(), openmuTemplate(), muemuTemplate(), rakionTemplate(), metin2Template(), tibiaTemplate()}
 }
 
-func GetGameTemplate(id string) *model.GameTemplate {
-	for _, t := range GetGameTemplates() {
+func Template(id string) *model.GameTemplate {
+	for _, t := range Templates() {
 		if t.ID == id {
 			tCopy := t
 			return &tCopy
@@ -429,6 +422,8 @@ func vrisingTemplate() model.GameTemplate {
 		DefaultGamePort:  27015,
 		DefaultQueryPort: 27016,
 		DefaultImage:     "luxview-cloud-vrising:latest",
+		DefaultCPU:       "1.0",
+		DefaultMemory:    "4g",
 		SupportsQuery:    true,
 		DefaultVolumes: []model.GameVolume{
 			{MountPath: "/vrising-server"}, // Steam-installed server binaries

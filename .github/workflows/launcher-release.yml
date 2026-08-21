@@ -46,7 +46,9 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
 
       - name: Build launcher
-        run: wails build -platform windows/amd64 -ldflags "-X main.appVersion=${{ steps.ver.outputs.version }}"
+        env:
+          LUXVIEW_BASE_URL: ${{ vars.LUXVIEW_BASE_URL || 'https://luxview.cloud' }}
+        run: wails build -platform windows/amd64 -ldflags "-X main.appVersion=${{ steps.ver.outputs.version }} -X main.luxviewBaseURL=$env:LUXVIEW_BASE_URL"
 
       - name: Publish release
         uses: softprops/action-gh-release@v2

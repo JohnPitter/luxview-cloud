@@ -161,7 +161,26 @@ export namespace main {
 	        this.current = source["current"];
 	        this.version = source["version"];
 	        this.url = source["url"];
-	        this.notes = source["notes"];
+	    this.notes = source["notes"];
+	    }
+	}
+
+	export class PlayerSession {
+	    token: string;
+	    username: string;
+	    cash_points: number;
+	    reward_points: number;
+
+	    static createFrom(source: any = {}) {
+	        return new PlayerSession(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.token = source["token"];
+	        this.username = source["username"];
+	        this.cash_points = source["cash_points"];
+	        this.reward_points = source["reward_points"];
 	    }
 	}
 

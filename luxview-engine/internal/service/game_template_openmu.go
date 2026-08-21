@@ -25,6 +25,9 @@ func openmuTemplate() model.GameTemplate {
 			{Port: 55906, Protocol: "tcp", Label: "GameServer 2b"},
 		},
 		DefaultImage:  "luxview-cloud-openmu:latest",
+		DefaultCPU:    "1.0",
+		DefaultMemory: "2g",
+		DBService:     model.ServicePostgres,
 		SupportsQuery: false,
 		DefaultVolumes: []model.GameVolume{
 			{MountPath: "/openmu-data"},

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"encoding/base64"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 )
@@ -21,5 +22,16 @@ func TestExtractTokenIgnoresMalformedGitBasicAuthentication(t *testing.T) {
 
 	if got := extractToken(req); got != "" {
 		t.Fatalf("extractToken() = %q, want empty token", got)
+	}
+}
+
+func TestInternalAuthRejectsEmptyToken(t *testing.T) {
+	h := InternalAuth("")(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("should not reach handler")
+	}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/internal/traefik-config", nil))
+	if rec.Code != 503 {
+		t.Fatalf("status = %d, want 503", rec.Code)
 	}
 }

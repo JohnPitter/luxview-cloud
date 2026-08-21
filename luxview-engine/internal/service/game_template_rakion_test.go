@@ -1,11 +1,15 @@
 package service
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/luxview/engine/internal/model"
+)
 
 func TestRakionTemplateRegistered(t *testing.T) {
-	tmpl := GetGameTemplate("rakion")
+	tmpl := Template("rakion")
 	if tmpl == nil {
-		t.Fatal("rakion template not registered in GetGameTemplates()")
+		t.Fatal("rakion template not registered in Templates()")
 	}
 	if tmpl.WebPort != 80 {
 		t.Errorf("WebPort = %d, want 80 (auth web routed via Traefik)", tmpl.WebPort)
@@ -34,14 +38,13 @@ func TestRakionTemplateRegistered(t *testing.T) {
 		t.Error("missing extra port 40709/udp (World UDP)")
 	}
 
-	// Must persist accounts across restarts.
-	var hasDataVol bool
+	// Must persist accounts in mysql-shared, not a volume inside the game cgroup.
+	if tmpl.DBService != model.ServiceMySQL {
+		t.Errorf("DBService = %q, want mysql", tmpl.DBService)
+	}
 	for _, v := range tmpl.DefaultVolumes {
 		if v.MountPath == "/var/lib/mysql" {
-			hasDataVol = true
+			t.Error("mysql volume must not stay on the game container")
 		}
-	}
-	if !hasDataVol {
-		t.Error("missing /var/lib/mysql volume (account persistence)")
 	}
 }

@@ -19,6 +19,9 @@ func muemuTemplate() model.GameTemplate {
 		DefaultGamePort:  44405,
 		DefaultQueryPort: 55901,
 		DefaultImage:     "luxview-cloud-muemu:latest",
+		DefaultCPU:       "1.0",
+		DefaultMemory:    "1g",
+		DBService:        model.ServiceMySQL,
 		SupportsQuery:    false,
 		DefaultVolumes: []model.GameVolume{
 			{MountPath: "/muemu-data"},

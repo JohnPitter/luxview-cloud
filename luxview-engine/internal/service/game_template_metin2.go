@@ -4,10 +4,6 @@ import "github.com/luxview/engine/internal/model"
 
 const metin2TemplateID = "metin2"
 
-// metin2Template describes the single-container legacy image used by the
-// platform. The legacy client authenticates on 11000 and enters channel 1 on
-// 13001; the remaining channel ports are published for future channels and
-// the 13099 mark service is kept available for the client handshake.
 func metin2Template() model.GameTemplate {
 	return model.GameTemplate{
 		ID:               metin2TemplateID,
@@ -23,13 +19,12 @@ func metin2Template() model.GameTemplate {
 			{Port: 13099, Protocol: "tcp", Label: "Game 99"},
 		},
 		DefaultImage:  "luxview-cloud-metin2-legacy:latest",
+		DefaultCPU:    "2.0",
+		DefaultMemory: "3g",
+		DBService:     model.ServiceMySQL,
 		SupportsQuery: false,
-		DefaultVolumes: []model.GameVolume{
-			{MountPath: "/var/lib/mysql"},
-		},
 		ConfigFields: []model.ConfigFieldDef{
-			{Key: "METIN_DB_USER", Label: "Usuário do banco do jogo", Type: "text", Placeholder: "user", Section: "Servidor"},
-			{Key: "METIN_DB_PASSWORD", Label: "Senha do banco do jogo", Type: "password", Placeholder: "pw", Section: "Servidor"},
+			{Key: "METIN_CORE_COUNT", Label: "Canais ch1 (cores)", Type: "number", Placeholder: "1", Section: "Servidor"},
 			{Key: "METIN_SERVER_NAME", Label: "Nome exibido no cliente", Type: "text", Placeholder: "OpenMetin", Section: "Servidor"},
 			{Key: model.GameClientGlobalFileField, Label: "Arquivo do client no armazenamento global", Type: model.ConfigFieldTypeGlobalFile, Placeholder: "metin2-legacy-assets/metin2-legacy-client-base.zip", Section: "Launcher"},
 			{Key: "LUXVIEW_LISTED", Label: "Exibir no launcher LuxView", Type: "select", Options: sel("true", "Sim", "false", "Não"), Section: "Launcher"},

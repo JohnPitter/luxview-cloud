@@ -155,12 +155,15 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 			dataDir = "/data"
 		}
 		protocol := "udp"
-		tmpl := service.GetGameTemplate(gc.TemplateID)
+		tmpl := service.Template(gc.TemplateID)
 		if tmpl != nil && tmpl.Protocol != "" {
 			protocol = tmpl.Protocol
 		}
 
-		resourceLimits := model.ResourceLimits{CPU: "1.0", Memory: "4g", Disk: "1g"}
+		resourceLimits := model.ResourceLimits{CPU: "0.5", Memory: "1g", Disk: "1g"}
+		if tmpl != nil {
+			resourceLimits = tmpl.Limits()
+		}
 
 		app := &model.App{
 			UserID:         userID,
@@ -209,6 +212,12 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 			log.Error().Err(err).Msg("failed to create game server config")
 			_ = h.appRepo.Delete(ctx, app.ID)
 			writeError(w, http.StatusInternalServerError, "failed to create game config")
+			return
+		}
+		if err := h.attachGameDB(ctx, app, tmpl, gameCfg); err != nil {
+			log.Error().Err(err).Msg("failed to provision game database")
+			_ = h.appRepo.Delete(ctx, app.ID)
+			writeError(w, http.StatusInternalServerError, "failed to provision game database")
 			return
 		}
 
@@ -1192,4 +1201,45 @@ func parseRepoURL(repoURL string) (owner, repo string) {
 		return parts[len(parts)-2], parts[len(parts)-1]
 	}
 	return "", ""
+}
+
+func (h *AppHandler) attachGameDB(ctx context.Context, app *model.App, tmpl *model.GameTemplate, cfg *model.GameServerConfig) error {
+	if tmpl == nil || tmpl.DBService == "" {
+		return nil
+	}
+	svc, err := h.provisioner.Provision(ctx, app.ID, tmpl.DBService)
+	if err != nil {
+		return err
+	}
+	if cfg.ConfigFields == nil {
+		cfg.ConfigFields = map[string]string{}
+	}
+	for k, v := range h.provisioner.GetEnvVarsForService(svc, svc.CredentialsPlain) {
+		cfg.ConfigFields[k] = v
+	}
+	if tmpl.ID == "metin2" {
+		cfg.ConfigFields["METIN_MYSQL_HOST"] = cfg.ConfigFields["MYSQL_HOST"]
+		cfg.ConfigFields["METIN_MYSQL_PORT"] = cfg.ConfigFields["MYSQL_PORT"]
+		cfg.ConfigFields["METIN_DB_USER"] = cfg.ConfigFields["MYSQL_USER"]
+		cfg.ConfigFields["METIN_DB_PASSWORD"] = cfg.ConfigFields["MYSQL_PASSWORD"]
+		if cfg.ConfigFields["METIN_CORE_COUNT"] == "" {
+			cfg.ConfigFields["METIN_CORE_COUNT"] = "1"
+		}
+		if err := h.provisioner.EnsureMySQLDatabases(ctx, svc.CredentialsPlain, []string{"account", "common", "log", "player", "hotbackup"}); err != nil {
+			return err
+		}
+	}
+	if tmpl.ID == "rakion" && cfg.ConfigFields["MYSQL_DATABASE"] != "" {
+		if err := h.provisioner.EnsureMySQLDatabases(ctx, svc.CredentialsPlain, []string{"rakion"}); err != nil {
+			return err
+		}
+		cfg.ConfigFields["MYSQL_DATABASE"] = "rakion"
+	}
+	if tmpl.ID == "tibia" && cfg.ConfigFields["MYSQL_DATABASE"] != "" {
+		if err := h.provisioner.EnsureMySQLDatabases(ctx, svc.CredentialsPlain, []string{"canary"}); err != nil {
+			return err
+		}
+		cfg.ConfigFields["MYSQL_DATABASE"] = "canary"
+	}
+	return h.gameConfigRepo.Update(ctx, cfg)
 }

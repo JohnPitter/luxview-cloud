@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/minio/selfupdate"
 )
+
+const launcherReleasePrefix = "/JohnPitter/luxview-cloud/releases/"
 
 // UpdateInfo is returned to the frontend so it can show an "update available"
 // banner. When Available is false the launcher is already on the latest release.
@@ -35,13 +38,16 @@ type latestRelease struct {
 func (a *App) CheckForUpdate() (UpdateInfo, error) {
 	info := UpdateInfo{Available: false, Current: appVersion}
 
-	resp, err := a.client.Get(baseURL() + "/api/public/launcher/latest")
+	origin, err := platformOrigin()
+	if err != nil {
+		return info, err
+	}
+	resp, err := a.client.Get(origin + "/api/public/launcher/latest")
 	if err != nil {
 		return info, fmt.Errorf("falha ao checar atualização: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		// No release published yet — not an error from the user's perspective.
 		return info, nil
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -51,6 +57,11 @@ func (a *App) CheckForUpdate() (UpdateInfo, error) {
 	var rel latestRelease
 	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
 		return info, fmt.Errorf("resposta de atualização inválida: %w", err)
+	}
+	if rel.URL != "" {
+		if err := allowedUpdateURL(rel.URL); err != nil {
+			return info, err
+		}
 	}
 
 	info.Version = rel.Version
@@ -64,12 +75,12 @@ func (a *App) CheckForUpdate() (UpdateInfo, error) {
 // handles the Windows "binary is running" rename), and relaunches the app. The
 // launcher runs elevated (requireAdministrator), so writing next to itself works
 // even under Program Files.
-func (a *App) ApplyUpdate(url string) error {
-	if url == "" {
-		return fmt.Errorf("URL de atualização vazia")
+func (a *App) ApplyUpdate(rawURL string) error {
+	if err := allowedUpdateURL(rawURL); err != nil {
+		return err
 	}
 
-	resp, err := a.dl.Get(url)
+	resp, err := a.dl.Get(rawURL)
 	if err != nil {
 		return fmt.Errorf("falha ao baixar atualização: %w", err)
 	}
@@ -79,11 +90,9 @@ func (a *App) ApplyUpdate(url string) error {
 	}
 
 	if err := selfupdate.Apply(resp.Body, selfupdate.Options{}); err != nil {
-		// selfupdate already attempts a rollback on failure.
 		return fmt.Errorf("falha ao aplicar atualização: %w", err)
 	}
 
-	// Relaunch the now-updated binary and exit the current process.
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("atualizado, mas falha ao reiniciar: %w", err)
@@ -97,9 +106,26 @@ func (a *App) ApplyUpdate(url string) error {
 	return nil
 }
 
-// versionLess reports whether version a is strictly older than b. Versions look
-// like "v1.32"; we compare the dotted integer components, so "v1.9" < "v1.10".
-// Non-numeric / unparizable input compares as 0 for that component.
+func allowedUpdateURL(raw string) error {
+	if strings.TrimSpace(raw) == "" {
+		return fmt.Errorf("URL de atualização vazia")
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("URL de atualização inválida")
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("atualização só via HTTPS")
+	}
+	if !strings.EqualFold(u.Host, "github.com") {
+		return fmt.Errorf("atualização só a partir do GitHub da LuxView")
+	}
+	if !strings.HasPrefix(u.Path, launcherReleasePrefix) {
+		return fmt.Errorf("atualização só a partir das releases oficiais")
+	}
+	return nil
+}
+
 func versionLess(a, b string) bool {
 	pa := parseVersion(a)
 	pb := parseVersion(b)

@@ -18,22 +18,22 @@ import (
 	"github.com/luxview/engine/pkg/logger"
 )
 
-// GameClientStorageService resolves a client from global storage and keeps
-// compatibility with app-local client services created by older versions.
-type GameClientStorageService struct {
+// ClientStore resolves a client from global storage and keeps compatibility
+// with app-local client services created by older versions.
+type ClientStore struct {
 	serviceRepo   *repository.ServiceRepo
 	encryptionKey []byte
 	globalRoot    string
 	basePaths     map[string]string
 }
 
-func NewGameClientStorageService(
+func NewClientStore(
 	serviceRepo *repository.ServiceRepo,
 	encryptionKey []byte,
 	globalRoot string,
 	basePaths map[string]string,
-) *GameClientStorageService {
-	return &GameClientStorageService{
+) *ClientStore {
+	return &ClientStore{
 		serviceRepo:   serviceRepo,
 		encryptionKey: encryptionKey,
 		globalRoot:    globalRoot,
@@ -43,7 +43,7 @@ func NewGameClientStorageService(
 
 // FileHash fingerprints a client zip by size and mtime so the public catalog
 // stays instant. Replacing the file changes those and the launcher shows update.
-func (s *GameClientStorageService) FileHash(path string) (string, error) {
+func (s *ClientStore) FileHash(path string) (string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return "", err
@@ -55,7 +55,7 @@ func (s *GameClientStorageService) FileHash(path string) (string, error) {
 // Resolve returns the configured global client or the legacy app-local file.
 // A missing app-local service falls back to the template's global default and
 // never provisions a storage service just for the client download.
-func (s *GameClientStorageService) Resolve(ctx context.Context, appID uuid.UUID, templateID, globalKey string) (string, error) {
+func (s *ClientStore) Resolve(ctx context.Context, appID uuid.UUID, templateID, globalKey string) (string, error) {
 	if key := strings.TrimSpace(globalKey); key != "" {
 		return s.resolveGlobalFile(key)
 	}
@@ -73,7 +73,7 @@ func (s *GameClientStorageService) Resolve(ctx context.Context, appID uuid.UUID,
 	return s.defaultSource(templateID)
 }
 
-func (s *GameClientStorageService) resolveExistingAppFile(ctx context.Context, appID uuid.UUID, templateID string) (string, error) {
+func (s *ClientStore) resolveExistingAppFile(ctx context.Context, appID uuid.UUID, templateID string) (string, error) {
 	svc, err := s.serviceRepo.FindByAppAndType(ctx, appID, model.ServiceStorage)
 	if err != nil {
 		return "", fmt.Errorf("find game storage: %w", err)
@@ -106,7 +106,7 @@ func (s *GameClientStorageService) resolveExistingAppFile(ctx context.Context, a
 	return target, nil
 }
 
-func (s *GameClientStorageService) resolveGlobalFile(key string) (string, error) {
+func (s *ClientStore) resolveGlobalFile(key string) (string, error) {
 	path, err := safeGlobalPath(s.globalRoot, key)
 	if err != nil {
 		return "", err
@@ -125,7 +125,7 @@ func (s *GameClientStorageService) resolveGlobalFile(key string) (string, error)
 	return resolved, nil
 }
 
-func (s *GameClientStorageService) defaultSource(templateID string) (string, error) {
+func (s *ClientStore) defaultSource(templateID string) (string, error) {
 	source := strings.TrimSpace(s.basePaths[templateID])
 	if source == "" {
 		return "", fmt.Errorf("client base is not configured for template %s", templateID)
@@ -138,7 +138,7 @@ func (s *GameClientStorageService) defaultSource(templateID string) (string, err
 
 // DefaultGlobalKey maps the configured template fallback to the global-root
 // relative key shown in the game settings selector.
-func (s *GameClientStorageService) DefaultGlobalKey(templateID string) string {
+func (s *ClientStore) DefaultGlobalKey(templateID string) string {
 	source := strings.TrimSpace(s.basePaths[templateID])
 	if source == "" || s.globalRoot == "" {
 		return ""
@@ -151,7 +151,7 @@ func (s *GameClientStorageService) DefaultGlobalKey(templateID string) string {
 }
 
 // ListGlobalFiles returns ZIP references without exposing absolute server paths.
-func (s *GameClientStorageService) ListGlobalFiles() ([]model.SelectOptionDef, error) {
+func (s *ClientStore) ListGlobalFiles() ([]model.SelectOptionDef, error) {
 	if strings.TrimSpace(s.globalRoot) == "" {
 		return []model.SelectOptionDef{}, nil
 	}

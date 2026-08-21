@@ -46,6 +46,26 @@ export function Play(arg1, arg2, arg3) {
   return window['go']['main']['App']['Play'](arg1, arg2, arg3);
 }
 
+export function PlayerLink(arg1, arg2, arg3) {
+  return window['go']['main']['App']['PlayerLink'](arg1, arg2, arg3);
+}
+
+export function PlayerLogin(arg1, arg2) {
+  return window['go']['main']['App']['PlayerLogin'](arg1, arg2);
+}
+
+export function PlayerLogout() {
+  return window['go']['main']['App']['PlayerLogout']();
+}
+
+export function PlayerMe() {
+  return window['go']['main']['App']['PlayerMe']();
+}
+
+export function PlayerRegister(arg1, arg2) {
+  return window['go']['main']['App']['PlayerRegister'](arg1, arg2);
+}
+
 export function Register(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['Register'](arg1, arg2, arg3, arg4);
 }

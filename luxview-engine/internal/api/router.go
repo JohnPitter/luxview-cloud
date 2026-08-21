@@ -50,6 +50,7 @@ type Deps struct {
 	BranchProtectionRepo *repository.BranchProtectionRepo
 	GameConfigRepo       *repository.GameServerConfigRepo
 	GameServerSvc        *service.GameServerService
+	PlayerRepo           *repository.PlayerRepo
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -89,7 +90,7 @@ func NewRouter(deps Deps) *chi.Mux {
 		"tibia":  deps.Config.TibiaClientBaseZipPath,
 	}
 	globalStorageRoot := filepath.Join(deps.Config.StorageBasePath, "_global")
-	gameClientStorage := service.NewGameClientStorageService(deps.ServiceRepo, deps.EncryptKey, globalStorageRoot, gameClientBaseZips)
+	gameClientStorage := service.NewClientStore(deps.ServiceRepo, deps.EncryptKey, globalStorageRoot, gameClientBaseZips)
 	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.RepositoryRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.RepositorySvc, deps.BuildQueue, deps.EncryptKey, deps.AuditSvc, webhookURL, deps.Config.InternalToken, deps.GameConfigRepo, deps.GameServerSvc)
 	deployHandler := handlers.NewDeploymentHandler(deps.DeployRepo, deps.AppRepo, deps.BuildQueue, deps.AuditSvc)
 	actionHandler := handlers.NewActionHandler(deps.ActionRepo, deps.AppRepo, deps.ActionSvc, deps.AuditSvc)
@@ -118,11 +119,13 @@ func NewRouter(deps Deps) *chi.Mux {
 	domainChecker := service.NewDomainChecker(deps.Config.VPSPublicIP, deps.Config.AcmeStorePath)
 	domainCheckHandler := handlers.NewDomainCheckHandler(deps.AppRepo, domainChecker)
 	gameServerHandler := handlers.NewGameServerHandler(deps.AppRepo, deps.GameConfigRepo, deps.GameServerSvc, gameClientStorage, deps.Config.VPSPublicIP, deps.Config.Domain, gameClientBaseZips)
+	playerHandler := handlers.NewPlayers(service.NewPlayer(deps.PlayerRepo), deps.Config.JWTSecret)
 	launcherHandler := handlers.NewLauncherHandler(deps.Config.LauncherReleaseRepo, deps.Config.LauncherAssetName, deps.Config.GitHubAPIToken)
 	globalStorageHandler := handlers.NewGlobalStorageHandler(deps.Config.StorageBasePath)
 
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 	optionalAuthMiddleware := middleware.OptionalAuth(deps.Config.JWTSecret, deps.UserRepo)
+	playerAuthMiddleware := middleware.PlayerAuth(deps.Config.JWTSecret, deps.PlayerRepo)
 
 	// Global client assets can be large, so they use a dedicated route with a
 	// larger body limit instead of the 1 MB JSON API limit below.
@@ -164,6 +167,8 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Use(authRL.Middleware)
 			r.Get("/auth/github", authHandler.GitHubLogin)
 			r.Get("/auth/github/callback", authHandler.GitHubCallback)
+			r.Post("/public/players/register", playerHandler.Register)
+			r.Post("/public/players/login", playerHandler.Login)
 		})
 
 		// Plans (public, for landing page)
@@ -185,6 +190,12 @@ func NewRouter(deps Deps) *chi.Mux {
 		// latest-release JSON (launcher auto-update). No auth.
 		r.Get("/public/launcher", launcherHandler.Download)
 		r.Get("/public/launcher/latest", launcherHandler.Latest)
+
+		r.Group(func(r chi.Router) {
+			r.Use(playerAuthMiddleware)
+			r.Get("/players/me", playerHandler.Me)
+			r.Post("/players/links", playerHandler.Link)
+		})
 
 		// Internal (Traefik)
 		r.Group(func(r chi.Router) {

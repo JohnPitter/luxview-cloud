@@ -131,5 +131,7 @@ func testContainerConfig() ContainerConfig {
 		MongoPassword:       "testpass",
 		RedisContainer:      "luxview-redis-shared",
 		RedisPassword:       "testpass",
+		MySQLContainer:      "luxview-mysql-shared",
+		MySQLPassword:       "testpass",
 	}
 }

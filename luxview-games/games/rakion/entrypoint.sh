@@ -12,10 +12,32 @@ WEB=/webroot
 # --- Config via env (template LuxView) ---------------------------------------
 MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-123456}"
 RAKION_ADMIN_PASS="${RAKION_ADMIN_PASS:-admin123}"
+MYSQL_HOST="${MYSQL_HOST:-127.0.0.1}"
+MYSQL_PORT="${MYSQL_PORT:-3306}"
+MYSQL_USER="${MYSQL_USER:-root}"
+MYSQL_PASSWORD="${MYSQL_PASSWORD:-$MYSQL_ROOT_PASSWORD}"
+MYSQL_DATABASE="${MYSQL_DATABASE:-rakion}"
+REMOTE_MYSQL=0
+if [ "$MYSQL_HOST" != "127.0.0.1" ] && [ "$MYSQL_HOST" != "localhost" ]; then
+    REMOTE_MYSQL=1
+fi
+
+MQ() {
+    if [ "$REMOTE_MYSQL" = "1" ]; then
+        mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$@"
+    else
+        mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$@"
+    fi
+}
 
 #############################################
-# 1. MariaDB (datadir = /var/lib/mysql, volume persistente)
+# 1. MariaDB — local only when MYSQL_HOST is loopback
 #############################################
+if [ "$REMOTE_MYSQL" = "1" ]; then
+    log "usando mysql-shared em $MYSQL_HOST:$MYSQL_PORT"
+    for i in $(seq 1 60); do MQ -e 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
+    MQ -e 'SELECT 1' >/dev/null 2>&1 && log "MySQL remoto up" || { log "MySQL remoto FALHOU"; exit 1; }
+else
 log "iniciando MariaDB..."
 mkdir -p /run/mysqld && chown -R mysql:mysql /run/mysqld
 FIRST_INIT=0
@@ -25,7 +47,7 @@ if [ ! -d /var/lib/mysql/mysql ]; then
     mariadb-install-db --user=mysql --datadir=/var/lib/mysql >/dev/null 2>&1
 fi
 chown -R mysql:mysql /var/lib/mysql
-mariadbd --user=mysql --bind-address=0.0.0.0 --lower-case-table-names=1 >/var/log/mariadb.log 2>&1 &
+mariadbd --user=mysql --bind-address=127.0.0.1 --lower-case-table-names=1 >/var/log/mariadb.log 2>&1 &
 for i in $(seq 1 60); do mysqladmin ping --silent 2>/dev/null && break; sleep 1; done
 mysqladmin ping 2>/dev/null && log "MariaDB up" || { log "MariaDB FALHOU"; cat /var/log/mariadb.log; }
 
@@ -41,10 +63,9 @@ SQL
 SET PASSWORD FOR 'root'@'localhost' = PASSWORD('${MYSQL_ROOT_PASSWORD}');
 FLUSH PRIVILEGES;
 SQL2
+fi
 
-MQ() { mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$@"; }
-
-# Carrega o DUMP só na PRIMEIRA inicialização (depois, contas persistem no volume)
+# Carrega o DUMP só se o schema ainda não existe.
 HAS_DB=$(MQ -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='rakion';" 2>/dev/null || echo 0)
 if [ "$FIRST_INIT" = "1" ] || [ "${HAS_DB:-0}" = "0" ]; then
     if [ -f "$SRV/DB/rakion_data.sql" ]; then
@@ -73,9 +94,10 @@ log "tabelas rakion: ${TBL:-?}"
 #############################################
 log "aplicando senhas nos configs PHP..."
 # DB password nos três configs (config.php, admin, fetch)
-sed -i "s/define('MYSQL_PASS', \"[^\"]*\")/define('MYSQL_PASS', \"${MYSQL_ROOT_PASSWORD}\")/" "$WEB/config.php" 2>/dev/null || true
-sed -i "s/define('DB_PASS', '[^']*')/define('DB_PASS', '${MYSQL_ROOT_PASSWORD}')/" "$WEB/admin/config_admin.php" 2>/dev/null || true
-sed -i "s/\$config\['db_pass'\] = '[^']*'/\$config['db_pass'] = '${MYSQL_ROOT_PASSWORD}'/" "$WEB/fetch/fetch.php" 2>/dev/null || true
+sed -i "s/define('MYSQL_PASS', \"[^\"]*\")/define('MYSQL_PASS', \"${MYSQL_PASSWORD}\")/" "$WEB/config.php" 2>/dev/null || true
+sed -i "s/define('MYSQL_HOST', \"[^\"]*\")/define('MYSQL_HOST', \"${MYSQL_HOST}\")/" "$WEB/config.php" 2>/dev/null || true
+sed -i "s/define('DB_PASS', '[^']*')/define('DB_PASS', '${MYSQL_PASSWORD}')/" "$WEB/admin/config_admin.php" 2>/dev/null || true
+sed -i "s/\$config\['db_pass'\] = '[^']*'/\$config['db_pass'] = '${MYSQL_PASSWORD}'/" "$WEB/fetch/fetch.php" 2>/dev/null || true
 # Senha do painel admin
 sed -i "s/define('ADMIN_PASS', '[^']*')/define('ADMIN_PASS', '${RAKION_ADMIN_PASS}')/" "$WEB/admin/config_admin.php" 2>/dev/null || true
 

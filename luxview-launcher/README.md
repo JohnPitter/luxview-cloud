@@ -39,4 +39,7 @@ registro/elevação em `launch_windows.go`.
 
 ## Configuração
 
-- `LUXVIEW_BASE_URL` (env, opcional) — origem da plataforma (default `https://luxview.cloud`).
+- `LUXVIEW_BASE_URL` — origem da API (`https://luxview.cloud`, nunca o IP da VPS).
+  Runtime: variável de ambiente ou `.env` ao lado do exe / no cwd.
+  Release: o CI carimba via `-ldflags -X main.luxviewBaseURL=…` (repo variable
+  `LUXVIEW_BASE_URL`). Sem isso o launcher recusa subir o catálogo.

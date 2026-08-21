@@ -20,7 +20,7 @@ func TestGameClientStorageResolvesGlobalReferenceWithoutAppService(t *testing.T)
 		t.Fatal(err)
 	}
 
-	storage := NewGameClientStorageService(nil, nil, root, map[string]string{
+	storage := NewClientStore(nil, nil, root, map[string]string{
 		"metin2": clientPath,
 	})
 	got, err := storage.Resolve(context.Background(), uuid.New(), "metin2", "metin2-assets/client.zip")
@@ -59,7 +59,7 @@ func TestGameClientStorageListsZipReferences(t *testing.T) {
 		}
 	}
 
-	storage := NewGameClientStorageService(nil, nil, root, nil)
+	storage := NewClientStore(nil, nil, root, nil)
 	options, err := storage.ListGlobalFiles()
 	if err != nil {
 		t.Fatal(err)
@@ -81,7 +81,7 @@ func TestFileHashChangesWhenClientContentsChange(t *testing.T) {
 	if err := os.WriteFile(path, []byte("client-v1"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	storage := NewGameClientStorageService(nil, nil, root, nil)
+	storage := NewClientStore(nil, nil, root, nil)
 	first, err := storage.FileHash(path)
 	if err != nil {
 		t.Fatal(err)

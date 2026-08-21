@@ -134,7 +134,7 @@ SQL
 start_database() {
     mkdir -p /run/mysqld
     chown mysql:mysql /run/mysqld
-    mariadbd --user=mysql --datadir="$data_dir" --bind-address=0.0.0.0 \
+    mariadbd --user=mysql --datadir="$data_dir" --bind-address=127.0.0.1 \
         --port="$mysql_port" --sql-mode=NO_ENGINE_SUBSTITUTION \
         >>"$log_dir/mariadb.log" 2>&1 &
     db_pid=$!
@@ -206,7 +206,7 @@ start_process() {
     (
         cd "$directory"
         exec "$executable"
-    ) >>"$log_dir/${name}.log" 2>&1 &
+    ) 2>&1 | tee -a "$log_dir/${name}.log" &
     if [[ -z ${process_pids[$name]+set} ]]; then
         process_names+=("$name")
     fi
@@ -262,23 +262,39 @@ supervise_processes() {
 trap stop_all EXIT INT TERM
 mkdir -p "$log_dir"
 validate_config_value MYSQL_ROOT_PASSWORD "$root_password"
-
-if [[ ! -f "$data_dir/.openmetin-legacy-imported" ]]; then
-    initialize_legacy_databases
+core_count="${METIN_CORE_COUNT:-1}"
+remote_mysql=0
+if [[ "$mysql_host" != "127.0.0.1" && "$mysql_host" != "localhost" ]]; then
+    remote_mysql=1
 fi
 
-start_database
-wait_for_database
-ensure_database_user
+if [[ "$remote_mysql" = "1" ]]; then
+    log "usando mysql-shared em ${mysql_host}:${mysql_port}"
+    for _ in $(seq 1 60); do
+        if mariadb -h"$mysql_host" -P"$mysql_port" -u"$mysql_user" -p"$mysql_password" -e 'SELECT 1' >/dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+else
+    if [[ ! -f "$data_dir/.openmetin-legacy-imported" ]]; then
+        initialize_legacy_databases
+    fi
+    start_database
+    wait_for_database
+    ensure_database_user
+fi
 configure_game
 
 start_process cache-db /usr/game/core/db ./db
 wait_for_cache_db
 start_process auth /usr/game/core/auth ./auth
-for core in 1 2 3 4; do
+for core in $(seq 1 "$core_count"); do
     start_process "ch1-core${core}" "/usr/game/core/ch1/core${core}" ./game
 done
-start_process game99 /usr/game/core/game99 ./game
+if [[ "${METIN_GAME99:-false}" == "true" ]]; then
+    start_process game99 /usr/game/core/game99 ./game
+fi
 
 log 'servidor legado iniciado'
 while true; do
