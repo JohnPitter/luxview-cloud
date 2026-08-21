@@ -160,6 +160,7 @@ async function load() {
   paintChips();
   paintHero();
   paintFooter();
+  paintStatus();
   void checkUpdate(true);
   startUpdateWatcher();
 }
@@ -186,7 +187,15 @@ async function refreshCatalog() {
     paintChips();
     paintHero();
     paintFooter();
+    paintStatus();
   } catch { /* offline — ignora */ }
+}
+
+function paintStatus() {
+  const el = document.querySelector('.topbar .status');
+  if (!el) return;
+  el.className = 'status' + (online ? '' : ' off');
+  el.innerHTML = `<span class="dot"></span>${online ? 'Conectado' : 'Offline'}`;
 }
 
 function mount() {
@@ -223,6 +232,11 @@ function mount() {
   document.getElementById('winMin')?.addEventListener('click', () => WindowMinimise());
   document.getElementById('winMax')?.addEventListener('click', () => WindowToggleMaximise());
   document.getElementById('winClose')?.addEventListener('click', () => Quit());
+  document.getElementById('carPrev')?.addEventListener('click', () => scrollCarousel(-1));
+  document.getElementById('carNext')?.addEventListener('click', () => scrollCarousel(1));
+  document.getElementById('strip')?.addEventListener('scroll', updateCarousel, { passive: true });
+  window.removeEventListener('resize', updateCarousel);
+  window.addEventListener('resize', updateCarousel);
 }
 
 function paintUpdate() {
@@ -297,34 +311,34 @@ function paintChips() {
       paintFooter();
     });
   });
-  // Carrossel: setas + esconder barra de rolagem. Re-checa no scroll/resize.
-  const stripEl = document.getElementById('strip')!;
-  document.getElementById('carPrev')?.addEventListener('click', () => scrollCarousel(-1));
-  document.getElementById('carNext')?.addEventListener('click', () => scrollCarousel(1));
-  stripEl.addEventListener('scroll', updateCarousel, { passive: true });
-  window.removeEventListener('resize', updateCarousel);
-  window.addEventListener('resize', updateCarousel);
-  updateCarousel();
+  requestAnimationFrame(() => requestAnimationFrame(updateCarousel));
 }
 
 // scrollCarousel rola o strip por uma largura de chip (com o gap).
 function scrollCarousel(dir: number) {
-  const stripEl = document.getElementById('strip')!;
+  const stripEl = document.getElementById('strip');
+  if (!stripEl) return;
   const chipEl = stripEl.querySelector<HTMLElement>('.chip');
   const step = chipEl ? chipEl.offsetWidth + 10 : 160;
   stripEl.scrollBy({ left: dir * step, behavior: 'smooth' });
 }
 
-// updateCarousel desabilita as setas nas extremidades e mostra/esconde o
-// carrossel quando há espaço de sobra (não deixa o layout quebrar).
+// updateCarousel só mostra as setas quando os chips transbordam o strip.
+// Mede sem as setas, senão elas mesmas criam o overflow que depois "justificam".
 function updateCarousel() {
-  const stripEl = document.getElementById('strip')!;
+  const carousel = document.querySelector('.carousel');
+  const stripEl = document.getElementById('strip');
   const prev = document.getElementById('carPrev') as HTMLButtonElement | null;
   const next = document.getElementById('carNext') as HTMLButtonElement | null;
+  if (!carousel || !stripEl) return;
+  carousel.classList.remove('overflow');
+  void stripEl.offsetWidth;
+  const overflowing = stripEl.scrollWidth > stripEl.clientWidth + 1;
+  carousel.classList.toggle('overflow', overflowing);
+  if (!overflowing) return;
   const maxScroll = stripEl.scrollWidth - stripEl.clientWidth - 1;
-  const canScroll = maxScroll > 0;
-  if (prev) prev.disabled = !canScroll || stripEl.scrollLeft <= 1;
-  if (next) next.disabled = !canScroll || stripEl.scrollLeft >= maxScroll;
+  if (prev) prev.disabled = stripEl.scrollLeft <= 1;
+  if (next) next.disabled = stripEl.scrollLeft >= maxScroll;
 }
 
 function chip(g: Card, i: number): string {

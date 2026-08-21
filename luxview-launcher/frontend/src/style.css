@@ -126,6 +126,7 @@ html, body {
 }
 .car-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
 .car-btn:disabled { opacity: .3; cursor: not-allowed; }
+.carousel:not(.overflow) .car-btn { display: none; }
 .strip {
   display: flex; gap: 10px; flex: 1; min-width: 0;
   overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth;

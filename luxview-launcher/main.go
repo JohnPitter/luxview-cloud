@@ -17,9 +17,9 @@ func main() {
 
 	err := wails.Run(&options.App{
 		Title:            "LuxView Cloud Games",
-		Width:            900,
+		Width:            1000,
 		Height:           600,
-		MinWidth:         900,
+		MinWidth:         1000,
 		MinHeight:        600,
 		Frameless:        true, // sem moldura nativa; controles próprios no titlebar
 		AssetServer:      &assetserver.Options{Assets: assets},
