@@ -36,7 +36,8 @@ git pull origin "$BRANCH"
 COMMIT_SHA=$(git rev-parse --short HEAD)
 log "Deploying commit: $COMMIT_SHA"
 
-# -- 2. Build new images ------------------------------------------------------
+log "Rendering Traefik config..."
+./scripts/render-traefik.sh
 log "Building images..."
 $COMPOSE build --parallel
 

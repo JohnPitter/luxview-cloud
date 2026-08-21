@@ -26,6 +26,7 @@ data/
 # -- Traefik ------------------------------------------------------------------
 traefik/acme.json
 traefik/certs/
+traefik/traefik.runtime.yml
 
 # -- Build artifacts ----------------------------------------------------------
 *.exe

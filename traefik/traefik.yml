@@ -38,8 +38,12 @@ providers:
   file:
     directory: /etc/traefik/dynamic
     watch: true
-  # HTTP provider is configured via compose CLI so Authorization can come
-  # from INTERNAL_TOKEN (static YAML cannot interpolate env).
+  http:
+    endpoint: "http://luxview-engine:8080/api/internal/traefik-config"
+    pollInterval: 5s
+    pollTimeout: 3s
+    headers:
+      Authorization: "Bearer __INTERNAL_TOKEN__"
 
 # -- API / Dashboard (disabled in production) ---------------------------------
 api:
