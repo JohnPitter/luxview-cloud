@@ -81,9 +81,14 @@ func gameAccountSQL(templateID, username, password string) (*GameAccountInfo, st
 	switch templateID {
 	case "tibia":
 		email := TibiaEmail(username)
+		charName := TibiaCharacterName(username)
 		sql := fmt.Sprintf(
-			`INSERT INTO canary.accounts (name, password, email, type, creation) VALUES (%s, %s, %s, 1, UNIX_TIMESTAMP()) ON DUPLICATE KEY UPDATE password = VALUES(password), email = VALUES(email);`,
+			`INSERT INTO canary.accounts (name, password, email, type, creation) VALUES (%s, %s, %s, 1, UNIX_TIMESTAMP()) ON DUPLICATE KEY UPDATE password = VALUES(password), email = VALUES(email);`+
+				`INSERT INTO canary.players (name, account_id, group_id, level, vocation, health, healthmax, experience, lookbody, lookfeet, lookhead, looklegs, looktype, lookaddons, maglevel, mana, manamax, manaspent, soul, town_id, posx, posy, posz, conditions, cap, sex, stamina, skill_fist, skill_club, skill_sword, skill_axe, skill_dist, skill_shielding, skill_fishing) SELECT %s, a.id, 1, s.level, s.vocation, s.health, s.healthmax, s.experience, s.lookbody, s.lookfeet, s.lookhead, s.looklegs, s.looktype, s.lookaddons, s.maglevel, s.mana, s.manamax, s.manaspent, s.soul, s.town_id, s.posx, s.posy, s.posz, s.conditions, s.cap, s.sex, s.stamina, s.skill_fist, s.skill_club, s.skill_sword, s.skill_axe, s.skill_dist, s.skill_shielding, s.skill_fishing FROM canary.accounts a INNER JOIN canary.players s ON s.name = 'Knight Sample' WHERE a.name = %s AND NOT EXISTS (SELECT 1 FROM canary.players p WHERE p.account_id = a.id);`+
+				`INSERT INTO canary.player_items (player_id, pid, sid, itemtype, count, attributes) SELECT np.id, i.pid, i.sid, i.itemtype, i.count, i.attributes FROM canary.players np INNER JOIN canary.accounts a ON a.id = np.account_id INNER JOIN canary.players sp ON sp.name = 'Knight Sample' INNER JOIN canary.player_items i ON i.player_id = sp.id WHERE a.name = %s AND np.name = %s AND NOT EXISTS (SELECT 1 FROM canary.player_items x WHERE x.player_id = np.id);`,
 			mysqlQuote(email), mysqlQuote(SHA1Hex(password)), mysqlQuote(email),
+			mysqlQuote(charName), mysqlQuote(email),
+			mysqlQuote(email), mysqlQuote(charName),
 		)
 		return &GameAccountInfo{TemplateID: templateID, Login: email, Email: email}, sql, nil
 	case "metin2":

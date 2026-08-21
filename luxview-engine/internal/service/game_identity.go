@@ -13,6 +13,26 @@ func TibiaEmail(username string) string {
 	return strings.ToLower(strings.TrimSpace(username)) + "@" + tibiaMailDomain
 }
 
+// TibiaCharacterName is the in-game player name derived from the LuxView username.
+// Canary/OTClient hang on an empty character list, so SSO accounts need a starter char.
+func TibiaCharacterName(username string) string {
+	var b strings.Builder
+	for _, r := range username {
+		if r > unicode.MaxASCII {
+			continue
+		}
+		if unicode.IsLetter(r) {
+			b.WriteRune(r)
+		}
+	}
+	name := b.String()
+	if len(name) < 2 {
+		name = "Hero" + name
+	}
+	name = clipRunes(name, 29)
+	return strings.ToUpper(name[:1]) + strings.ToLower(name[1:])
+}
+
 func MetinLogin(username string) string {
 	return clipRunes(strings.TrimSpace(username), 30)
 }

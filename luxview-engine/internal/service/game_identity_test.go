@@ -26,6 +26,15 @@ func TestTibiaEmail(t *testing.T) {
 	}
 }
 
+func TestTibiaCharacterName(t *testing.T) {
+	if got := TibiaCharacterName("testando"); got != "Testando" {
+		t.Fatalf("got %s", got)
+	}
+	if got := TibiaCharacterName("x"); got != "Herox" {
+		t.Fatalf("short got %s", got)
+	}
+}
+
 func TestRakionLoginStripsAndClips(t *testing.T) {
 	if got := RakionLogin("hello_world_xx"); got != "helloworldx" {
 		t.Fatalf("got %q", got)

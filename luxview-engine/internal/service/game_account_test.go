@@ -13,7 +13,7 @@ func TestGameAccountSQLTibia(t *testing.T) {
 	if info.Login != "joao@luxviewot.com" {
 		t.Fatalf("login %s", info.Login)
 	}
-	for _, part := range []string{"canary.accounts", "7c4a8d09ca3762af61e59520943dc26494f8941b", "joao@luxviewot.com"} {
+	for _, part := range []string{"canary.accounts", "canary.players", "Knight Sample", "Joao", "7c4a8d09ca3762af61e59520943dc26494f8941b", "joao@luxviewot.com"} {
 		if !strings.Contains(sql, part) {
 			t.Fatalf("missing %q in %s", part, sql)
 		}
