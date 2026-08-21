@@ -17,6 +17,9 @@ services:
       - INTERNAL_TOKEN=${INTERNAL_TOKEN}
     command:
       - --configFile=/etc/traefik/traefik.yml
+      - --providers.http.endpoint=http://luxview-engine:8080/api/internal/traefik-config
+      - --providers.http.pollInterval=5s
+      - --providers.http.pollTimeout=3s
       - --providers.http.headers.Authorization=Bearer ${INTERNAL_TOKEN}
     ports:
       - "80:80"
