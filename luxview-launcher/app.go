@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.59"
+var appVersion = "v1.60"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -350,9 +350,9 @@ func (a *App) InstallGame(card GameCard) error {
 	if spec, ok := launchSpecForGame(game); ok && !clientFilesReady(dir, game, spec) {
 		return fmt.Errorf("client extraído incompleto — arquivos obrigatórios não encontrados")
 	}
-	if !updating {
-		a.applyDefaultDisplay(card)
-	}
+	// Sempre regrava o modo de vídeo do Rakion. O zip base vem windowed, e em
+	// janela o overlay do Discord/NVIDIA pinta uma camada preta por cima.
+	a.applyDefaultDisplay(card)
 	if err := saveInstalledClientHash(card.AppID, card.ClientHash); err != nil {
 		return fmt.Errorf("client instalado, mas não gravei a versão local: %w", err)
 	}
@@ -374,8 +374,11 @@ func (a *App) applyDefaultDisplay(card GameCard) {
 		return
 	}
 	s.DisplayMode = displayFullscreen
-	if s.ScreenWidth > 1920 || s.ScreenHeight > 1080 {
+	if s.ScreenWidth < 640 || s.ScreenHeight < 480 || s.ScreenWidth > 1920 || s.ScreenHeight > 1080 {
 		s.ScreenWidth, s.ScreenHeight = 1920, 1080
+	}
+	if s.Gamma < 0.3 {
+		s.Gamma = 1
 	}
 	_ = a.SaveSettings(card, s)
 }

@@ -104,6 +104,8 @@ const (
 	pmRemove      = 0x0001   // PM_REMOVE
 	swMinimize    = 6        // SW_MINIMIZE
 	swRestore     = 9        // SW_RESTORE
+	swHide        = 0        // SW_HIDE
+	swShow        = 5        // SW_SHOW
 )
 
 // msg mirrors the Win32 MSG struct for PeekMessage.
@@ -147,6 +149,20 @@ func withDPIUnaware(fn func()) {
 		}
 	}
 	fn()
+}
+
+// saneBackbuffer rejects the engine's 1x1 splash size. Framing that produces a
+// title-bar-only window; fall back to a playable size instead.
+func saneBackbuffer(cw, ch int32, fill bool) (int32, int32) {
+	if cw >= 640 && ch >= 480 {
+		return cw, ch
+	}
+	if fill {
+		if sw, sh := screenSize(); sw >= 640 && sh >= 480 {
+			return sw, sh
+		}
+	}
+	return 1280, 720
 }
 
 // fillScreenResolution returns the client size of a titled window that fills the
@@ -254,7 +270,8 @@ func frameGameWindow(processName, mode string) {
 	if hwnd == 0 {
 		return
 	}
-	// The render window starts at 1x1; wait for its final client size.
+	// Hide the 1x1 splash so windowed mode does not freeze a title-bar-only window.
+	procShowWindow.Call(hwnd, swHide)
 	var cw, ch int32
 	for range 60 {
 		if cw, ch = clientSize(hwnd); cw >= 320 && ch >= 240 {
@@ -262,6 +279,8 @@ func frameGameWindow(processName, mode string) {
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
+	cw, ch = saneBackbuffer(cw, ch, fill)
+	procShowWindow.Call(hwnd, swShow)
 
 	applyTitledFrame(hwnd, cw, ch, true, fill) // activate the game window on the first apply
 	for range 24 {                             // re-apply while the engine re-pins/restyles during init

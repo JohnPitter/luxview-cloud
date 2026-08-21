@@ -91,7 +91,7 @@ func TestFileHashChangesWhenClientContentsChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	if first != again {
-		t.Fatal("hash cache should reuse the same digest")
+		t.Fatal("fingerprint should be stable for an unchanged file")
 	}
 	time.Sleep(time.Millisecond * 20)
 	if err := os.WriteFile(path, []byte("client-v2"), 0644); err != nil {

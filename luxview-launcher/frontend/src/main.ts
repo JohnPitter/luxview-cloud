@@ -145,6 +145,10 @@ const app = document.querySelector<HTMLDivElement>('#app')!;
 
 async function load() {
   try { version = await Version(); } catch { /* binding nova */ }
+  mount();
+  paintChips();
+  paintHero();
+  paintFooter();
   try {
     applyCatalog(((await GetGames()) as unknown as Card[]).map(normalizeCard), true);
   } catch (e) {
@@ -153,7 +157,6 @@ async function load() {
     selected = 0;
     toast(String(e), true);
   }
-  mount();
   paintChips();
   paintHero();
   paintFooter();
@@ -279,10 +282,12 @@ async function applyUpdate() {
 }
 
 function paintChips() {
-  const strip = document.getElementById('strip')!;
+  const strip = document.getElementById('strip');
+  if (!strip) return;
   strip.innerHTML = games.map((g, i) => chip(g, i)).join('');
   games.forEach((_, i) => {
-    const el = document.getElementById('chip-' + i)!;
+    const el = document.getElementById('chip-' + i);
+    if (!el) return;
     el.style.animationDelay = `${i * 70}ms`;
     el.addEventListener('click', () => {
       if (installing || i === selected) return;
@@ -351,7 +356,7 @@ function chip(g: Card, i: number): string {
 function paintHero() {
   const g = games[selected];
   const host = document.getElementById('hero')!;
-  if (!g) { host.innerHTML = '<div class="hero hero-empty">Nenhum jogo disponível</div>'; return; }
+  if (!g) { host.innerHTML = '<div class="hero hero-empty">Conectando à LuxView Cloud…</div>'; return; }
   const id = cardGame(g);
   const t = theme(id);
   const status = g.enabled
@@ -374,11 +379,13 @@ function paintHero() {
 function paintFooter() {
   const g = games[selected];
   const id = g ? cardGame(g) : '';
-  document.getElementById('pline')!.textContent = footerLine(g);
-  const bar = document.getElementById('pbarwrap')!;
-  const fill = document.getElementById('pbar') as HTMLElement;
+  const line = document.getElementById('pline');
+  const bar = document.getElementById('pbarwrap');
+  const fill = document.getElementById('pbar') as HTMLElement | null;
+  const actions = document.getElementById('actions');
+  if (!line || !bar || !fill || !actions) return;
+  line.textContent = footerLine(g);
   if (!installing) { bar.classList.remove('active', 'indet'); fill.style.width = '0%'; }
-  const actions = document.getElementById('actions')!;
   actions.innerHTML = `
     ${g && g.installed && (id === 'rakion' || id === 'metin2') ? `<button class="btn icon" id="optionsBtn" title="Configurações do jogo">⚙</button>` : ''}
     <button class="btn icon" id="folderBtn" title="Abrir pasta de instalação" ${g && g.installed ? '' : 'disabled'}>📁</button>
@@ -754,24 +761,26 @@ async function openMetin2Options(g: Card) {
   };
 }
 
-EventsOn('install:progress', (p: { game: string; phase: string; percent: number; detail?: string }) => {
-  const bar = document.getElementById('pbar') as HTMLElement | null;
-  const wrap = document.getElementById('pbarwrap');
-  const line = document.getElementById('pline');
-  if (p.percent < 0) {
-    wrap?.classList.add('indet');
-    if (bar) bar.style.width = '';
-  } else {
-    wrap?.classList.remove('indet');
-    if (bar) bar.style.width = `${Math.max(2, p.percent)}%`;
-  }
-  if (line) {
-    line.textContent =
-      p.phase === 'download' ? (p.detail ? `Baixando… ${p.detail}` : 'Baixando client…') :
-      p.phase === 'extract' ? `Extraindo… ${p.percent}%` :
-      p.phase === 'done' ? 'Concluído!' : '';
-  }
-});
+try {
+  EventsOn('install:progress', (p: { game: string; phase: string; percent: number; detail?: string }) => {
+    const bar = document.getElementById('pbar') as HTMLElement | null;
+    const wrap = document.getElementById('pbarwrap');
+    const line = document.getElementById('pline');
+    if (p.percent < 0) {
+      wrap?.classList.add('indet');
+      if (bar) bar.style.width = '';
+    } else {
+      wrap?.classList.remove('indet');
+      if (bar) bar.style.width = `${Math.max(2, p.percent)}%`;
+    }
+    if (line) {
+      line.textContent =
+        p.phase === 'download' ? (p.detail ? `Baixando… ${p.detail}` : 'Baixando client…') :
+        p.phase === 'extract' ? `Extraindo… ${p.percent}%` :
+        p.phase === 'done' ? 'Concluído!' : '';
+    }
+  });
+} catch { /* runtime ainda não injetado */ }
 
 let toastTimer: number | undefined;
 function toast(msg: string, err = false) {
@@ -789,4 +798,6 @@ function esc(s: string): string {
   return (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 }
 
-load();
+void load().catch((e) => {
+  if (app) app.innerHTML = `<div class="shell"><div class="hero hero-empty">${esc(String(e))}</div></div>`;
+});
