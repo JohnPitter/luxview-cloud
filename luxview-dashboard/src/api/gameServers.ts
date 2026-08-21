@@ -1,4 +1,5 @@
 import { api } from './client';
+import { appsApi } from './apps';
 import type { GameServerConfig, GameVolume, CreateGameServerPayload, App, ExtraPort } from './apps';
 
 export interface ConfigFieldOption {
@@ -81,13 +82,9 @@ export const gameServersApi = {
     return data;
   },
 
-  // Builds a native browser-download URL for the configured client. The engine's
-  // auth accepts the JWT via the `token` query param (same as WebSockets), so the
-  // browser can download the large (~700MB) file natively — with a real progress
-  // bar and streaming to disk — instead of buffering it in memory via XHR.
-  clientDownloadHref(downloadUrl: string): string {
-    const token = localStorage.getItem('lv_token') ?? '';
+  async clientDownloadHref(appId: string, downloadUrl: string): Promise<string> {
+    const ticket = await appsApi.accessTicket(appId, 'download');
     const sep = downloadUrl.includes('?') ? '&' : '?';
-    return `${downloadUrl}${sep}token=${encodeURIComponent(token)}`;
+    return `${downloadUrl}${sep}ticket=${encodeURIComponent(ticket)}`;
   },
 };

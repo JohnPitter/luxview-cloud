@@ -30,12 +30,12 @@ services:
       dockerfile: Dockerfile.dev
     volumes:
       - ./luxview-engine:/app
-      - /var/run/docker.sock:/var/run/docker.sock
       - build-cache:/tmp/builds
       - ./data/repositories:/data/luxview/repositories
       - ./backups:/backups
     environment:
       - PORT=8080
+      - DOCKER_HOST=tcp://docker-proxy:2375
       - DATABASE_URL=postgres://luxview:${DB_PASSWORD:-devpassword}@pg-platform:5432/luxview_platform?sslmode=disable
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-dev-encryption-key-min-32-chars!!}
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-me}

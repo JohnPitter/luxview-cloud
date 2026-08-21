@@ -107,17 +107,20 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
     }
   };
 
-  const handleClientDownload = () => {
+  const handleClientDownload = async () => {
     if (!config?.clientDownloadUrl) return;
-    // Native browser download (server sets Content-Disposition). Avoids buffering
-    // the ~700MB client in memory; the browser shows progress and streams to disk.
-    const link = document.createElement('a');
-    link.href = gameServersApi.clientDownloadHref(config.clientDownloadUrl);
-    link.rel = 'noopener';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    addNotification({ type: 'success', title: 'Download iniciado — acompanhe na barra do navegador' });
+    try {
+      const href = await gameServersApi.clientDownloadHref(appId, config.clientDownloadUrl);
+      const link = document.createElement('a');
+      link.href = href;
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      addNotification({ type: 'success', title: 'Download iniciado — acompanhe na barra do navegador' });
+    } catch {
+      addNotification({ type: 'error', title: 'Não foi possível iniciar o download' });
+    }
   };
 
   const handleCopyPublicUrl = async () => {

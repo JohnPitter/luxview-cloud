@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -50,6 +51,7 @@ type AppHandler struct {
 	webhookSecret  string
 	gameConfigRepo *repository.GameServerConfigRepo
 	gameServerSvc  *service.GameServerService
+	tickets        *middleware.AccessTickets
 }
 
 func NewAppHandler(
@@ -85,6 +87,10 @@ func NewAppHandler(
 		gameConfigRepo: gameConfigRepo,
 		gameServerSvc:  gameServerSvc,
 	}
+}
+
+func (h *AppHandler) SetTickets(tickets *middleware.AccessTickets) {
+	h.tickets = tickets
 }
 
 // Create creates a new app.
@@ -1030,6 +1036,48 @@ func (h *AppHandler) ListGitHubBranches(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, branches)
+}
+
+func (h *AppHandler) IssueAccessTicket(w http.ResponseWriter, r *http.Request) {
+	if h.tickets == nil {
+		writeError(w, http.StatusServiceUnavailable, "tickets unavailable")
+		return
+	}
+	userID := middleware.GetUserID(r.Context())
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app ID")
+		return
+	}
+	app, err := h.appRepo.FindByID(r.Context(), appID)
+	if err != nil || app == nil {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	}
+	if app.UserID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	var req struct {
+		Kind string `json:"kind"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Kind != "logs" && req.Kind != "download" {
+		writeError(w, http.StatusBadRequest, "kind must be logs or download")
+		return
+	}
+	id, exp, err := h.tickets.Issue(userID, appID, req.Kind)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to issue ticket")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ticket":     id,
+		"expires_at": exp.UTC().Format(time.RFC3339),
+	})
 }
 
 // ContainerLogs returns the runtime logs for an app's container.

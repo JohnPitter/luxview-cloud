@@ -36,6 +36,36 @@ services:
       - luxview-net
 
   # ---------------------------------------------------------------------------
+  # Docker socket proxy — engine never mounts the host socket (S-06)
+  # ---------------------------------------------------------------------------
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: luxview-docker-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      EXEC: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      BUILD: 1
+      INFO: 1
+      VERSION: 1
+      POST: 1
+      SYSTEM: 1
+      EVENTS: 1
+      AUTH: 0
+      SECRETS: 0
+      SWARM: 0
+      SERVICES: 0
+      TASKS: 0
+      PLUGINS: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - luxview-net
+
+  # ---------------------------------------------------------------------------
   # LuxView Engine — Go API (the brain)
   # ---------------------------------------------------------------------------
   engine:
@@ -47,10 +77,11 @@ services:
     depends_on:
       pg-platform:
         condition: service_healthy
+      docker-proxy:
+        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - build-cache:/tmp/builds
       - traefik-logs:/var/log/traefik:ro
       - traefik-certs:/letsencrypt:ro
@@ -95,6 +126,7 @@ services:
       - VPS_PUBLIC_IP=${VPS_PUBLIC_IP:-}
       - ACME_STORE_PATH=/letsencrypt/acme.json
       - INTERNAL_TOKEN=${INTERNAL_TOKEN}
+      - DOCKER_HOST=tcp://docker-proxy:2375
       - SHARED_MYSQL_HOST=mysql-shared
       - SHARED_MYSQL_PORT=3306
       - SHARED_MYSQL_PASSWORD=${SHARED_MYSQL_PASSWORD}

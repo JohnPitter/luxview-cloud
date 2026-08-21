@@ -24,7 +24,7 @@ export function RuntimeLogs({ appId, containerId }: RuntimeLogsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  const connectSSE = useCallback(() => {
+  const connectSSE = useCallback(async () => {
     if (!appId || !containerId) return;
 
     // Close previous connection
@@ -34,11 +34,16 @@ export function RuntimeLogs({ appId, containerId }: RuntimeLogsProps) {
 
     setLoading(true);
     const url = appsApi.logsStreamUrl(appId, 200);
-
-    // SSE needs the auth token in the URL since EventSource doesn't support headers
-    const token = localStorage.getItem('lv_token');
+    let ticket: string;
+    try {
+      ticket = await appsApi.accessTicket(appId, 'logs');
+    } catch {
+      setConnected(false);
+      setLoading(false);
+      return;
+    }
     const separator = url.includes('?') ? '&' : '?';
-    const fullUrl = token ? `${url}${separator}token=${token}` : url;
+    const fullUrl = `${url}${separator}ticket=${encodeURIComponent(ticket)}`;
 
     const es = new EventSource(fullUrl);
     eventSourceRef.current = es;

@@ -280,14 +280,9 @@ func extractToken(r *http.Request) string {
 		}
 	}
 
-	// Check cookie
+	// Cookie (HttpOnly session). Query JWT is rejected — use a short-lived ticket.
 	if cookie, err := r.Cookie("token"); err == nil {
 		return cookie.Value
-	}
-
-	// Check query param (for WebSocket connections)
-	if token := r.URL.Query().Get("token"); token != "" {
-		return token
 	}
 
 	return ""

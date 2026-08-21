@@ -150,6 +150,11 @@ export const appsApi = {
     return data.logs ?? '';
   },
 
+  async accessTicket(id: string, kind: 'logs' | 'download'): Promise<string> {
+    const { data } = await api.post<{ ticket: string }>(`/apps/${id}/access-ticket`, { kind });
+    return data.ticket;
+  },
+
   /** Returns the base URL for SSE log streaming */
   logsStreamUrl(id: string, tail = 100): string {
     const base = api.defaults.baseURL ?? '/api';

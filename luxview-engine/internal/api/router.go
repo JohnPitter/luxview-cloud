@@ -92,6 +92,8 @@ func NewRouter(deps Deps) *chi.Mux {
 	globalStorageRoot := filepath.Join(deps.Config.StorageBasePath, "_global")
 	gameClientStorage := service.NewClientStore(deps.ServiceRepo, deps.EncryptKey, globalStorageRoot, gameClientBaseZips)
 	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.RepositoryRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.RepositorySvc, deps.BuildQueue, deps.EncryptKey, deps.AuditSvc, webhookURL, deps.Config.InternalToken, deps.GameConfigRepo, deps.GameServerSvc)
+	accessTickets := middleware.NewAccessTickets()
+	appHandler.SetTickets(accessTickets)
 	deployHandler := handlers.NewDeploymentHandler(deps.DeployRepo, deps.AppRepo, deps.BuildQueue, deps.AuditSvc)
 	actionHandler := handlers.NewActionHandler(deps.ActionRepo, deps.AppRepo, deps.ActionSvc, deps.AuditSvc)
 	serviceHandler := handlers.NewServiceHandler(deps.ServiceRepo, deps.AppRepo, deps.GameConfigRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)
@@ -126,6 +128,8 @@ func NewRouter(deps Deps) *chi.Mux {
 	authMiddleware := middleware.Auth(deps.Config.JWTSecret, deps.UserRepo)
 	optionalAuthMiddleware := middleware.OptionalAuth(deps.Config.JWTSecret, deps.UserRepo)
 	playerAuthMiddleware := middleware.PlayerAuth(deps.Config.JWTSecret, deps.PlayerRepo)
+	logsTicketAuth := middleware.AuthOrTicket(deps.Config.JWTSecret, deps.UserRepo, accessTickets, "logs")
+	downloadTicketAuth := middleware.AuthOrTicket(deps.Config.JWTSecret, deps.UserRepo, accessTickets, "download")
 
 	// Global client assets can be large, so they use a dedicated route with a
 	// larger body limit instead of the 1 MB JSON API limit below.
@@ -296,7 +300,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Post("/apps/{id}/stop", appHandler.Stop)
 			r.Put("/apps/{id}/maintenance", appHandler.SetMaintenance)
 			r.Get("/apps/{id}/logs", appHandler.ContainerLogs)
-			r.Get("/apps/{id}/logs/stream", appHandler.ContainerLogsStream)
+			r.Post("/apps/{id}/access-ticket", appHandler.IssueAccessTicket)
 			r.Get("/apps/{id}/disk-usage", appHandler.DiskUsage)
 			r.Get("/apps/{id}/domain-check", domainCheckHandler.Check)
 
@@ -307,7 +311,6 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Put("/apps/{id}/game-config", gameServerHandler.UpdateConfig)
 			r.Get("/apps/{id}/game-status", gameServerHandler.GetStatus)
 			r.Get("/apps/{id}/game-players", gameServerHandler.GetPlayers)
-			r.Get("/apps/{id}/game-client/download", gameServerHandler.DownloadClient)
 
 			// AI Analyze
 			r.Post("/apps/{id}/analyze", analyzeHandler.Analyze)
@@ -413,6 +416,15 @@ func NewRouter(deps Deps) *chi.Mux {
 				r.Post("/admin/backups/{id}/restore", backupHandler.Restore)
 				r.Get("/admin/backups/{id}/download", backupHandler.Download)
 			})
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(logsTicketAuth)
+			r.Get("/apps/{id}/logs/stream", appHandler.ContainerLogsStream)
+		})
+		r.Group(func(r chi.Router) {
+			r.Use(downloadTicketAuth)
+			r.Get("/apps/{id}/game-client/download", gameServerHandler.DownloadClient)
 		})
 	})
 

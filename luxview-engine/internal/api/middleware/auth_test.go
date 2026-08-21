@@ -25,6 +25,13 @@ func TestExtractTokenIgnoresMalformedGitBasicAuthentication(t *testing.T) {
 	}
 }
 
+func TestExtractTokenIgnoresQueryJWT(t *testing.T) {
+	req := httptest.NewRequest("GET", "/apps/x/logs/stream?token=secret-jwt", nil)
+	if got := extractToken(req); got != "" {
+		t.Fatalf("extractToken() = %q, want empty (query JWT is not accepted)", got)
+	}
+}
+
 func TestInternalAuthRejectsEmptyToken(t *testing.T) {
 	h := InternalAuth("")(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("should not reach handler")
