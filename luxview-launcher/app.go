@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.63"
+var appVersion = "v1.64"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -51,13 +51,13 @@ func validDisplayMode(m string) string {
 
 // GameCard mirrors the engine's /api/public/games payload, plus local state.
 type GameCard struct {
-	AppID       string `json:"app_id"`
-	Name        string `json:"name"`
-	Game        string `json:"game"`
-	DisplayName string `json:"display_name"`
-	Description string `json:"description"`
-	Enabled     bool   `json:"enabled"`
-	DownloadURL string `json:"download_url"`
+	AppID           string `json:"app_id"`
+	Name            string `json:"name"`
+	Game            string `json:"game"`
+	DisplayName     string `json:"display_name"`
+	Description     string `json:"description"`
+	Enabled         bool   `json:"enabled"`
+	DownloadURL     string `json:"download_url"`
 	ServerIP        string `json:"server_ip"`
 	AuthHost        string `json:"auth_host"`
 	ClientHash      string `json:"client_hash"`
@@ -518,6 +518,15 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	if !clientFilesReady(dir, game, spec) {
 		return fmt.Errorf("jogo não encontrado — instale primeiro")
 	}
+
+	secret, err := loadPlayerSecret()
+	if err != nil || secret.Username == "" || secret.Password == "" {
+		return fmt.Errorf("entre na conta LuxView")
+	}
+	if err := a.ensureGameAccount(card.AppID, secret.Password); err != nil {
+		return err
+	}
+
 	if game == "tibia" {
 		return launchTibiaExecutable(exePath, clientDir)
 	}
@@ -526,11 +535,12 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	}
 
 	if user == "" || pass == "" {
-		saved, err := loadGameLogin(card.AppID)
-		if err != nil || saved.User == "" || saved.Pass == "" {
-			return fmt.Errorf("informe usuário e senha")
-		}
-		user, pass = saved.User, saved.Pass
+		user = rakionLogin(secret.Username)
+		pass = rakionPassword(secret.Password)
+	}
+
+	if user == "" || pass == "" {
+		return fmt.Errorf("entre na conta LuxView")
 	}
 
 	// Login() validates the credentials against the web auth (launcherlogin.php).

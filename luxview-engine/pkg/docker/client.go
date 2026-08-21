@@ -14,8 +14,8 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/luxview/engine/pkg/logger"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // Client wraps the Docker SDK client.
@@ -48,9 +48,9 @@ func (c *Client) BuildImage(ctx context.Context, buildContext io.Reader, tags []
 	log.Debug().Strs("tags", tags).Str("dockerfile", dockerfile).Msg("building Docker image")
 
 	opts := types.ImageBuildOptions{
-		Tags:       tags,
-		Dockerfile: dockerfile,
-		Remove:     true,
+		Tags:        tags,
+		Dockerfile:  dockerfile,
+		Remove:      true,
 		ForceRemove: true,
 	}
 	resp, err := c.cli.ImageBuild(ctx, buildContext, opts)
@@ -161,7 +161,7 @@ func (c *Client) ConnectNetwork(ctx context.Context, networkID, containerID stri
 }
 
 // ContainerExec runs a command inside a running container and returns the output.
-func (c *Client) ContainerExec(ctx context.Context, containerID string, cmd []string) (string, error) {
+func (c *Client) ContainerExec(ctx context.Context, containerID string, cmd []string, env ...string) (string, error) {
 	log := logger.With("docker")
 	shortID := containerID
 	if len(shortID) > 12 {
@@ -171,6 +171,7 @@ func (c *Client) ContainerExec(ctx context.Context, containerID string, cmd []st
 
 	execConfig := container.ExecOptions{
 		Cmd:          cmd,
+		Env:          env,
 		AttachStdout: true,
 		AttachStderr: true,
 	}
@@ -206,11 +207,11 @@ func (c *Client) ContainerExec(ctx context.Context, containerID string, cmd []st
 
 // PruneResult holds the result of a system-wide prune operation.
 type PruneResult struct {
-	ImagesRemoved      int   `json:"imagesRemoved"`
-	ContainersRemoved  int   `json:"containersRemoved"`
+	ImagesRemoved       int   `json:"imagesRemoved"`
+	ContainersRemoved   int   `json:"containersRemoved"`
 	BuildCacheReclaimed int64 `json:"buildCacheReclaimed"`
-	ImagesReclaimed    int64 `json:"imagesReclaimed"`
-	TotalReclaimed     int64 `json:"totalReclaimed"`
+	ImagesReclaimed     int64 `json:"imagesReclaimed"`
+	TotalReclaimed      int64 `json:"totalReclaimed"`
 }
 
 // SystemPrune removes unused containers, dangling images, and build cache.

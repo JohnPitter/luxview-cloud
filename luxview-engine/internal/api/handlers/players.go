@@ -3,7 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/luxview/engine/internal/api/middleware"
 	"github.com/luxview/engine/internal/model"
@@ -12,11 +14,12 @@ import (
 
 type Players struct {
 	players   *service.Player
+	accounts  *service.GameAccount
 	jwtSecret string
 }
 
-func NewPlayers(players *service.Player, jwtSecret string) *Players {
-	return &Players{players: players, jwtSecret: jwtSecret}
+func NewPlayers(players *service.Player, accounts *service.GameAccount, jwtSecret string) *Players {
+	return &Players{players: players, accounts: accounts, jwtSecret: jwtSecret}
 }
 
 type playerAuthBody struct {
@@ -92,6 +95,36 @@ func (h *Players) Link(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, link)
+}
+
+func (h *Players) ProvisionAccount(w http.ResponseWriter, r *http.Request) {
+	acct := middleware.GetPlayer(r.Context())
+	if acct == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	appID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "jogo inválido")
+		return
+	}
+	var body struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Password) == "" {
+		writeError(w, http.StatusBadRequest, "senha ausente")
+		return
+	}
+	if h.accounts == nil {
+		writeError(w, http.StatusInternalServerError, "provisionamento indisponível")
+		return
+	}
+	info, err := h.accounts.Provision(r.Context(), acct, appID, body.Password)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
 }
 
 func (h *Players) writeSession(w http.ResponseWriter, r *http.Request, status int, acct *model.PlayerAccount) {

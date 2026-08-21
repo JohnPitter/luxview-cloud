@@ -71,6 +71,7 @@ func (a *App) PlayerMe() (PlayerSession, error) {
 }
 
 func (a *App) PlayerLogout() error {
+	_ = clearPlayerSecret()
 	path, err := playerSessionPath()
 	if err != nil {
 		return err
@@ -133,6 +134,9 @@ func (a *App) playerAuth(path, username, password string) (PlayerSession, error)
 	if err := savePlayerSession(out); err != nil {
 		return out, err
 	}
+	if err := savePlayerSecret(out.Username, password); err != nil {
+		return out, err
+	}
 	return out, nil
 }
 
@@ -185,4 +189,82 @@ func loadPlayerSession() (PlayerSession, error) {
 	}
 	err = json.Unmarshal(data, &sess)
 	return sess, err
+}
+
+type playerSecret struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func playerSecretPath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "luxview-launcher", "player-secret.json"), nil
+}
+
+func savePlayerSecret(username, password string) error {
+	path, err := playerSecretPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data, err := json.Marshal(playerSecret{Username: username, Password: password})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
+func loadPlayerSecret() (playerSecret, error) {
+	var sec playerSecret
+	path, err := playerSecretPath()
+	if err != nil {
+		return sec, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return sec, err
+	}
+	err = json.Unmarshal(data, &sec)
+	return sec, err
+}
+
+func clearPlayerSecret() error {
+	path, err := playerSecretPath()
+	if err != nil {
+		return err
+	}
+	return os.Remove(path)
+}
+
+func (a *App) ensureGameAccount(appID, password string) error {
+	origin, err := platformOrigin()
+	if err != nil {
+		return err
+	}
+	sess, err := loadPlayerSession()
+	if err != nil || sess.Token == "" {
+		return fmt.Errorf("entre na conta LuxView")
+	}
+	body, _ := json.Marshal(map[string]string{"password": password})
+	req, err := http.NewRequest(http.MethodPost, origin+"/api/players/games/"+appID+"/account", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+sess.Token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("não consegui criar a conta no jogo: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return fmt.Errorf("%s", stringsTrimError(raw))
+	}
+	return nil
 }

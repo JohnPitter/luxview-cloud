@@ -1,6 +1,6 @@
 import './style.css';
 import './app.css';
-import { GetGames, InstallGame, Play, GetSettings, SaveSettings, GetMetin2Settings, SaveMetin2Settings, OpenInstallFolder, Version, IsGameRunning, IsInstalled, CheckForUpdate, ApplyUpdate, Register, PlayerRegister, PlayerLogin, PlayerMe, PlayerLogout } from '../wailsjs/go/main/App';
+import { GetGames, InstallGame, Play, GetSettings, SaveSettings, GetMetin2Settings, SaveMetin2Settings, OpenInstallFolder, Version, IsGameRunning, IsInstalled, CheckForUpdate, ApplyUpdate, PlayerRegister, PlayerLogin, PlayerMe, PlayerLogout } from '../wailsjs/go/main/App';
 import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
 import rakionImg from './assets/games/rakion.jpg';
 import muImg from './assets/games/mu.jpg';
@@ -491,7 +491,6 @@ function footerLine(g?: Card): string {
   if (!g.enabled) return 'Este jogo ainda não está disponível.';
   if (id === loadingGame) return `Carregando ${niceName(g)}… (verificando arquivos e iniciando o jogo).`;
   if (id === runningGame) return 'Jogo em execução — Alt+Tab liberado (ou Ctrl+Alt+M para minimizar).';
-  if (g.installed && id === 'tibia') return 'OTClient pede e-mail do Canary (player@luxview.cloud / 123456), não a conta LuxView.';
   if (g.installed) return g.update_available
     ? 'Nova versão do client disponível — clique em ATUALIZAR.'
     : 'Instalado — pronto para jogar.';
@@ -505,15 +504,7 @@ async function doAction() {
 
   if (g.installed && !g.update_available) {
     g.game = id;
-    if (id === 'metin2') {
-      return launchInstalled(g);
-    }
-    if (id === 'tibia') {
-      openTibiaHint(g);
-      return;
-    }
-    launchRakion(g);
-    return;
+    return launchInstalled(g);
   }
 
   installing = true;
@@ -560,24 +551,9 @@ async function launchInstalled(g: Card) {
     monitorGame(g);
   } catch (e) {
     const message = String(e).replace(/^Error:\s*/, '');
-    if (message.includes('jogo não encontrado')) {
-      g.installed = await IsInstalled(g.app_id, g.game);
-      paintFooter();
-      paintChips();
-    }
-    toast(message, true);
-  }
-}
-
-async function launchRakion(g: Card) {
-  try {
-    await Play(g as any, '', '');
-    toast('Iniciando o jogo…');
-    monitorGame(g);
-  } catch (e) {
-    const message = String(e).replace(/^Error:\s*/, '');
-    if (message.includes('informe usuário e senha') || message.includes('usuário ou senha') || message.includes('incorret')) {
-      openLogin(g);
+    if (message.includes('entre na conta LuxView')) {
+      openPlayerAccount();
+      toast(message, true);
       return;
     }
     if (message.includes('jogo não encontrado')) {
@@ -587,115 +563,6 @@ async function launchRakion(g: Card) {
     }
     toast(message, true);
   }
-}
-
-function openTibiaHint(g: Card) {
-  showModal(`
-    <h3>Tibia — conta do servidor</h3>
-    <p class="modal-hint">O client pede o e-mail da conta do Canary, não a conta LuxView do canto da tela.</p>
-    <p class="modal-hint">Teste: player@luxview.cloud / 123456 — personagem Player Knight.</p>
-    <p class="modal-hint">Fechar o client sai do mundo. Isso é o esperado.</p>
-    <div class="modal-actions">
-      <button class="btn" id="tibiaCancel">Cancelar</button>
-      <button class="btn primary" id="tibiaGo">Jogar</button>
-    </div>
-  `);
-  document.getElementById('tibiaCancel')!.onclick = closeModal;
-  document.getElementById('tibiaGo')!.onclick = async () => {
-    closeModal();
-    await launchInstalled(g);
-  };
-}
-
-function openLogin(g: Card) {
-  const lastUser = localStorage.getItem('luxview:user:' + g.game) || '';
-  showModal(`
-    <h3>Entrar — ${esc(niceName(g))}</h3>
-    <div class="field"><label>Usuário</label><input id="loginUser" type="text" autocomplete="username" value="${esc(lastUser)}" maxlength="32"></div>
-    <div class="field"><label>Senha</label><input id="loginPass" type="password" autocomplete="current-password" maxlength="32"></div>
-    <div class="modal-err" id="loginErr"></div>
-    <div class="modal-actions">
-      <button class="btn" id="loginCancel">Cancelar</button>
-      <button class="btn primary" id="loginGo">▶ Entrar e Jogar</button>
-    </div>
-    <div class="modal-hint">Não tem conta? <a id="loginRegister" class="modal-link">Criar conta</a></div>
-  `);
-  const userEl = document.getElementById('loginUser') as HTMLInputElement;
-  const passEl = document.getElementById('loginPass') as HTMLInputElement;
-  const errEl = document.getElementById('loginErr')!;
-  const goBtn = document.getElementById('loginGo') as HTMLButtonElement;
-  (lastUser ? passEl : userEl).focus();
-
-  const go = async () => {
-    const user = userEl.value.trim();
-    const pass = passEl.value;
-    if (!user || !pass) { errEl.textContent = 'Informe usuário e senha.'; return; }
-    goBtn.disabled = true; goBtn.innerHTML = '<span class="spinner"></span> Entrando…';
-    errEl.textContent = '';
-    try {
-      await Play(g as any, user, pass);
-      localStorage.setItem('luxview:user:' + g.game, user);
-      closeModal();
-      toast('Iniciando o jogo…');
-      monitorGame(g); // botão fica "Em execução" enquanto o jogo está aberto
-    } catch (e) {
-      errEl.textContent = String(e).replace(/^Error:\s*/, '');
-      goBtn.disabled = false; goBtn.innerHTML = '▶ Entrar e Jogar';
-    }
-  };
-  goBtn.onclick = go;
-  passEl.onkeydown = (e) => { if (e.key === 'Enter') go(); };
-  document.getElementById('loginCancel')!.onclick = closeModal;
-  document.getElementById('loginRegister')!.onclick = () => openRegister(g);
-}
-
-function openRegister(g: Card) {
-  showModal(`
-    <h3>Criar conta — ${esc(niceName(g))}</h3>
-    <div class="field"><label>Usuário</label><input id="regUser" type="text" autocomplete="off" maxlength="11" placeholder="até 11 letras/números"></div>
-    <div class="field"><label>Senha</label><input id="regPass" type="password" autocomplete="new-password" maxlength="11"></div>
-    <div class="field"><label>Confirmar senha</label><input id="regPass2" type="password" autocomplete="new-password" maxlength="11"></div>
-    <div class="field"><label>E-mail <span class="muted">(opcional)</span></label><input id="regEmail" type="email" autocomplete="off" maxlength="50"></div>
-    <div class="modal-err" id="regErr"></div>
-    <div class="modal-actions">
-      <button class="btn" id="regBack">Voltar</button>
-      <button class="btn primary" id="regGo">Criar conta</button>
-    </div>
-    <div class="modal-hint">Usuário e senha: até 11 caracteres. A senha não diferencia maiúsculas.</div>
-  `);
-  const userEl = document.getElementById('regUser') as HTMLInputElement;
-  const passEl = document.getElementById('regPass') as HTMLInputElement;
-  const pass2El = document.getElementById('regPass2') as HTMLInputElement;
-  const emailEl = document.getElementById('regEmail') as HTMLInputElement;
-  const errEl = document.getElementById('regErr')!;
-  const goBtn = document.getElementById('regGo') as HTMLButtonElement;
-  userEl.focus();
-
-  const go = async () => {
-    const user = userEl.value.trim();
-    const pass = passEl.value;
-    const pass2 = pass2El.value;
-    const email = emailEl.value.trim();
-    if (!user || !pass) { errEl.textContent = 'Informe usuário e senha.'; return; }
-    if (!/^[A-Za-z0-9]{1,11}$/.test(user)) { errEl.textContent = 'Usuário: 1 a 11 letras/números, sem espaço ou símbolo.'; return; }
-    if (pass.length < 3) { errEl.textContent = 'A senha precisa de pelo menos 3 caracteres.'; return; }
-    if (pass !== pass2) { errEl.textContent = 'As senhas não conferem.'; return; }
-    goBtn.disabled = true; goBtn.innerHTML = '<span class="spinner"></span> Criando…';
-    errEl.textContent = '';
-    try {
-      await Register(g as any, user, pass, email);
-      // Sucesso: pré-preenche o login com o usuário criado e volta pra ele.
-      localStorage.setItem('luxview:user:' + g.game, user);
-      toast('Conta criada! Agora é só entrar.');
-      openLogin(g);
-    } catch (e) {
-      errEl.textContent = String(e).replace(/^Error:\s*/, '');
-      goBtn.disabled = false; goBtn.innerHTML = 'Criar conta';
-    }
-  };
-  goBtn.onclick = go;
-  pass2El.onkeydown = (e) => { if (e.key === 'Enter') go(); };
-  document.getElementById('regBack')!.onclick = () => openLogin(g);
 }
 
 const RESOLUTIONS = [[1280,720],[1366,768],[1600,900],[1920,1080],[2560,1440],[3840,2160]];

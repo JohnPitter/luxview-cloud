@@ -59,6 +59,16 @@ func (r *PlayerRepo) CreateLink(ctx context.Context, link *model.PlayerGameLink)
 	).Scan(&link.ID, &link.CreatedAt)
 }
 
+func (r *PlayerRepo) EnsureLink(ctx context.Context, link *model.PlayerGameLink) error {
+	_, err := r.db.Pool.Exec(ctx,
+		`INSERT INTO player_game_links (player_id, app_id, template_id, in_game_nick)
+		 VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (player_id, app_id) DO UPDATE SET in_game_nick = EXCLUDED.in_game_nick, template_id = EXCLUDED.template_id`,
+		link.PlayerID, link.AppID, link.TemplateID, link.InGameNick,
+	)
+	return err
+}
+
 func (r *PlayerRepo) ListLinks(ctx context.Context, playerID uuid.UUID) ([]model.PlayerGameLink, error) {
 	rows, err := r.db.Pool.Query(ctx,
 		`SELECT id, player_id, app_id, template_id, in_game_nick, created_at

@@ -119,7 +119,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	domainChecker := service.NewDomainChecker(deps.Config.VPSPublicIP, deps.Config.AcmeStorePath)
 	domainCheckHandler := handlers.NewDomainCheckHandler(deps.AppRepo, domainChecker)
 	gameServerHandler := handlers.NewGameServerHandler(deps.AppRepo, deps.GameConfigRepo, deps.GameServerSvc, gameClientStorage, deps.Config.VPSPublicIP, deps.Config.Domain, gameClientBaseZips)
-	playerHandler := handlers.NewPlayers(service.NewPlayer(deps.PlayerRepo), deps.Config.JWTSecret)
+	playerHandler := handlers.NewPlayers(service.NewPlayer(deps.PlayerRepo), service.NewGameAccount(deps.Docker, deps.AppRepo, deps.GameConfigRepo, deps.PlayerRepo), deps.Config.JWTSecret)
 	launcherHandler := handlers.NewLauncherHandler(deps.Config.LauncherReleaseRepo, deps.Config.LauncherAssetName, deps.Config.GitHubAPIToken)
 	globalStorageHandler := handlers.NewGlobalStorageHandler(deps.Config.StorageBasePath)
 
@@ -195,6 +195,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Use(playerAuthMiddleware)
 			r.Get("/players/me", playerHandler.Me)
 			r.Post("/players/links", playerHandler.Link)
+			r.Post("/players/games/{id}/account", playerHandler.ProvisionAccount)
 		})
 
 		// Internal (Traefik)
