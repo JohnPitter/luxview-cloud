@@ -452,6 +452,7 @@ async function doAction() {
     g.installed = true;
     g.update_available = false;
     toast(updatingClient ? 'Client atualizado!' : 'Instalado com sucesso!');
+    await refreshCatalog();
   } catch (e) {
     toast(String(e), true);
   } finally {

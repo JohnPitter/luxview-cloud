@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.58"
+var appVersion = "v1.59"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -299,11 +299,15 @@ func (a *App) InstallGame(card GameCard) error {
 	if err != nil {
 		return err
 	}
+	if a.IsGameRunning(card.Game) {
+		return fmt.Errorf("feche o jogo antes de atualizar o client")
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 
 	a.progress(card.Game, "download", 0)
+	updating := a.isInstalled(card)
 	tmp, err := os.CreateTemp("", "luxview-*.zip")
 	if err != nil {
 		return err
@@ -328,18 +332,27 @@ func (a *App) InstallGame(card GameCard) error {
 	}
 
 	a.progress(card.Game, "extract", 0)
+	restoreSettings := a.backupGameSettings(card, updating)
 	if err := unzip(tmpPath, dir, func(done, count int) {
 		if count > 0 {
 			a.progress(card.Game, "extract", int(float64(done)/float64(count)*100))
 		}
 	}); err != nil {
+		if restoreSettings != nil {
+			restoreSettings()
+		}
 		return fmt.Errorf("falha ao extrair: %w", err)
+	}
+	if restoreSettings != nil {
+		restoreSettings()
 	}
 	game := normalizeGameID(card.Game)
 	if spec, ok := launchSpecForGame(game); ok && !clientFilesReady(dir, game, spec) {
 		return fmt.Errorf("client extraído incompleto — arquivos obrigatórios não encontrados")
 	}
-	a.applyDefaultDisplay(card)
+	if !updating {
+		a.applyDefaultDisplay(card)
+	}
 	if err := saveInstalledClientHash(card.AppID, card.ClientHash); err != nil {
 		return fmt.Errorf("client instalado, mas não gravei a versão local: %w", err)
 	}
@@ -365,6 +378,21 @@ func (a *App) applyDefaultDisplay(card GameCard) {
 		s.ScreenWidth, s.ScreenHeight = 1920, 1080
 	}
 	_ = a.SaveSettings(card, s)
+}
+
+func (a *App) backupGameSettings(card GameCard, updating bool) func() {
+	if !updating {
+		return nil
+	}
+	path, err := a.iniPath(card)
+	if err != nil {
+		return nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	return func() { _ = os.WriteFile(path, raw, 0o644) }
 }
 
 // downloadZip streams the client zip to path (one attempt), emitting progress.
@@ -1041,50 +1069,86 @@ func unzip(src, dest string, onProgress func(done, total int)) error {
 	}
 	defer r.Close()
 
-	total := len(r.File)
 	destAbs, err := filepath.Abs(dest)
 	if err != nil {
 		return err
 	}
+	total := len(r.File)
 	for i, f := range r.File {
-		target := filepath.Join(dest, f.Name)
-		targetAbs, err := filepath.Abs(target)
-		if err != nil {
+		if err := extractZipEntry(f, dest, destAbs); err != nil {
 			return err
 		}
-		if !strings.HasPrefix(targetAbs, destAbs+string(os.PathSeparator)) && targetAbs != destAbs {
-			return fmt.Errorf("entrada de zip insegura: %s", f.Name)
-		}
-		// Some Windows-made zips (this client) use "\" separators and may not flag
-		// directory entries via FileInfo — treat trailing-separator names as dirs.
-		if f.FileInfo().IsDir() || strings.HasSuffix(f.Name, "/") || strings.HasSuffix(f.Name, `\`) {
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return err
-		}
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
-		if err != nil {
-			rc.Close()
-			return err
-		}
-		if _, err := io.Copy(out, rc); err != nil {
-			out.Close()
-			rc.Close()
-			return err
-		}
-		out.Close()
-		rc.Close()
 		if onProgress != nil {
 			onProgress(i+1, total)
 		}
 	}
 	return nil
+}
+
+func extractZipEntry(f *zip.File, dest, destAbs string) error {
+	target, err := zipEntryTarget(dest, destAbs, f.Name)
+	if err != nil {
+		return err
+	}
+	if f.FileInfo().IsDir() || strings.HasSuffix(f.Name, "/") || strings.HasSuffix(f.Name, `\`) {
+		return os.MkdirAll(target, 0o755)
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+	rc, err := f.Open()
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+	out, err := openTruncated(target)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(out, rc)
+	closeErr := out.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
+}
+
+func zipEntryTarget(dest, destAbs, name string) (string, error) {
+	name = strings.ReplaceAll(name, `\`, "/")
+	name = strings.TrimPrefix(name, "/")
+	parts := strings.Split(name, "/")
+	clean := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part == "" || part == "." {
+			continue
+		}
+		if part == ".." {
+			return "", fmt.Errorf("entrada de zip insegura: %s", name)
+		}
+		clean = append(clean, part)
+	}
+	target := filepath.Join(append([]string{dest}, clean...)...)
+	targetAbs, err := filepath.Abs(target)
+	if err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(targetAbs, destAbs+string(os.PathSeparator)) && targetAbs != destAbs {
+		return "", fmt.Errorf("entrada de zip insegura: %s", name)
+	}
+	return target, nil
+}
+
+func openTruncated(path string) (*os.File, error) {
+	_ = os.Chmod(path, 0o666)
+	var last error
+	for i := 0; i < 8; i++ {
+		out, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+		if err == nil {
+			return out, nil
+		}
+		last = err
+		time.Sleep(time.Duration(200*(i+1)) * time.Millisecond)
+		_ = os.Chmod(path, 0o666)
+	}
+	return nil, fmt.Errorf("arquivo em uso (%s): %w — feche o jogo e tente de novo", filepath.Base(path), last)
 }
