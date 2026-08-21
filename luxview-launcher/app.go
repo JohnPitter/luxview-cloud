@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.62"
+var appVersion = "v1.63"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -525,6 +525,14 @@ func (a *App) Play(card GameCard, user, pass string) error {
 		return launchExecutable(exePath, clientDir)
 	}
 
+	if user == "" || pass == "" {
+		saved, err := loadGameLogin(card.AppID)
+		if err != nil || saved.User == "" || saved.Pass == "" {
+			return fmt.Errorf("informe usuário e senha")
+		}
+		user, pass = saved.User, saved.Pass
+	}
+
 	// Login() validates the credentials against the web auth (launcherlogin.php).
 	// We don't forward the long web token to the game: the 3rd arg is a short auth
 	// ticket and a 40-char token corrupts the client's login packet, making the
@@ -533,6 +541,7 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	if _, err := a.Login(card, user, pass); err != nil {
 		return err
 	}
+	_ = saveGameLogin(card.AppID, user, pass)
 
 	a.ensureRegistry(spec, clientDir)
 

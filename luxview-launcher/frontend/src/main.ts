@@ -491,6 +491,7 @@ function footerLine(g?: Card): string {
   if (!g.enabled) return 'Este jogo ainda não está disponível.';
   if (id === loadingGame) return `Carregando ${niceName(g)}… (verificando arquivos e iniciando o jogo).`;
   if (id === runningGame) return 'Jogo em execução — Alt+Tab liberado (ou Ctrl+Alt+M para minimizar).';
+  if (g.installed && id === 'tibia') return 'OTClient pede e-mail do Canary (player@luxview.cloud / 123456), não a conta LuxView.';
   if (g.installed) return g.update_available
     ? 'Nova versão do client disponível — clique em ATUALIZAR.'
     : 'Instalado — pronto para jogar.';
@@ -504,23 +505,14 @@ async function doAction() {
 
   if (g.installed && !g.update_available) {
     g.game = id;
-    if (id === 'metin2' || id === 'tibia') {
-      try {
-        await Play(g as any, '', '');
-        toast('Iniciando o jogo…');
-        monitorGame(g);
-      } catch (e) {
-        const message = String(e).replace(/^Error:\s*/, '');
-        if (message.includes('jogo não encontrado')) {
-          g.installed = await IsInstalled(g.app_id, g.game);
-          paintFooter();
-          paintChips();
-        }
-        toast(message, true);
-      }
-    } else {
-      openLogin(g);
+    if (id === 'metin2') {
+      return launchInstalled(g);
     }
+    if (id === 'tibia') {
+      openTibiaHint(g);
+      return;
+    }
+    launchRakion(g);
     return;
   }
 
@@ -560,6 +552,60 @@ function showModal(inner: string): HTMLElement {
   return ov;
 }
 function closeModal() { document.getElementById('modal')?.remove(); }
+
+async function launchInstalled(g: Card) {
+  try {
+    await Play(g as any, '', '');
+    toast('Iniciando o jogo…');
+    monitorGame(g);
+  } catch (e) {
+    const message = String(e).replace(/^Error:\s*/, '');
+    if (message.includes('jogo não encontrado')) {
+      g.installed = await IsInstalled(g.app_id, g.game);
+      paintFooter();
+      paintChips();
+    }
+    toast(message, true);
+  }
+}
+
+async function launchRakion(g: Card) {
+  try {
+    await Play(g as any, '', '');
+    toast('Iniciando o jogo…');
+    monitorGame(g);
+  } catch (e) {
+    const message = String(e).replace(/^Error:\s*/, '');
+    if (message.includes('informe usuário e senha') || message.includes('usuário ou senha') || message.includes('incorret')) {
+      openLogin(g);
+      return;
+    }
+    if (message.includes('jogo não encontrado')) {
+      g.installed = await IsInstalled(g.app_id, g.game);
+      paintFooter();
+      paintChips();
+    }
+    toast(message, true);
+  }
+}
+
+function openTibiaHint(g: Card) {
+  showModal(`
+    <h3>Tibia — conta do servidor</h3>
+    <p class="modal-hint">O client pede o e-mail da conta do Canary, não a conta LuxView do canto da tela.</p>
+    <p class="modal-hint">Teste: player@luxview.cloud / 123456 — personagem Player Knight.</p>
+    <p class="modal-hint">Fechar o client sai do mundo. Isso é o esperado.</p>
+    <div class="modal-actions">
+      <button class="btn" id="tibiaCancel">Cancelar</button>
+      <button class="btn primary" id="tibiaGo">Jogar</button>
+    </div>
+  `);
+  document.getElementById('tibiaCancel')!.onclick = closeModal;
+  document.getElementById('tibiaGo')!.onclick = async () => {
+    closeModal();
+    await launchInstalled(g);
+  };
+}
 
 function openLogin(g: Card) {
   const lastUser = localStorage.getItem('luxview:user:' + g.game) || '';
