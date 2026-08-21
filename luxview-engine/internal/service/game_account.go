@@ -35,9 +35,10 @@ type GameAccountInfo struct {
 	TemplateID string `json:"template_id"`
 	Login      string `json:"login"`
 	Email      string `json:"email,omitempty"`
+	Character  string `json:"character,omitempty"`
 }
 
-func (g *GameAccount) Provision(ctx context.Context, player *model.PlayerAccount, appID uuid.UUID, password string) (*GameAccountInfo, error) {
+func (g *GameAccount) Provision(ctx context.Context, player *model.PlayerAccount, appID uuid.UUID, password, characterName, vocation string) (*GameAccountInfo, error) {
 	if player == nil {
 		return nil, fmt.Errorf("entre na conta LuxView")
 	}
@@ -61,7 +62,7 @@ func (g *GameAccount) Provision(ctx context.Context, player *model.PlayerAccount
 	if cfg == nil {
 		return nil, fmt.Errorf("jogo sem template")
 	}
-	info, sql, err := gameAccountSQL(cfg.TemplateID, player.Username, password)
+	info, sql, err := gameAccountSQL(cfg.TemplateID, player.Username, password, characterName, vocation)
 	if err != nil {
 		return nil, err
 	}
@@ -71,26 +72,49 @@ func (g *GameAccount) Provision(ctx context.Context, player *model.PlayerAccount
 		log.Warn().Err(err).Str("container", container).Str("template", cfg.TemplateID).Msg("provision game account")
 		return nil, fmt.Errorf("não consegui criar a conta no servidor")
 	}
+	nick := info.Login
+	if info.Character != "" {
+		nick = info.Character
+	}
 	_ = g.playerRepo.EnsureLink(ctx, &model.PlayerGameLink{
-		PlayerID: player.ID, AppID: app.ID, TemplateID: cfg.TemplateID, InGameNick: info.Login,
+		PlayerID: player.ID, AppID: app.ID, TemplateID: cfg.TemplateID, InGameNick: nick,
 	})
 	return info, nil
 }
 
-func gameAccountSQL(templateID, username, password string) (*GameAccountInfo, string, error) {
+func gameAccountSQL(templateID, username, password, characterName, vocation string) (*GameAccountInfo, string, error) {
 	switch templateID {
 	case "tibia":
 		email := TibiaEmail(username)
-		charName := TibiaCharacterName(username)
 		sql := fmt.Sprintf(
-			`INSERT INTO canary.accounts (name, password, email, type, creation) VALUES (%s, %s, %s, 1, UNIX_TIMESTAMP()) ON DUPLICATE KEY UPDATE password = VALUES(password), email = VALUES(email);`+
-				`INSERT INTO canary.players (name, account_id, group_id, level, vocation, health, healthmax, experience, lookbody, lookfeet, lookhead, looklegs, looktype, lookaddons, maglevel, mana, manamax, manaspent, soul, town_id, posx, posy, posz, conditions, cap, sex, stamina, skill_fist, skill_club, skill_sword, skill_axe, skill_dist, skill_shielding, skill_fishing) SELECT %s, a.id, 1, s.level, s.vocation, s.health, s.healthmax, s.experience, s.lookbody, s.lookfeet, s.lookhead, s.looklegs, s.looktype, s.lookaddons, s.maglevel, s.mana, s.manamax, s.manaspent, s.soul, s.town_id, s.posx, s.posy, s.posz, s.conditions, s.cap, s.sex, s.stamina, s.skill_fist, s.skill_club, s.skill_sword, s.skill_axe, s.skill_dist, s.skill_shielding, s.skill_fishing FROM canary.accounts a INNER JOIN canary.players s ON s.name = 'Knight Sample' WHERE a.name = %s AND NOT EXISTS (SELECT 1 FROM canary.players p WHERE p.account_id = a.id);`+
-				`INSERT INTO canary.player_items (player_id, pid, sid, itemtype, count, attributes) SELECT np.id, i.pid, i.sid, i.itemtype, i.count, i.attributes FROM canary.players np INNER JOIN canary.accounts a ON a.id = np.account_id INNER JOIN canary.players sp ON sp.name = 'Knight Sample' INNER JOIN canary.player_items i ON i.player_id = sp.id WHERE a.name = %s AND np.name = %s AND NOT EXISTS (SELECT 1 FROM canary.player_items x WHERE x.player_id = np.id);`,
+			`INSERT INTO canary.accounts (name, password, email, type, creation) VALUES (%s, %s, %s, 1, UNIX_TIMESTAMP()) ON DUPLICATE KEY UPDATE password = VALUES(password), email = VALUES(email);`,
 			mysqlQuote(email), mysqlQuote(SHA1Hex(password)), mysqlQuote(email),
-			mysqlQuote(charName), mysqlQuote(email),
-			mysqlQuote(email), mysqlQuote(charName),
 		)
-		return &GameAccountInfo{TemplateID: templateID, Login: email, Email: email}, sql, nil
+		info := &GameAccountInfo{TemplateID: templateID, Login: email, Email: email}
+		charName := strings.TrimSpace(characterName)
+		voc := strings.TrimSpace(vocation)
+		if charName == "" && voc == "" {
+			return info, sql, nil
+		}
+		if charName == "" || voc == "" {
+			return nil, "", fmt.Errorf("informe o nome e a vocação do personagem")
+		}
+		name, err := ParseTibiaCharacterName(charName)
+		if err != nil {
+			return nil, "", err
+		}
+		sample, err := TibiaVocationSample(voc)
+		if err != nil {
+			return nil, "", err
+		}
+		sql += fmt.Sprintf(
+			`INSERT INTO canary.players (name, account_id, group_id, level, vocation, health, healthmax, experience, lookbody, lookfeet, lookhead, looklegs, looktype, lookaddons, maglevel, mana, manamax, manaspent, soul, town_id, posx, posy, posz, conditions, cap, sex, stamina, skill_fist, skill_club, skill_sword, skill_axe, skill_dist, skill_shielding, skill_fishing) SELECT %s, a.id, 1, s.level, s.vocation, s.health, s.healthmax, s.experience, s.lookbody, s.lookfeet, s.lookhead, s.looklegs, s.looktype, s.lookaddons, s.maglevel, s.mana, s.manamax, s.manaspent, s.soul, s.town_id, s.posx, s.posy, s.posz, s.conditions, s.cap, s.sex, s.stamina, s.skill_fist, s.skill_club, s.skill_sword, s.skill_axe, s.skill_dist, s.skill_shielding, s.skill_fishing FROM canary.accounts a INNER JOIN canary.players s ON s.name = %s WHERE a.name = %s AND NOT EXISTS (SELECT 1 FROM canary.players p WHERE p.account_id = a.id);`+
+				`INSERT INTO canary.player_items (player_id, pid, sid, itemtype, count, attributes) SELECT np.id, i.pid, i.sid, i.itemtype, i.count, i.attributes FROM canary.players np INNER JOIN canary.accounts a ON a.id = np.account_id INNER JOIN canary.players sp ON sp.name = %s INNER JOIN canary.player_items i ON i.player_id = sp.id WHERE a.name = %s AND np.name = %s AND NOT EXISTS (SELECT 1 FROM canary.player_items x WHERE x.player_id = np.id);`,
+			mysqlQuote(name), mysqlQuote(sample), mysqlQuote(email),
+			mysqlQuote(sample), mysqlQuote(email), mysqlQuote(name),
+		)
+		info.Character = name
+		return info, sql, nil
 	case "metin2":
 		login := MetinLogin(username)
 		if login == "" {

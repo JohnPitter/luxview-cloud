@@ -546,23 +546,117 @@ function closeModal() { document.getElementById('modal')?.remove(); }
 
 async function launchInstalled(g: Card) {
   try {
+    if (cardGame(g) === 'tibia') {
+      await launchTibia(g);
+      return;
+    }
     await Play(g as any, '', '');
     toast('Iniciando o jogo…');
     monitorGame(g);
   } catch (e) {
-    const message = String(e).replace(/^Error:\s*/, '');
-    if (message.includes('entre na conta LuxView')) {
-      openPlayerAccount();
-      toast(message, true);
+    await handleLaunchError(g, e);
+  }
+}
+
+async function handleLaunchError(g: Card, e: unknown) {
+  const message = String(e).replace(/^Error:\s*/, '');
+  if (message.includes('entre na conta LuxView')) {
+    openPlayerAccount();
+    toast(message, true);
+    return;
+  }
+  if (message.includes('jogo não encontrado')) {
+    g.installed = await IsInstalled(g.app_id, g.game);
+    paintFooter();
+    paintChips();
+  }
+  toast(message, true);
+}
+
+function tibiaCharKey(appId: string) {
+  return `luxview:tibia-char:${appId}`;
+}
+
+function tibiaNameHint(): string {
+  const letters = (player?.username || '').replace(/[^A-Za-z]/g, '');
+  if (letters.length < 2) return '';
+  return letters[0].toUpperCase() + letters.slice(1, 29).toLowerCase();
+}
+
+async function launchTibia(g: Card) {
+  const raw = localStorage.getItem(tibiaCharKey(g.app_id));
+  if (raw) {
+    try {
+      const saved = JSON.parse(raw) as { name: string; vocation: string };
+      if (saved.name && saved.vocation) {
+        await playTibia(g, saved.name, saved.vocation);
+        return;
+      }
+    } catch { /* pede de novo */ }
+  }
+  openTibiaCharacter(g);
+}
+
+async function playTibia(g: Card, name: string, vocation: string) {
+  try {
+    await Play(g as any, name, vocation);
+    localStorage.setItem(tibiaCharKey(g.app_id), JSON.stringify({ name, vocation }));
+    closeModal();
+    toast('Iniciando o jogo…');
+    monitorGame(g);
+  } catch (e) {
+    await handleLaunchError(g, e);
+  }
+}
+
+function openTibiaCharacter(g: Card) {
+  const hint = tibiaNameHint();
+  showModal(`
+    <h3>Criar personagem</h3>
+    <div class="field"><label>Nome</label><input id="tbName" type="text" maxlength="29" value="${esc(hint)}"></div>
+    <div class="field"><label>Vocação</label>
+      <select id="tbVoc">
+        <option value="knight">Cavaleiro</option>
+        <option value="paladin">Paladino</option>
+        <option value="sorcerer">Mago</option>
+        <option value="druid">Druida</option>
+        <option value="monk">Monge</option>
+      </select>
+    </div>
+    <div class="modal-err" id="tbErr"></div>
+    <div class="modal-actions">
+      <button class="btn" id="tbCancel">Cancelar</button>
+      <button class="btn primary" id="tbGo">Criar e jogar</button>
+    </div>
+    <p class="modal-hint">Só na primeira vez — depois o JOGAR entra direto.</p>
+  `);
+  const nameEl = document.getElementById('tbName') as HTMLInputElement;
+  const vocEl = document.getElementById('tbVoc') as HTMLSelectElement;
+  const errEl = document.getElementById('tbErr')!;
+  document.getElementById('tbCancel')!.onclick = closeModal;
+  document.getElementById('tbGo')!.onclick = async () => {
+    const name = nameEl.value.trim();
+    const vocation = vocEl.value;
+    errEl.textContent = '';
+    if (name.replace(/[^A-Za-z ]/g, '').replace(/\s+/g, ' ').trim().length < 2) {
+      errEl.textContent = 'Nome: 2 a 29 letras.';
       return;
     }
-    if (message.includes('jogo não encontrado')) {
-      g.installed = await IsInstalled(g.app_id, g.game);
-      paintFooter();
-      paintChips();
+    try {
+      await Play(g as any, name, vocation);
+      localStorage.setItem(tibiaCharKey(g.app_id), JSON.stringify({ name, vocation }));
+      closeModal();
+      toast('Iniciando o jogo…');
+      monitorGame(g);
+    } catch (e) {
+      const message = String(e).replace(/^Error:\s*/, '');
+      if (message.includes('entre na conta LuxView')) {
+        closeModal();
+        openPlayerAccount();
+      }
+      errEl.textContent = message;
     }
-    toast(message, true);
-  }
+  };
 }
 
 const RESOLUTIONS = [[1280,720],[1366,768],[1600,900],[1920,1080],[2560,1440],[3840,2160]];

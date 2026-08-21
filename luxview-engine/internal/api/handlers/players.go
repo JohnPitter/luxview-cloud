@@ -108,9 +108,11 @@ func (h *Players) ProvisionAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "jogo inválido")
 		return
 	}
-	var body struct {
-		Password string `json:"password"`
-	}
+		var body struct {
+			Password      string `json:"password"`
+			CharacterName string `json:"character_name"`
+			Vocation      string `json:"vocation"`
+		}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Password) == "" {
 		writeError(w, http.StatusBadRequest, "senha ausente")
 		return
@@ -119,7 +121,7 @@ func (h *Players) ProvisionAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "provisionamento indisponível")
 		return
 	}
-	info, err := h.accounts.Provision(r.Context(), acct, appID, body.Password)
+		info, err := h.accounts.Provision(r.Context(), acct, appID, body.Password, body.CharacterName, body.Vocation)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

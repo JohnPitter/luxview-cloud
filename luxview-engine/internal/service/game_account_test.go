@@ -5,23 +5,42 @@ import (
 	"testing"
 )
 
-func TestGameAccountSQLTibia(t *testing.T) {
-	info, sql, err := gameAccountSQL("tibia", "Joao", "123456")
+func TestGameAccountSQLTibiaAccountOnly(t *testing.T) {
+	info, sql, err := gameAccountSQL("tibia", "Joao", "123456", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if info.Login != "joao@luxviewot.com" {
 		t.Fatalf("login %s", info.Login)
 	}
-	for _, part := range []string{"canary.accounts", "canary.players", "Knight Sample", "Joao", "7c4a8d09ca3762af61e59520943dc26494f8941b", "joao@luxviewot.com"} {
+	if strings.Contains(sql, "canary.players") {
+		t.Fatalf("account-only SQL created a character: %s", sql)
+	}
+}
+
+func TestGameAccountSQLTibiaWithVocation(t *testing.T) {
+	info, sql, err := gameAccountSQL("tibia", "Joao", "123456", "Joao Mage", "sorcerer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Character != "Joao Mage" {
+		t.Fatalf("character %s", info.Character)
+	}
+	for _, part := range []string{"canary.accounts", "canary.players", "Sorcerer Sample", "Joao Mage", "7c4a8d09ca3762af61e59520943dc26494f8941b"} {
 		if !strings.Contains(sql, part) {
 			t.Fatalf("missing %q in %s", part, sql)
 		}
 	}
 }
 
+func TestGameAccountSQLTibiaNeedsBothFields(t *testing.T) {
+	if _, _, err := gameAccountSQL("tibia", "Joao", "123456", "Joao", ""); err == nil {
+		t.Fatal("expected error when vocation is missing")
+	}
+}
+
 func TestGameAccountSQLMetin(t *testing.T) {
-	_, sql, err := gameAccountSQL("metin2", "testando", "123456")
+	_, sql, err := gameAccountSQL("metin2", "testando", "123456", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +52,7 @@ func TestGameAccountSQLMetin(t *testing.T) {
 }
 
 func TestGameAccountSQLRakion(t *testing.T) {
-	info, sql, err := gameAccountSQL("rakion", "testando", "Secret99")
+	info, sql, err := gameAccountSQL("rakion", "testando", "Secret99", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

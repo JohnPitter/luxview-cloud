@@ -30,8 +30,31 @@ func TestTibiaCharacterName(t *testing.T) {
 	if got := TibiaCharacterName("testando"); got != "Testando" {
 		t.Fatalf("got %s", got)
 	}
-	if got := TibiaCharacterName("x"); got != "Herox" {
+	if got := TibiaCharacterName("x"); got != "" {
 		t.Fatalf("short got %s", got)
+	}
+}
+
+func TestParseTibiaCharacterName(t *testing.T) {
+	got, err := ParseTibiaCharacterName("  joao  mage ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "Joao Mage" {
+		t.Fatalf("got %s", got)
+	}
+}
+
+func TestTibiaVocationSample(t *testing.T) {
+	got, err := TibiaVocationSample("druida")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "Druid Sample" {
+		t.Fatalf("got %s", got)
+	}
+	if _, err := TibiaVocationSample("ninja"); err == nil {
+		t.Fatal("expected invalid vocation")
 	}
 }
 

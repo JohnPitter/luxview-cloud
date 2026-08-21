@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.64"
+var appVersion = "v1.65"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -523,7 +523,11 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	if err != nil || secret.Username == "" || secret.Password == "" {
 		return fmt.Errorf("entre na conta LuxView")
 	}
-	if err := a.ensureGameAccount(card.AppID, secret.Password); err != nil {
+	charName, vocation := "", ""
+	if game == "tibia" {
+		charName, vocation = user, pass
+	}
+	if err := a.ensureGameAccount(card.AppID, secret.Password, charName, vocation); err != nil {
 		return err
 	}
 

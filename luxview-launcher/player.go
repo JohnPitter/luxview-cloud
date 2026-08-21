@@ -241,7 +241,7 @@ func clearPlayerSecret() error {
 	return os.Remove(path)
 }
 
-func (a *App) ensureGameAccount(appID, password string) error {
+func (a *App) ensureGameAccount(appID, password, characterName, vocation string) error {
 	origin, err := platformOrigin()
 	if err != nil {
 		return err
@@ -250,7 +250,11 @@ func (a *App) ensureGameAccount(appID, password string) error {
 	if err != nil || sess.Token == "" {
 		return fmt.Errorf("entre na conta LuxView")
 	}
-	body, _ := json.Marshal(map[string]string{"password": password})
+	body, _ := json.Marshal(map[string]string{
+		"password":       password,
+		"character_name": characterName,
+		"vocation":       vocation,
+	})
 	req, err := http.NewRequest(http.MethodPost, origin+"/api/players/games/"+appID+"/account", bytes.NewReader(body))
 	if err != nil {
 		return err
