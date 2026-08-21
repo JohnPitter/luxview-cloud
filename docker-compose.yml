@@ -93,6 +93,8 @@ services:
       - RAKION_CLIENT_BASE_ZIP=${RAKION_CLIENT_BASE_ZIP:-/data/luxview/storage/_global/rakion-assets/rakion-client-base.zip}
       # Metin2 legado base client zip — IP/portas são injetados no root.data.
       - METIN2_LEGACY_CLIENT_BASE_ZIP=${METIN2_LEGACY_CLIENT_BASE_ZIP:-/data/luxview/storage/_global/metin2-legacy-assets/metin2-legacy-client-base.zip}
+      # Tibia base client zip — init.lua do OTClient é injetado por servidor.
+      - TIBIA_CLIENT_BASE_ZIP=${TIBIA_CLIENT_BASE_ZIP:-/data/luxview/storage/_global/tibia-assets/tibia-client-base.zip}
     networks:
       - luxview-net
       - traefik-public

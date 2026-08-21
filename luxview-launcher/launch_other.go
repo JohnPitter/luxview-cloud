@@ -21,3 +21,7 @@ func launchExecutable(exePath, workingDir string) error {
 	}
 	return nil
 }
+
+func launchTibiaExecutable(exePath, workingDir string) error {
+	return launchExecutable(exePath, workingDir)
+}

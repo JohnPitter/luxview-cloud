@@ -450,6 +450,15 @@ func (h *GameServerHandler) serveGameClient(w http.ResponseWriter, r *http.Reque
 			writeError(w, http.StatusInternalServerError, "failed to generate legacy Metin2 client")
 			return
 		}
+	case tibiaTemplateID:
+		if err := service.WriteTibiaClientZip(baseZip, stat.Size(), w, service.TibiaClientOptions{
+			ServerName: app.Name,
+			ServerIP:   h.serverIP,
+			LoginPort:  tibiaLoginHTTPPort(cfg),
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to generate Tibia client")
+			return
+		}
 	default: // openMUTemplateID
 		if err := service.WriteOpenMUClientZip(baseZip, stat.Size(), w, service.OpenMUClientOptions{
 			ServerName: app.Name,
@@ -499,6 +508,7 @@ const (
 	openMUTemplateID = "openmu"
 	rakionTemplateID = "rakion"
 	metin2TemplateID = "metin2"
+	tibiaTemplateID  = "tibia"
 )
 
 // gameClientWithDownload lists templates that offer a configured client download.
@@ -506,6 +516,7 @@ var gameClientWithDownload = map[string]bool{
 	openMUTemplateID: true,
 	rakionTemplateID: true,
 	metin2TemplateID: true,
+	tibiaTemplateID:  true,
 }
 
 func gameClientDownloadURL(appID string, templateID string) string {
@@ -569,4 +580,16 @@ func openMUMaxPlayers(cfg *model.GameServerConfig) int {
 		}
 	}
 	return 1000
+}
+
+// tibiaLoginHTTPPort é a porta publicada do login HTTP (login-server) que o
+// client OTClient usa para autenticar. Padrão 8088 quando o extra port não
+// estiver persistido.
+func tibiaLoginHTTPPort(cfg *model.GameServerConfig) int {
+	for _, ep := range cfg.ExtraPorts {
+		if ep.Port == 8088 {
+			return ep.Port
+		}
+	}
+	return 8088
 }

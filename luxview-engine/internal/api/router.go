@@ -86,6 +86,7 @@ func NewRouter(deps Deps) *chi.Mux {
 		"openmu": deps.Config.OpenMUClientBaseZipPath,
 		"rakion": deps.Config.RakionClientBaseZipPath,
 		"metin2": deps.Config.Metin2LegacyClientBaseZipPath,
+		"tibia":  deps.Config.TibiaClientBaseZipPath,
 	}
 	globalStorageRoot := filepath.Join(deps.Config.StorageBasePath, "_global")
 	gameClientStorage := service.NewGameClientStorageService(deps.ServiceRepo, deps.EncryptKey, globalStorageRoot, gameClientBaseZips)

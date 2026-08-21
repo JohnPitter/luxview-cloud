@@ -115,10 +115,26 @@ html, body {
 .topbar .status .dot { width: 8px; height: 8px; border-radius: 999px; background: #22c55e; animation: pulseDot 2s infinite; }
 .topbar .status.off .dot { background: #ef4444; animation: none; box-shadow: 0 0 8px #ef4444; }
 
-/* ---------- game strip ---------- */
-.strip { display: flex; gap: 10px; margin-bottom: 14px; }
+/* ---------- game strip (carrossel) ---------- */
+.carousel { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
+.car-btn {
+  flex: none; width: 30px; height: 66px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--muted); font-size: 18px; cursor: pointer;
+  display: grid; place-items: center;
+  transition: color .16s, border-color .2s, opacity .2s;
+}
+.car-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.car-btn:disabled { opacity: .3; cursor: not-allowed; }
+.strip {
+  display: flex; gap: 10px; flex: 1; min-width: 0;
+  overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+.strip::-webkit-scrollbar { display: none; }
 .chip {
-  position: relative; flex: 1; min-width: 0; height: 66px; border-radius: 13px;
+  position: relative; flex: 0 0 auto; width: 152px; height: 66px; border-radius: 13px;
+  scroll-snap-align: start;
   border: 1px solid var(--border);
   background: linear-gradient(160deg, var(--surface-2), var(--surface));
   display: flex; align-items: center; gap: 10px; padding: 0 12px; cursor: pointer;

@@ -22,6 +22,31 @@ func TestMetin2LaunchSpecUsesLegacyClientLayout(t *testing.T) {
 	}
 }
 
+func TestTibiaLaunchSpecUsesOTClient(t *testing.T) {
+	spec, ok := launchSpecForGame("Tibia (Canary)")
+	if !ok {
+		t.Fatal("tibia launch spec is not registered")
+	}
+	if spec.clientDir != "" || spec.gameExe != "otclient.exe" {
+		t.Fatalf("Tibia client layout = %q/%q", spec.clientDir, spec.gameExe)
+	}
+}
+
+func TestNormalizeGameIDAcceptsTibiaVariants(t *testing.T) {
+	for _, raw := range []string{"tibia", "Tibia", "tibia-canary", "Tibia (Canary)"} {
+		if got := normalizeGameID(raw); got != "tibia" {
+			t.Fatalf("normalizeGameID(%q) = %q, want tibia", raw, got)
+		}
+	}
+}
+
+func TestResolveGameIDFallsBackToTibiaDisplayName(t *testing.T) {
+	got := resolveGameID(GameCard{DisplayName: "Tibia (Canary)"})
+	if got != "tibia" {
+		t.Fatalf("resolveGameID() = %q, want tibia", got)
+	}
+}
+
 func TestMetin2InstallRequiresRuntimeFiles(t *testing.T) {
 	spec := launchSpecs["metin2"]
 	root := t.TempDir()

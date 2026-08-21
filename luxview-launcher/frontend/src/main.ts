@@ -5,6 +5,7 @@ import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs
 import rakionImg from './assets/games/rakion.jpg';
 import muImg from './assets/games/mu.jpg';
 import metin2Img from './assets/games/metin2.jpg';
+import tibiaImg from './assets/games/tibia.jpg';
 
 // Arte por jogo, usada no hero E no ícone do chip (quando houver; senão gradiente).
 const IMAGES: Record<string, string> = {
@@ -12,6 +13,7 @@ const IMAGES: Record<string, string> = {
   openmu: muImg,
   muemu: muImg,
   metin2: metin2Img,
+  tibia: tibiaImg,
 };
 
 type Card = {
@@ -48,15 +50,28 @@ type Metin2Settings = {
 
 type Theme = { grad: string; accent: string; tag: string; initials: string };
 
+const gameId = (raw: string = ''): string => {
+  const id = raw.trim().toLowerCase().replaceAll('_', '-');
+  return id.includes('tibia') ? 'tibia' : id;
+};
+
+const normalizeCard = (card: Card): Card => ({
+  ...card,
+  game: gameId(card.game || card.display_name || card.name),
+});
+
+const cardGame = (card: Card): string => gameId(card.game || card.display_name || card.name);
+
 const THEMES: Record<string, Theme> = {
   rakion:   { grad: 'linear-gradient(135deg,#7f1d1d 0%,#2a0a0a 100%)', accent: '#e0392b', tag: 'Chaos Force', initials: 'R' },
   openmu:   { grad: 'linear-gradient(135deg,#581c87 0%,#1b0a2e 100%)', accent: '#a855f7', tag: 'MMORPG', initials: 'M' },
   muemu:    { grad: 'linear-gradient(135deg,#581c87 0%,#1b0a2e 100%)', accent: '#a855f7', tag: 'MMORPG', initials: 'M' },
   metin2:   { grad: 'linear-gradient(135deg,#7c2d12 0%,#2a1505 100%)', accent: '#fb923c', tag: 'MMORPG', initials: 'M2' },
+  tibia:    { grad: 'linear-gradient(135deg,#14532d 0%,#052e16 100%)', accent: '#fbbf24', tag: 'MMORPG', initials: 'T' },
   priston:  { grad: 'linear-gradient(135deg,#0e7490 0%,#082530 100%)', accent: '#22d3ee', tag: 'Tale', initials: 'PT' },
 };
 const FALLBACK: Theme = { grad: 'linear-gradient(135deg,#3f3f46 0%,#18181b 100%)', accent: '#71717a', tag: 'Em breve', initials: '?' };
-const theme = (g: string): Theme => THEMES[g] || FALLBACK;
+const theme = (g: string): Theme => THEMES[gameId(g)] || FALLBACK;
 
 // Frases amigáveis (substituem a descrição técnica do servidor no hero).
 const BLURBS: Record<string, string> = {
@@ -64,15 +79,16 @@ const BLURBS: Record<string, string> = {
   openmu:  'O MMORPG de ação clássico. Evolua seu herói, cace e enfrente chefes épicos.',
   muemu:   'O MMORPG de ação clássico. Evolua seu herói, cace e enfrente chefes épicos.',
   metin2:  'MMORPG de ação oriental com três reinos em guerra constante.',
+  tibia:   'Aventure-se em um mundo de fantasia medieval: escolha sua vocação (cavaleiro, paladino, druida ou mago) e enfrente monstros, explore masmorras, complete quests épicas e domine o combate por turnos com magias e feitiços.',
   priston: 'MMORPG isométrico clássico, com caçadas intensas e bosses lendários.',
 };
-const blurb = (g: Card): string => BLURBS[g.game] || g.description || '';
+const blurb = (g: Card): string => BLURBS[cardGame(g)] || g.description || '';
 
 // Nome amigável (sem sufixos técnicos tipo "(SoftNyx v258)").
 const NAMES: Record<string, string> = {
-  rakion: 'Rakion', openmu: 'Mu Online', muemu: 'Mu Online', metin2: 'Metin2', priston: 'Priston Tale',
+  rakion: 'Rakion', openmu: 'Mu Online', muemu: 'Mu Online', metin2: 'Metin2', tibia: 'Tibia', priston: 'Priston Tale',
 };
-const niceName = (g: Card): string => NAMES[g.game] || g.display_name;
+const niceName = (g: Card): string => NAMES[cardGame(g)] || g.display_name;
 
 function ph(game: string, name: string, desc: string): Card {
   return { app_id: '', name, game, display_name: name, description: desc, enabled: false, download_url: '', server_ip: '', auth_host: '', installed: false };
@@ -128,7 +144,7 @@ const app = document.querySelector<HTMLDivElement>('#app')!;
 async function load() {
   try { version = await Version(); } catch { /* binding nova */ }
   try {
-    const real = (await GetGames()) as unknown as Card[];
+    const real = ((await GetGames()) as unknown as Card[]).map(normalizeCard);
     online = true;
     const have = new Set(real.map((r) => r.game));
     games = [...real, ...PLACEHOLDERS.filter((p) => !have.has(p.game))];
@@ -165,7 +181,11 @@ function mount() {
         </div>
       </div>
       <div class="update-bar" id="updatebar"></div>
-      <div class="strip" id="strip"></div>
+      <div class="carousel">
+        <button class="car-btn" id="carPrev" title="Anterior" aria-label="Anterior">‹</button>
+        <div class="strip" id="strip"></div>
+        <button class="car-btn" id="carNext" title="Próximo" aria-label="Próximo">›</button>
+      </div>
       <div class="hero-wrap" id="hero"></div>
       <div class="footer">
         <div class="progress-wrap">
@@ -251,15 +271,44 @@ function paintChips() {
       paintFooter();
     });
   });
+  // Carrossel: setas + esconder barra de rolagem. Re-checa no scroll/resize.
+  const stripEl = document.getElementById('strip')!;
+  document.getElementById('carPrev')?.addEventListener('click', () => scrollCarousel(-1));
+  document.getElementById('carNext')?.addEventListener('click', () => scrollCarousel(1));
+  stripEl.addEventListener('scroll', updateCarousel, { passive: true });
+  window.removeEventListener('resize', updateCarousel);
+  window.addEventListener('resize', updateCarousel);
+  updateCarousel();
+}
+
+// scrollCarousel rola o strip por uma largura de chip (com o gap).
+function scrollCarousel(dir: number) {
+  const stripEl = document.getElementById('strip')!;
+  const chipEl = stripEl.querySelector<HTMLElement>('.chip');
+  const step = chipEl ? chipEl.offsetWidth + 10 : 160;
+  stripEl.scrollBy({ left: dir * step, behavior: 'smooth' });
+}
+
+// updateCarousel desabilita as setas nas extremidades e mostra/esconde o
+// carrossel quando há espaço de sobra (não deixa o layout quebrar).
+function updateCarousel() {
+  const stripEl = document.getElementById('strip')!;
+  const prev = document.getElementById('carPrev') as HTMLButtonElement | null;
+  const next = document.getElementById('carNext') as HTMLButtonElement | null;
+  const maxScroll = stripEl.scrollWidth - stripEl.clientWidth - 1;
+  const canScroll = maxScroll > 0;
+  if (prev) prev.disabled = !canScroll || stripEl.scrollLeft <= 1;
+  if (next) next.disabled = !canScroll || stripEl.scrollLeft >= maxScroll;
 }
 
 function chip(g: Card, i: number): string {
-  const t = theme(g.game);
+  const id = cardGame(g);
+  const t = theme(id);
   const cls = ['chip'];
   if (i === selected) cls.push('selected');
   if (!g.enabled) cls.push('disabled');
   const pill = g.enabled ? `<span class="pill on">online</span>` : `<span class="pill soon">em breve</span>`;
-  const img = IMAGES[g.game];
+  const img = IMAGES[id];
   const ico = img
     ? `<div class="ico img" style="background-image:url('${img}');box-shadow:0 0 16px ${t.accent}66"></div>`
     : `<div class="ico" style="background:${t.grad};box-shadow:0 0 16px ${t.accent}66">${t.initials}</div>`;
@@ -278,11 +327,12 @@ function paintHero() {
   const g = games[selected];
   const host = document.getElementById('hero')!;
   if (!g) { host.innerHTML = '<div class="hero hero-empty">Nenhum jogo disponível</div>'; return; }
-  const t = theme(g.game);
+  const id = cardGame(g);
+  const t = theme(id);
   const status = g.enabled
     ? `<div class="server"><span class="live">Online</span></div>`
     : `<div class="server"><span>Em breve</span></div>`;
-  const img = IMAGES[g.game];
+  const img = IMAGES[id];
   host.innerHTML = `
     <div class="hero ${img ? 'has-img' : ''}" style="--hero-grad:${t.grad}">
       ${img ? `<div class="hero-bg" style="background-image:url('${img}')"></div>` : ''}
@@ -298,13 +348,14 @@ function paintHero() {
 
 function paintFooter() {
   const g = games[selected];
+  const id = g ? cardGame(g) : '';
   document.getElementById('pline')!.textContent = footerLine(g);
   const bar = document.getElementById('pbarwrap')!;
   const fill = document.getElementById('pbar') as HTMLElement;
   if (!installing) { bar.classList.remove('active', 'indet'); fill.style.width = '0%'; }
   const actions = document.getElementById('actions')!;
   actions.innerHTML = `
-    ${g && g.installed && (g.game === 'rakion' || g.game === 'metin2') ? `<button class="btn icon" id="optionsBtn" title="Configurações do jogo">⚙</button>` : ''}
+    ${g && g.installed && (id === 'rakion' || id === 'metin2') ? `<button class="btn icon" id="optionsBtn" title="Configurações do jogo">⚙</button>` : ''}
     <button class="btn icon" id="folderBtn" title="Abrir pasta de instalação" ${g && g.installed ? '' : 'disabled'}>📁</button>
     ${actionBtn(g)}`;
   document.getElementById('actionBtn')?.addEventListener('click', doAction);
@@ -314,9 +365,10 @@ function paintFooter() {
 
 function actionBtn(g?: Card): string {
   if (!g) return '';
+  const id = cardGame(g);
   if (!g.enabled) return `<button class="btn" disabled>Indisponível</button>`;
-  if (g.game === loadingGame) return `<button class="btn primary" disabled><span class="spinner"></span> Carregando ${esc(niceName(g))}…</button>`;
-  if (g.game === runningGame) return `<button class="btn primary" disabled>● Em execução</button>`;
+  if (id === loadingGame) return `<button class="btn primary" disabled><span class="spinner"></span> Carregando ${esc(niceName(g))}…</button>`;
+  if (id === runningGame) return `<button class="btn primary" disabled>● Em execução</button>`;
   if (installing) return `<button class="btn primary" disabled><span class="spinner"></span> Instalando…</button>`;
   if (g.installed) return `<button class="btn primary" id="actionBtn">▶ JOGAR</button>`;
   return `<button class="btn primary" id="actionBtn">⬇ INSTALAR</button>`;
@@ -324,9 +376,10 @@ function actionBtn(g?: Card): string {
 
 function footerLine(g?: Card): string {
   if (!g) return '';
+  const id = cardGame(g);
   if (!g.enabled) return 'Este jogo ainda não está disponível.';
-  if (g.game === loadingGame) return `Carregando ${niceName(g)}… (verificando arquivos e iniciando o jogo).`;
-  if (g.game === runningGame) return 'Jogo em execução — Alt+Tab liberado (ou Ctrl+Alt+M para minimizar).';
+  if (id === loadingGame) return `Carregando ${niceName(g)}… (verificando arquivos e iniciando o jogo).`;
+  if (id === runningGame) return 'Jogo em execução — Alt+Tab liberado (ou Ctrl+Alt+M para minimizar).';
   if (g.installed) return 'Instalado — pronto para jogar.';
   return 'Clique em INSTALAR para baixar o client.';
 }
@@ -334,9 +387,11 @@ function footerLine(g?: Card): string {
 async function doAction() {
   const g = games[selected];
   if (!g || !g.enabled || installing) return;
+  const id = cardGame(g);
 
   if (g.installed) {
-    if (g.game === 'metin2') {
+    g.game = id;
+    if (id === 'metin2' || id === 'tibia') {
       try {
         await Play(g as any, '', '');
         toast('Iniciando o jogo…');

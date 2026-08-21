@@ -5,7 +5,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
+	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -22,6 +24,22 @@ func gameProcessRunning(name string) bool { return gameProcessPID(name) != 0 }
 func launchExecutable(exePath, workingDir string) error {
 	if err := shellExec("runas", exePath, "", workingDir, windows.SW_SHOWNORMAL); err != nil {
 		return fmt.Errorf("falha ao iniciar o jogo: %w", err)
+	}
+	return nil
+}
+
+// launchTibiaExecutable starts the GUI client without inheriting a console.
+// OTClient is shipped as a console-subsystem binary and otherwise opens a
+// visible cmd window next to the game.
+func launchTibiaExecutable(exePath, workingDir string) error {
+	command := exec.Command(exePath)
+	command.Dir = workingDir
+	command.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: windows.CREATE_NO_WINDOW,
+	}
+	if err := command.Start(); err != nil {
+		return fmt.Errorf("falha ao iniciar o Tibia: %w", err)
 	}
 	return nil
 }

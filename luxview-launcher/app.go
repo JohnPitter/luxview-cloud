@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.44"
+var appVersion = "v1.57"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -102,12 +102,44 @@ var launchSpecs = map[string]launchSpec{
 		settingsINI: "metin2.cfg",
 		processName: "Metin2Distribute.exe",
 	},
+	"tibia": {
+		clientDir:   "",
+		gameExe:     "otclient.exe",
+		processName: "otclient.exe",
+	},
+}
+
+func normalizeGameID(raw string) string {
+	id := strings.ToLower(strings.TrimSpace(raw))
+	id = strings.ReplaceAll(id, "_", "-")
+	if id == "tibia" || id == "tibia-canary" || id == "tibia (canary)" || strings.Contains(id, "tibia") {
+		return "tibia"
+	}
+	return id
+}
+
+func launchSpecForGame(game string) (launchSpec, bool) {
+	spec, ok := launchSpecs[normalizeGameID(game)]
+	return spec, ok
+}
+
+func resolveGameID(card GameCard) string {
+	for _, raw := range []string{card.Game, card.DisplayName, card.Name} {
+		id := normalizeGameID(raw)
+		if id == "tibia" {
+			return id
+		}
+		if _, ok := launchSpecs[id]; ok {
+			return id
+		}
+	}
+	return normalizeGameID(card.Game)
 }
 
 // IsGameRunning reports whether the game's process is currently running, so the
 // UI can keep the Play button disabled while you're in-game.
 func (a *App) IsGameRunning(game string) bool {
-	spec, ok := launchSpecs[game]
+	spec, ok := launchSpecForGame(game)
 	if !ok || spec.processName == "" {
 		return false
 	}
@@ -175,23 +207,25 @@ func (a *App) GetGames() ([]GameCard, error) {
 		return nil, fmt.Errorf("resposta inválida do catálogo: %w", err)
 	}
 	for i := range cards {
+		cards[i].Game = resolveGameID(cards[i])
 		cards[i].Installed = a.isInstalled(cards[i])
 	}
 	return cards, nil
 }
 
 func (a *App) isInstalled(c GameCard) bool {
+	game := resolveGameID(c)
 	dir, err := installDir(c.AppID)
 	if err != nil {
 		return false
 	}
-	spec, ok := launchSpecs[c.Game]
+	spec, ok := launchSpecForGame(game)
 	if !ok {
 		// Unknown game: consider installed if the folder exists and is non-empty.
 		entries, _ := os.ReadDir(dir)
 		return len(entries) > 0
 	}
-	return clientFilesReady(dir, c.Game, spec)
+	return clientFilesReady(dir, game, spec)
 }
 
 func clientFilesReady(installRoot, game string, spec launchSpec) bool {
@@ -204,6 +238,7 @@ func clientFilesReady(installRoot, game string, spec launchSpec) bool {
 }
 
 func requiredClientFiles(game string, spec launchSpec) []string {
+	game = normalizeGameID(game)
 	files := []string{spec.gameExe}
 	if game == "metin2" {
 		files = append(files,
@@ -267,7 +302,8 @@ func (a *App) InstallGame(card GameCard) error {
 	}); err != nil {
 		return fmt.Errorf("falha ao extrair: %w", err)
 	}
-	if spec, ok := launchSpecs[card.Game]; ok && !clientFilesReady(dir, card.Game, spec) {
+	game := normalizeGameID(card.Game)
+	if spec, ok := launchSpecForGame(game); ok && !clientFilesReady(dir, game, spec) {
 		return fmt.Errorf("client extraído incompleto — arquivos obrigatórios não encontrados")
 	}
 	a.applyDefaultDisplay(card)
@@ -322,9 +358,10 @@ func (a *App) downloadZip(card GameCard, path string) error {
 // Login authenticates against the game's web auth (replacing the original
 // launcher's login). Returns the auth token on success.
 func (a *App) Login(card GameCard, user, pass string) (string, error) {
-	spec, ok := launchSpecs[card.Game]
+	game := resolveGameID(card)
+	spec, ok := launchSpecForGame(game)
 	if !ok {
-		return "", fmt.Errorf("jogo não suportado: %s", card.Game)
+		return "", fmt.Errorf("jogo não suportado: %s", game)
 	}
 	if user == "" || pass == "" {
 		return "", fmt.Errorf("informe usuário e senha")
@@ -360,9 +397,10 @@ func (a *App) Login(card GameCard, user, pass string) (string, error) {
 // hex-encoded (same scheme as Login) — the server decodes + normalizes it so the
 // account works on the next login.
 func (a *App) Register(card GameCard, user, pass, email string) error {
-	spec, ok := launchSpecs[card.Game]
+	game := resolveGameID(card)
+	spec, ok := launchSpecForGame(game)
 	if !ok {
-		return fmt.Errorf("jogo não suportado: %s", card.Game)
+		return fmt.Errorf("jogo não suportado: %s", game)
 	}
 	if spec.registerPath == "" {
 		return fmt.Errorf("este servidor não permite cadastro pelo launcher")
@@ -403,9 +441,10 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	if runtime.GOOS != "windows" {
 		return fmt.Errorf("o jogo só roda no Windows")
 	}
-	spec, ok := launchSpecs[card.Game]
+	game := resolveGameID(card)
+	spec, ok := launchSpecForGame(game)
 	if !ok {
-		return fmt.Errorf("jogo não suportado: %s", card.Game)
+		return fmt.Errorf("jogo não suportado: %s", game)
 	}
 	dir, err := installDir(card.AppID)
 	if err != nil {
@@ -413,10 +452,13 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	}
 	clientDir := filepath.Join(dir, spec.clientDir)
 	exePath := filepath.Join(clientDir, spec.gameExe)
-	if !clientFilesReady(dir, card.Game, spec) {
+	if !clientFilesReady(dir, game, spec) {
 		return fmt.Errorf("jogo não encontrado — instale primeiro")
 	}
-	if card.Game == "metin2" {
+	if game == "tibia" {
+		return launchTibiaExecutable(exePath, clientDir)
+	}
+	if game == "metin2" {
 		return launchExecutable(exePath, clientDir)
 	}
 
@@ -587,9 +629,10 @@ func writeDisplayMode(appID, mode string) {
 }
 
 func (a *App) iniPath(card GameCard) (string, error) {
-	spec, ok := launchSpecs[card.Game]
+	game := resolveGameID(card)
+	spec, ok := launchSpecForGame(game)
 	if !ok {
-		return "", fmt.Errorf("jogo não suportado: %s", card.Game)
+		return "", fmt.Errorf("jogo não suportado: %s", game)
 	}
 	if spec.settingsINI == "" {
 		return "", fmt.Errorf("este jogo não tem opções editáveis")
