@@ -2,12 +2,15 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/luxview/engine/internal/model"
@@ -23,6 +26,14 @@ type GameClientStorageService struct {
 	encryptionKey []byte
 	globalRoot    string
 	basePaths     map[string]string
+	hashMu        sync.Mutex
+	hashCache     map[string]fileHashCache
+}
+
+type fileHashCache struct {
+	size    int64
+	modUnix int64
+	hash    string
 }
 
 func NewGameClientStorageService(
@@ -36,7 +47,46 @@ func NewGameClientStorageService(
 		encryptionKey: encryptionKey,
 		globalRoot:    globalRoot,
 		basePaths:     basePaths,
+		hashCache:     map[string]fileHashCache{},
 	}
+}
+
+// FileHash returns the SHA-256 of a client zip, cached by size and mtime so the
+// public catalog does not re-read hundreds of MB on every launcher poll.
+func (s *GameClientStorageService) FileHash(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	modUnix := info.ModTime().UnixNano()
+	s.hashMu.Lock()
+	if cached, ok := s.hashCache[path]; ok && cached.size == info.Size() && cached.modUnix == modUnix {
+		s.hashMu.Unlock()
+		return cached.hash, nil
+	}
+	s.hashMu.Unlock()
+
+	hash, err := hashRegularFile(path)
+	if err != nil {
+		return "", err
+	}
+	s.hashMu.Lock()
+	s.hashCache[path] = fileHashCache{size: info.Size(), modUnix: modUnix, hash: hash}
+	s.hashMu.Unlock()
+	return hash, nil
+}
+
+func hashRegularFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	sum := sha256.New()
+	if _, err := io.Copy(sum, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(sum.Sum(nil)), nil
 }
 
 // Resolve returns the configured global client or the legacy app-local file.

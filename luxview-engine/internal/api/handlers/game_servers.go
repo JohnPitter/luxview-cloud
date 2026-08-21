@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -321,6 +323,7 @@ type PublicGameCard struct {
 	DownloadURL string `json:"download_url"` // public, shareable client zip
 	ServerIP    string `json:"server_ip"`
 	AuthHost    string `json:"auth_host"` // <subdomain>.<domain> — onde o launcher faz login
+	ClientHash  string `json:"client_hash,omitempty"`
 }
 
 // ListPublicGames returns the public catalog consumed by the LuxView launcher.
@@ -348,11 +351,22 @@ func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Reque
 			continue
 		}
 		clientReady := true
+		clientHash := ""
+		authHost := fmt.Sprintf("%s.%s", app.Subdomain, h.domain)
 		if h.gameClientStorage != nil && gameClientWithDownload[cfg.TemplateID] {
-			if _, err := h.gameClientStorage.Resolve(ctx, app.ID, cfg.TemplateID, cfg.ConfigFields[model.GameClientGlobalFileField]); err != nil {
+			path, err := h.gameClientStorage.Resolve(ctx, app.ID, cfg.TemplateID, cfg.ConfigFields[model.GameClientGlobalFileField])
+			if err != nil {
 				clientReady = false
 				log := logger.With("game-client-storage")
 				log.Warn().Err(err).Str("app", app.Subdomain).Msg("launcher client is not ready")
+			} else {
+				fileHash, hashErr := h.gameClientStorage.FileHash(path)
+				if hashErr != nil {
+					log := logger.With("game-client-storage")
+					log.Warn().Err(hashErr).Str("app", app.Subdomain).Msg("failed to hash launcher client")
+				} else {
+					clientHash = clientRevision(cfg.TemplateID, fileHash, h.serverIP, authHost, cfg)
+				}
 			}
 		}
 		display, desc := cfg.TemplateID, ""
@@ -369,7 +383,8 @@ func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Reque
 			Enabled:     app.Status == model.AppStatusRunning && gameClientWithDownload[cfg.TemplateID] && clientReady,
 			DownloadURL: gameClientPublicURL("https://"+h.domain, app.ID.String(), cfg.TemplateID),
 			ServerIP:    h.serverIP,
-			AuthHost:    fmt.Sprintf("%s.%s", app.Subdomain, h.domain),
+			AuthHost:    authHost,
+			ClientHash:  clientHash,
 		})
 	}
 	writeJSON(w, http.StatusOK, cards)
@@ -534,6 +549,24 @@ func gameClientPublicURL(baseURL, appID, templateID string) string {
 		return ""
 	}
 	return baseURL + "/api/public/game-client/" + appID
+}
+
+// clientRevision fingerprints the zip the launcher would download: the base
+// client file plus the values patched into that zip at download time.
+func clientRevision(templateID, fileHash, serverIP, authHost string, cfg *model.GameServerConfig) string {
+	sum := sha256.New()
+	fmt.Fprintf(sum, "%s|%s|%s", fileHash, templateID, serverIP)
+	switch templateID {
+	case rakionTemplateID:
+		fmt.Fprintf(sum, "|%s", authHost)
+	case metin2TemplateID:
+		fmt.Fprintf(sum, "|%d|%d", cfg.GamePort, cfg.QueryPort)
+	case tibiaTemplateID:
+		fmt.Fprintf(sum, "|%d", tibiaLoginHTTPPort(cfg))
+	case openMUTemplateID:
+		fmt.Fprintf(sum, "|%d", cfg.GamePort)
+	}
+	return hex.EncodeToString(sum.Sum(nil))
 }
 
 func staticGameServerStatus(app *model.App, tmpl *model.GameTemplate) *model.GameServerStatus {

@@ -26,7 +26,9 @@ type Card = {
   download_url: string;
   server_ip: string;
   auth_host: string;
+  client_hash: string;
   installed: boolean;
+  update_available: boolean;
 };
 
 type Settings = {
@@ -91,7 +93,7 @@ const NAMES: Record<string, string> = {
 const niceName = (g: Card): string => NAMES[cardGame(g)] || g.display_name;
 
 function ph(game: string, name: string, desc: string): Card {
-  return { app_id: '', name, game, display_name: name, description: desc, enabled: false, download_url: '', server_ip: '', auth_host: '', installed: false };
+  return { app_id: '', name, game, display_name: name, description: desc, enabled: false, download_url: '', server_ip: '', auth_host: '', client_hash: '', installed: false, update_available: false };
 }
 // Próximos jogos da LuxView Cloud (cinza até ter servidor deployado + listado).
 const PLACEHOLDERS: Card[] = [
@@ -144,13 +146,7 @@ const app = document.querySelector<HTMLDivElement>('#app')!;
 async function load() {
   try { version = await Version(); } catch { /* binding nova */ }
   try {
-    const real = ((await GetGames()) as unknown as Card[]).map(normalizeCard);
-    online = true;
-    const have = new Set(real.map((r) => r.game));
-    games = [...real, ...PLACEHOLDERS.filter((p) => !have.has(p.game))];
-    if (games.length === 0) games = [...PLACEHOLDERS];
-    const firstEnabled = games.findIndex((g) => g.enabled);
-    selected = firstEnabled >= 0 ? firstEnabled : 0;
+    applyCatalog(((await GetGames()) as unknown as Card[]).map(normalizeCard), true);
   } catch (e) {
     online = false;
     games = [...PLACEHOLDERS];
@@ -161,8 +157,33 @@ async function load() {
   paintChips();
   paintHero();
   paintFooter();
-  void checkUpdate(true); // checa atualização em background (não bloqueia a UI)
-  startUpdateWatcher();   // re-checa periodicamente e ao focar a janela
+  void checkUpdate(true);
+  startUpdateWatcher();
+}
+
+function applyCatalog(real: Card[], pickDefault: boolean) {
+  online = true;
+  const keepID = !pickDefault && games[selected] ? games[selected].app_id : '';
+  const have = new Set(real.map((r) => r.game));
+  games = [...real, ...PLACEHOLDERS.filter((p) => !have.has(p.game))];
+  if (games.length === 0) games = [...PLACEHOLDERS];
+  const kept = keepID ? games.findIndex((g) => g.app_id === keepID) : -1;
+  if (kept >= 0) {
+    selected = kept;
+    return;
+  }
+  const firstEnabled = games.findIndex((g) => g.enabled);
+  selected = firstEnabled >= 0 ? firstEnabled : 0;
+}
+
+async function refreshCatalog() {
+  if (installing) return;
+  try {
+    applyCatalog(((await GetGames()) as unknown as Card[]).map(normalizeCard), false);
+    paintChips();
+    paintHero();
+    paintFooter();
+  } catch { /* offline — ignora */ }
 }
 
 function mount() {
@@ -240,8 +261,8 @@ let updateWatcherStarted = false;
 function startUpdateWatcher() {
   if (updateWatcherStarted) return;
   updateWatcherStarted = true;
-  setInterval(() => { void checkUpdate(); }, 10 * 60_000); // a cada 10 min
-  window.addEventListener('focus', () => { void checkUpdate(); });
+  setInterval(() => { void checkUpdate(); void refreshCatalog(); }, 10 * 60_000);
+  window.addEventListener('focus', () => { void checkUpdate(); void refreshCatalog(); });
 }
 
 async function applyUpdate() {
@@ -307,7 +328,11 @@ function chip(g: Card, i: number): string {
   const cls = ['chip'];
   if (i === selected) cls.push('selected');
   if (!g.enabled) cls.push('disabled');
-  const pill = g.enabled ? `<span class="pill on">online</span>` : `<span class="pill soon">em breve</span>`;
+  const pill = !g.enabled
+    ? `<span class="pill soon">em breve</span>`
+    : g.update_available
+      ? `<span class="pill upd">atualização</span>`
+      : `<span class="pill on">online</span>`;
   const img = IMAGES[id];
   const ico = img
     ? `<div class="ico img" style="background-image:url('${img}');box-shadow:0 0 16px ${t.accent}66"></div>`
@@ -369,7 +394,8 @@ function actionBtn(g?: Card): string {
   if (!g.enabled) return `<button class="btn" disabled>Indisponível</button>`;
   if (id === loadingGame) return `<button class="btn primary" disabled><span class="spinner"></span> Carregando ${esc(niceName(g))}…</button>`;
   if (id === runningGame) return `<button class="btn primary" disabled>● Em execução</button>`;
-  if (installing) return `<button class="btn primary" disabled><span class="spinner"></span> Instalando…</button>`;
+  if (installing) return `<button class="btn primary" disabled><span class="spinner"></span> ${g.update_available ? 'Atualizando…' : 'Instalando…'}</button>`;
+  if (g.update_available) return `<button class="btn primary" id="actionBtn">⬇ ATUALIZAR</button>`;
   if (g.installed) return `<button class="btn primary" id="actionBtn">▶ JOGAR</button>`;
   return `<button class="btn primary" id="actionBtn">⬇ INSTALAR</button>`;
 }
@@ -380,7 +406,9 @@ function footerLine(g?: Card): string {
   if (!g.enabled) return 'Este jogo ainda não está disponível.';
   if (id === loadingGame) return `Carregando ${niceName(g)}… (verificando arquivos e iniciando o jogo).`;
   if (id === runningGame) return 'Jogo em execução — Alt+Tab liberado (ou Ctrl+Alt+M para minimizar).';
-  if (g.installed) return 'Instalado — pronto para jogar.';
+  if (g.installed) return g.update_available
+    ? 'Nova versão do client disponível — clique em ATUALIZAR.'
+    : 'Instalado — pronto para jogar.';
   return 'Clique em INSTALAR para baixar o client.';
 }
 
@@ -389,7 +417,7 @@ async function doAction() {
   if (!g || !g.enabled || installing) return;
   const id = cardGame(g);
 
-  if (g.installed) {
+  if (g.installed && !g.update_available) {
     g.game = id;
     if (id === 'metin2' || id === 'tibia') {
       try {
@@ -414,13 +442,16 @@ async function doAction() {
   installing = true;
   paintFooter();
   document.getElementById('pbarwrap')!.classList.add('active');
+  const updatingClient = !!g.update_available;
+  g.game = id;
   try {
     await InstallGame(g as any);
     if (!(await IsInstalled(g.app_id, g.game))) {
       throw new Error('client extraído incompleto — tente instalar novamente');
     }
     g.installed = true;
-    toast('Instalado com sucesso!');
+    g.update_available = false;
+    toast(updatingClient ? 'Client atualizado!' : 'Instalado com sucesso!');
   } catch (e) {
     toast(String(e), true);
   } finally {

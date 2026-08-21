@@ -10,7 +10,9 @@ export namespace main {
 	    download_url: string;
 	    server_ip: string;
 	    auth_host: string;
+	    client_hash: string;
 	    installed: boolean;
+	    update_available: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new GameCard(source);
@@ -27,7 +29,9 @@ export namespace main {
 	        this.download_url = source["download_url"];
 	        this.server_ip = source["server_ip"];
 	        this.auth_host = source["auth_host"];
+	        this.client_hash = source["client_hash"];
 	        this.installed = source["installed"];
+	        this.update_available = source["update_available"];
 	    }
 	}
 	export class GameSettings {

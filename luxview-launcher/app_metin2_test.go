@@ -47,6 +47,24 @@ func TestResolveGameIDFallsBackToTibiaDisplayName(t *testing.T) {
 	}
 }
 
+func TestClientNeedsUpdateWhenCatalogHashDiffers(t *testing.T) {
+	if clientNeedsUpdate(false, "abc", "") {
+		t.Fatal("uninstalled games should not ask for a client update")
+	}
+	if clientNeedsUpdate(true, "", "abc") {
+		t.Fatal("empty catalog hash should not force an update")
+	}
+	if clientNeedsUpdate(true, "abc", "abc") {
+		t.Fatal("matching hashes should be up to date")
+	}
+	if !clientNeedsUpdate(true, "new", "") {
+		t.Fatal("legacy installs without a stamp should update once")
+	}
+	if !clientNeedsUpdate(true, "new", "old") {
+		t.Fatal("replaced client zip should mark the install outdated")
+	}
+}
+
 func TestMetin2InstallRequiresRuntimeFiles(t *testing.T) {
 	spec := launchSpecs["metin2"]
 	root := t.TempDir()

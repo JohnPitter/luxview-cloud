@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.57"
+var appVersion = "v1.58"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -67,9 +67,11 @@ type GameCard struct {
 	Description string `json:"description"`
 	Enabled     bool   `json:"enabled"`
 	DownloadURL string `json:"download_url"`
-	ServerIP    string `json:"server_ip"`
-	AuthHost    string `json:"auth_host"`
-	Installed   bool   `json:"installed"` // computed locally
+	ServerIP        string `json:"server_ip"`
+	AuthHost        string `json:"auth_host"`
+	ClientHash      string `json:"client_hash"`
+	Installed       bool   `json:"installed"`        // computed locally
+	UpdateAvailable bool   `json:"update_available"` // computed locally
 }
 
 // launchSpec tells the launcher how to authenticate and start an installed game,
@@ -209,8 +211,39 @@ func (a *App) GetGames() ([]GameCard, error) {
 	for i := range cards {
 		cards[i].Game = resolveGameID(cards[i])
 		cards[i].Installed = a.isInstalled(cards[i])
+		cards[i].UpdateAvailable = clientNeedsUpdate(cards[i].Installed, cards[i].ClientHash, installedClientHash(cards[i].AppID))
 	}
 	return cards, nil
+}
+
+const clientHashFileName = "luxview-client.hash"
+
+func clientNeedsUpdate(installed bool, catalogHash, localHash string) bool {
+	return installed && catalogHash != "" && localHash != catalogHash
+}
+
+func installedClientHash(appID string) string {
+	dir, err := installDir(appID)
+	if err != nil {
+		return ""
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, clientHashFileName))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+func saveInstalledClientHash(appID, hash string) error {
+	hash = strings.TrimSpace(hash)
+	if appID == "" || hash == "" {
+		return nil
+	}
+	dir, err := installDir(appID)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, clientHashFileName), []byte(hash+"\n"), 0o644)
 }
 
 func (a *App) isInstalled(c GameCard) bool {
@@ -307,6 +340,9 @@ func (a *App) InstallGame(card GameCard) error {
 		return fmt.Errorf("client extraído incompleto — arquivos obrigatórios não encontrados")
 	}
 	a.applyDefaultDisplay(card)
+	if err := saveInstalledClientHash(card.AppID, card.ClientHash); err != nil {
+		return fmt.Errorf("client instalado, mas não gravei a versão local: %w", err)
+	}
 	a.progress(card.Game, "done", 100)
 	return nil
 }

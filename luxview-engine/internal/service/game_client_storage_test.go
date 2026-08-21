@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -68,5 +69,39 @@ func TestGameClientStorageListsZipReferences(t *testing.T) {
 	}
 	if options[0].Value != "metin2/client.zip" || options[1].Value != "rakion/client.ZIP" {
 		t.Fatalf("unexpected options: %+v", options)
+	}
+}
+
+func TestFileHashChangesWhenClientContentsChange(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "tibia-assets", "client.zip")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("client-v1"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	storage := NewGameClientStorageService(nil, nil, root, nil)
+	first, err := storage.FileHash(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := storage.FileHash(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != again {
+		t.Fatal("hash cache should reuse the same digest")
+	}
+	time.Sleep(time.Millisecond * 20)
+	if err := os.WriteFile(path, []byte("client-v2"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	second, err := storage.FileHash(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatal("hash should change when the client zip is replaced")
 	}
 }
