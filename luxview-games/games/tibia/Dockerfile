@@ -27,7 +27,7 @@ RUN sed -i 's/if player:getGroup():getId() >= GROUP_TYPE_GAMEMASTER then/if fals
 RUN sed -i 's|local createItem = TalkAction("/i")|local createItem = TalkAction("/i", "/item")|' /canary/data/scripts/talkactions/god/create_item.lua
 RUN chmod +x /opt/tibia-entrypoint.sh
 
-# login TCP, game TCP, status TCP, login HTTP (OTClient), MariaDB
-EXPOSE 7171/tcp 7172/tcp 7173/tcp 8088/tcp 3306/tcp
+# login TCP, game TCP, status TCP, login HTTP (OTClient)
+EXPOSE 7171/tcp 7172/tcp 7173/tcp 8088/tcp
 
 ENTRYPOINT ["/opt/tibia-entrypoint.sh"]

@@ -206,7 +206,7 @@ start_process() {
     (
         cd "$directory"
         exec "$executable"
-    ) 2>&1 | tee -a "$log_dir/${name}.log" &
+    ) 2>&1 &
     if [[ -z ${process_pids[$name]+set} ]]; then
         process_names+=("$name")
     fi

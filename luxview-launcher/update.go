@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,6 +26,7 @@ type UpdateInfo struct {
 	Current   string `json:"current"`
 	Version   string `json:"version"`
 	URL       string `json:"url"`
+	SHA256    string `json:"sha256"`
 	Notes     string `json:"notes"`
 }
 
@@ -29,6 +34,7 @@ type UpdateInfo struct {
 type latestRelease struct {
 	Version string `json:"version"`
 	URL     string `json:"url"`
+	SHA256  string `json:"sha256"`
 	Notes   string `json:"notes"`
 }
 
@@ -66,6 +72,7 @@ func (a *App) CheckForUpdate() (UpdateInfo, error) {
 
 	info.Version = rel.Version
 	info.URL = rel.URL
+	info.SHA256 = rel.SHA256
 	info.Notes = rel.Notes
 	info.Available = rel.URL != "" && versionLess(appVersion, rel.Version)
 	return info, nil
@@ -80,6 +87,11 @@ func (a *App) ApplyUpdate(rawURL string) error {
 		return err
 	}
 
+	wantSHA := ""
+	if info, err := a.CheckForUpdate(); err == nil && info.URL == rawURL {
+		wantSHA = strings.TrimSpace(info.SHA256)
+	}
+
 	resp, err := a.dl.Get(rawURL)
 	if err != nil {
 		return fmt.Errorf("falha ao baixar atualização: %w", err)
@@ -89,7 +101,17 @@ func (a *App) ApplyUpdate(rawURL string) error {
 		return fmt.Errorf("falha ao baixar atualização: status %d", resp.StatusCode)
 	}
 
-	if err := selfupdate.Apply(resp.Body, selfupdate.Options{}); err != nil {
+	sum := sha256.New()
+	body, err := io.ReadAll(io.TeeReader(resp.Body, sum))
+	if err != nil {
+		return fmt.Errorf("falha ao ler atualização: %w", err)
+	}
+	got := hex.EncodeToString(sum.Sum(nil))
+	if wantSHA != "" && !strings.EqualFold(wantSHA, got) {
+		return fmt.Errorf("atualização recusada: hash não confere")
+	}
+
+	if err := selfupdate.Apply(bytes.NewReader(body), selfupdate.Options{}); err != nil {
 		return fmt.Errorf("falha ao aplicar atualização: %w", err)
 	}
 

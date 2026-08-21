@@ -3,7 +3,10 @@ package service
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -67,9 +70,8 @@ func (hc *HealthChecker) CheckAll(ctx context.Context) {
 			continue
 		}
 		if app.AppType == model.AppTypeGame {
-			running, err := hc.container.IsRunning(ctx, app.ContainerID)
-			healthy := err == nil && running
-			if healthy {
+			outcome := hc.checkGame(ctx, &app)
+			if outcome.healthy {
 				hc.resetFailures(app.ID)
 				if app.Status == model.AppStatusError {
 					log.Info().Str("app", app.Subdomain).Msg("game recovered, marking as running")
@@ -79,7 +81,7 @@ func (hc *HealthChecker) CheckAll(ctx context.Context) {
 			}
 			count := hc.recordFailure(app.ID)
 			if app.Status == model.AppStatusRunning && count >= unhealthyThreshold {
-				log.Warn().Str("app", app.Subdomain).Msg("game container is down, marking as error")
+				log.Warn().Str("app", app.Subdomain).Str("reason", outcome.reason).Msg("game port unreachable, marking as error")
 				_ = hc.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusError, app.ContainerID)
 			}
 			continue
@@ -125,6 +127,62 @@ func (hc *HealthChecker) CheckAll(ctx context.Context) {
 // just need a boolean answer.
 func (hc *HealthChecker) CheckApp(ctx context.Context, app *model.App) bool {
 	return hc.checkApp(ctx, app).healthy
+}
+
+func (hc *HealthChecker) checkGame(ctx context.Context, app *model.App) checkOutcome {
+	if app.ContainerID == "" {
+		return checkOutcome{reason: "missing_container_id"}
+	}
+	running, err := hc.container.IsRunning(ctx, app.ContainerID)
+	if err != nil {
+		return checkOutcome{reason: "docker_inspect_error", detail: err.Error()}
+	}
+	if !running {
+		return checkOutcome{reason: "container_not_running"}
+	}
+	info, err := hc.container.docker.InspectContainer(ctx, app.ContainerID)
+	if err != nil {
+		return checkOutcome{healthy: true}
+	}
+	tried := false
+	for port, bindings := range info.NetworkSettings.Ports {
+		if !strings.HasSuffix(string(port), "/tcp") {
+			continue
+		}
+		for _, b := range bindings {
+			if b.HostPort == "" {
+				continue
+			}
+			tried = true
+			conn, err := net.DialTimeout("tcp", net.JoinHostPort("host.docker.internal", b.HostPort), 2*time.Second)
+			if err == nil {
+				conn.Close()
+				return checkOutcome{healthy: true}
+			}
+		}
+	}
+	for _, nw := range info.NetworkSettings.Networks {
+		if nw.IPAddress == "" {
+			continue
+		}
+		for p := range info.Config.ExposedPorts {
+			port, _, _ := strings.Cut(string(p), "/")
+			if _, err := strconv.Atoi(port); err != nil {
+				continue
+			}
+			tried = true
+			conn, err := net.DialTimeout("tcp", net.JoinHostPort(nw.IPAddress, port), 2*time.Second)
+			if err == nil {
+				conn.Close()
+				return checkOutcome{healthy: true}
+			}
+		}
+		break
+	}
+	if tried {
+		return checkOutcome{reason: "game_port_unreachable"}
+	}
+	return checkOutcome{healthy: true}
 }
 
 func (hc *HealthChecker) checkApp(ctx context.Context, app *model.App) checkOutcome {

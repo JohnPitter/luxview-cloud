@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
+	"github.com/docker/go-units"
 	"github.com/luxview/engine/internal/model"
 	dockerclient "github.com/luxview/engine/pkg/docker"
 	"github.com/luxview/engine/pkg/logger"
@@ -42,7 +43,6 @@ func (cm *ContainerManager) Start(ctx context.Context, app *model.App, imageTag 
 		Int64("memory_bytes", memory).
 		Msg("starting container")
 
-	// Build env var list
 	var envList []string
 	for k, v := range envVars {
 		envList = append(envList, fmt.Sprintf("%s=%s", k, v))
@@ -57,12 +57,13 @@ func (cm *ContainerManager) Start(ctx context.Context, app *model.App, imageTag 
 		Env:          envList,
 		ExposedPorts: nat.PortSet{exposedPort: struct{}{}},
 		Labels: map[string]string{
-			"luxview.app":       app.Subdomain,
-			"luxview.app.id":    app.ID.String(),
-			"luxview.managed":   "true",
+			"luxview.app":     app.Subdomain,
+			"luxview.app.id":  app.ID.String(),
+			"luxview.managed": "true",
 		},
 	}
 
+	pids := int64(256)
 	hostConfig := &container.HostConfig{
 		PortBindings: nat.PortMap{
 			exposedPort: []nat.PortBinding{
@@ -71,8 +72,15 @@ func (cm *ContainerManager) Start(ctx context.Context, app *model.App, imageTag 
 		},
 		RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
 		Resources: container.Resources{
-			NanoCPUs: cpuQuota,
-			Memory:   memory,
+			NanoCPUs:   cpuQuota,
+			Memory:     memory,
+			MemorySwap: memory,
+			PidsLimit:  &pids,
+			Ulimits:    []*units.Ulimit{{Name: "nofile", Soft: 65535, Hard: 65535}},
+		},
+		LogConfig: container.LogConfig{
+			Type:   "json-file",
+			Config: map[string]string{"max-size": "10m", "max-file": "3"},
 		},
 		Binds: binds,
 	}
@@ -179,8 +187,9 @@ func (cm *ContainerManager) UpdateResources(ctx context.Context, containerID str
 	log.Info().Str("container", containerID[:min(12, len(containerID))]).Int64("cpu_nano", nanoCPUs).Int64("memory", memory).Msg("updating container resources")
 	return cm.docker.UpdateContainerResources(ctx, containerID, container.UpdateConfig{
 		Resources: container.Resources{
-			NanoCPUs: nanoCPUs,
-			Memory:   memory,
+			NanoCPUs:   nanoCPUs,
+			Memory:     memory,
+			MemorySwap: memory,
 		},
 	})
 }

@@ -145,6 +145,9 @@ func (s *GameServerService) gamePorts(ctx context.Context, app *model.App, cfg *
 		bindPort(portSet, portMap, cfg.QueryPort, protocol)
 	}
 	for _, ep := range cfg.ExtraPorts {
+		if skipPublishedPort(cfg.TemplateID, ep.Port) || skipMetinExtra(cfg, ep.Port) {
+			continue
+		}
 		epProto := ep.Protocol
 		if epProto == "" {
 			epProto = protocol
@@ -172,6 +175,38 @@ func (s *GameServerService) gamePorts(ctx context.Context, app *model.App, cfg *
 		portMap[webNat] = []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: strconv.Itoa(app.AssignedPort)}}
 	}
 	return portSet, portMap, nil
+}
+
+func skipPublishedPort(templateID string, port int) bool {
+	if port == 3306 {
+		return true
+	}
+	return templateID == tibiaTemplateID && port == 8080
+}
+
+func skipMetinExtra(cfg *model.GameServerConfig, port int) bool {
+	if cfg == nil || cfg.TemplateID != metin2TemplateID {
+		return false
+	}
+	n := 1
+	if cfg.ConfigFields != nil {
+		if v := strings.TrimSpace(cfg.ConfigFields["METIN_CORE_COUNT"]); v != "" {
+			if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+				n = parsed
+			}
+		}
+	}
+	switch port {
+	case 13002:
+		return n < 2
+	case 13003:
+		return n < 3
+	case 13004:
+		return n < 4
+	case 13099:
+		return n < 2
+	}
+	return false
 }
 
 func gameEnv(cfg *model.GameServerConfig, publicIP string) []string {
@@ -311,8 +346,8 @@ func queryA2S(addr string) (*a2sInfo, error) {
 		for b, _ := r.ReadByte(); b != 0; b, _ = r.ReadByte() {
 		} // skip null-terminated strings
 	}
-	r.ReadByte()               // appID low
-	r.ReadByte()               // appID high
+	r.ReadByte() // appID low
+	r.ReadByte() // appID high
 	players, _ := r.ReadByte()
 	maxPlayers, _ := r.ReadByte()
 	return &a2sInfo{players: int(players), maxPlayers: int(maxPlayers)}, nil

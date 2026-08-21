@@ -3,7 +3,6 @@ package service
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -294,13 +293,8 @@ func (a *Alerter) sendEmail(to, appName, message string) error {
 	}
 	defer client.Close()
 
-	// Try STARTTLS if available, skip if not (internal network)
-	if ok, _ := client.Extension("STARTTLS"); ok {
-		tlsCfg := &tls.Config{ServerName: a.smtpCfg.Host, InsecureSkipVerify: true}
-		if err := client.StartTLS(tlsCfg); err != nil {
-			log.Warn().Err(err).Msg("STARTTLS failed, continuing without TLS")
-		}
-	}
+	// Internal docker SMTP — plaintext on the overlay. STARTTLS with
+	// InsecureSkipVerify hid a self-signed cert; do not skip verification.
 
 	// Authenticate only if STARTTLS succeeded (PlainAuth requires encryption)
 	if a.smtpCfg.User != "" {

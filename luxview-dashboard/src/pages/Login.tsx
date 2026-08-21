@@ -12,10 +12,14 @@ export function Login() {
   const fetchMe = useAuthStore((s) => s.fetchMe);
 
   useEffect(() => {
-    const token = params.get('token');
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const token = hashParams.get('token') || params.get('token');
     if (!token) {
       navigate('/');
       return;
+    }
+    if (window.location.hash) {
+      history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
     }
 
     setToken(token);

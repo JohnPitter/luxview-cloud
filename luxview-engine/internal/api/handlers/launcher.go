@@ -20,7 +20,8 @@ const launcherCacheTTL = 5 * time.Minute
 type LauncherRelease struct {
 	Version string `json:"version"` // tag without the "launcher-" prefix (e.g. "v1.32")
 	URL     string `json:"url"`     // public asset download URL
-	Notes   string `json:"notes"`   // release body / changelog
+	SHA256  string `json:"sha256,omitempty"`
+	Notes   string `json:"notes"` // release body / changelog
 }
 
 // LauncherHandler resolves the latest launcher release from GitHub and exposes it
@@ -60,6 +61,7 @@ type ghRelease struct {
 	Assets     []struct {
 		Name               string `json:"name"`
 		BrowserDownloadURL string `json:"browser_download_url"`
+		Digest             string `json:"digest"`
 	} `json:"assets"`
 }
 
@@ -127,6 +129,7 @@ func (h *LauncherHandler) fetchLatest() (*LauncherRelease, error) {
 				return &LauncherRelease{
 					Version: strings.TrimPrefix(r.TagName, launcherTagPrefix),
 					URL:     a.BrowserDownloadURL,
+					SHA256:  strings.TrimPrefix(a.Digest, "sha256:"),
 					Notes:   r.Body,
 				}, nil
 			}

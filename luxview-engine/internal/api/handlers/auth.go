@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/luxview/engine/internal/api/middleware"
@@ -120,13 +121,12 @@ func (h *AuthHandler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "token",
 		Value:    jwt,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   cookieSecure(r),
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   86400, // 24h
 	})
@@ -143,9 +143,16 @@ func (h *AuthHandler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	log.Info().Str("user", user.Username).Msg("user authenticated")
 
-	// Redirect to dashboard with token
-	dashboardURL := fmt.Sprintf("%s/auth/callback?token=%s", h.cfg.BaseURL, jwt)
+	// Hash fragment stays in the browser — not in access logs, Referer, or history of the API.
+	dashboardURL := fmt.Sprintf("%s/auth/callback#token=%s", h.cfg.BaseURL, jwt)
 	http.Redirect(w, r, dashboardURL, http.StatusTemporaryRedirect)
+}
+
+func cookieSecure(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
 // GitHubAppInstallRedirect redirects the user to install the GitHub App.
