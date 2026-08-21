@@ -113,6 +113,7 @@ func (db *DB) migrate(ctx context.Context) error {
 		)`,
 
 		`CREATE INDEX IF NOT EXISTS idx_app_services_app_id ON app_services(app_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_app_services_app_type ON app_services(app_id, service_type)`,
 
 		`CREATE TABLE IF NOT EXISTS mailboxes (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

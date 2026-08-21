@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,26 +17,29 @@ import (
 )
 
 type ServiceHandler struct {
-	serviceRepo   *repository.ServiceRepo
-	appRepo       *repository.AppRepo
-	provisioner   *service.Provisioner
-	encryptionKey []byte
-	auditSvc      *service.AuditService
+	serviceRepo    *repository.ServiceRepo
+	appRepo        *repository.AppRepo
+	gameConfigRepo *repository.GameServerConfigRepo
+	provisioner    *service.Provisioner
+	encryptionKey  []byte
+	auditSvc       *service.AuditService
 }
 
 func NewServiceHandler(
 	serviceRepo *repository.ServiceRepo,
 	appRepo *repository.AppRepo,
+	gameConfigRepo *repository.GameServerConfigRepo,
 	provisioner *service.Provisioner,
 	encryptionKey []byte,
 	auditSvc *service.AuditService,
 ) *ServiceHandler {
 	return &ServiceHandler{
-		serviceRepo:   serviceRepo,
-		appRepo:       appRepo,
-		provisioner:   provisioner,
-		encryptionKey: encryptionKey,
-		auditSvc:      auditSvc,
+		serviceRepo:    serviceRepo,
+		appRepo:        appRepo,
+		gameConfigRepo: gameConfigRepo,
+		provisioner:    provisioner,
+		encryptionKey:  encryptionKey,
+		auditSvc:       auditSvc,
 	}
 }
 
@@ -43,6 +47,8 @@ func NewServiceHandler(
 func (h *ServiceHandler) ListAll(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)
+
+	h.ensureUserGameDBs(ctx, userID)
 
 	services, err := h.serviceRepo.ListByUserID(ctx, userID)
 	if err != nil {
@@ -135,14 +141,14 @@ func (h *ServiceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.auditSvc.Log(ctx, service.AuditEntry{
-		ActorID:      user.ID,
+		ActorID:       user.ID,
 		ActorUsername: user.Username,
-		Action:       "create",
-		ResourceType: "service",
-		ResourceID:   svc.ID.String(),
-		ResourceName: string(req.ServiceType),
-		NewValues:    map[string]string{"type": string(req.ServiceType), "appSubdomain": app.Subdomain},
-		IPAddress:    clientIP(r),
+		Action:        "create",
+		ResourceType:  "service",
+		ResourceID:    svc.ID.String(),
+		ResourceName:  string(req.ServiceType),
+		NewValues:     map[string]string{"type": string(req.ServiceType), "appSubdomain": app.Subdomain},
+		IPAddress:     clientIP(r),
 	})
 
 	log.Info().Str("app", app.Subdomain).Str("type", string(req.ServiceType)).Msg("service provisioned")
@@ -169,6 +175,8 @@ func (h *ServiceHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
+
+	h.ensureGameDB(ctx, app)
 
 	services, err := h.serviceRepo.ListByAppID(ctx, appID)
 	if err != nil {
@@ -220,16 +228,62 @@ func (h *ServiceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	user := middleware.GetUser(ctx)
 	h.auditSvc.Log(ctx, service.AuditEntry{
-		ActorID:      user.ID,
+		ActorID:       user.ID,
 		ActorUsername: user.Username,
-		Action:       "delete",
-		ResourceType: "service",
-		ResourceID:   svc.ID.String(),
-		ResourceName: string(svc.ServiceType),
-		OldValues:    map[string]string{"type": string(svc.ServiceType)},
-		IPAddress:    clientIP(r),
+		Action:        "delete",
+		ResourceType:  "service",
+		ResourceID:    svc.ID.String(),
+		ResourceName:  string(svc.ServiceType),
+		OldValues:     map[string]string{"type": string(svc.ServiceType)},
+		IPAddress:     clientIP(r),
 	})
 
 	log.Info().Str("service", svcID.String()).Msg("service removed")
 	writeJSON(w, http.StatusOK, map[string]string{"message": "service removed"})
+}
+
+func (h *ServiceHandler) ensureUserGameDBs(ctx context.Context, userID uuid.UUID) {
+	log := logger.With("services")
+	apps, _, err := h.appRepo.ListByUserID(ctx, userID, 200, 0)
+	if err != nil {
+		log.Warn().Err(err).Msg("list apps for mysql backfill")
+		return
+	}
+	for i := range apps {
+		h.ensureGameDB(ctx, &apps[i])
+	}
+}
+
+func (h *ServiceHandler) ensureGameDB(ctx context.Context, app *model.App) {
+	log := logger.With("services")
+	if app == nil || app.AppType != model.AppTypeGame {
+		return
+	}
+	cfg := app.GameConfig
+	if cfg == nil && h.gameConfigRepo != nil {
+		var err error
+		cfg, err = h.gameConfigRepo.GetByAppID(ctx, app.ID)
+		if err != nil {
+			log.Warn().Err(err).Str("app", app.Subdomain).Msg("game config for mysql backfill")
+			return
+		}
+	}
+	if cfg == nil {
+		return
+	}
+	tmpl := service.Template(cfg.TemplateID)
+	if tmpl == nil || tmpl.DBService == "" {
+		return
+	}
+	existing, err := h.serviceRepo.FindByAppAndType(ctx, app.ID, tmpl.DBService)
+	if err != nil || existing != nil {
+		return
+	}
+	if tmpl.DBService != model.ServiceMySQL {
+		return
+	}
+	dbName, creds := service.EmbeddedGameDBCreds(tmpl, cfg)
+	if _, err := h.provisioner.RegisterExisting(ctx, app.ID, tmpl.DBService, dbName, creds); err != nil {
+		log.Warn().Err(err).Str("app", app.Subdomain).Msg("backfill game mysql service")
+	}
 }

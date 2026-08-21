@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"errors"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -175,7 +175,31 @@ func (p *Provisioner) Provision(ctx context.Context, appID uuid.UUID, serviceTyp
 		return nil, fmt.Errorf("unsupported service type: %s", serviceType)
 	}
 
-	// Encrypt credentials
+	return p.persistService(ctx, appID, serviceType, dbName, creds)
+}
+
+// RegisterExisting records a service that already exists (e.g. MySQL inside a
+// game container) without creating anything on the shared hosts.
+func (p *Provisioner) RegisterExisting(ctx context.Context, appID uuid.UUID, serviceType model.ServiceType, dbName string, creds map[string]string) (*model.AppService, error) {
+	existing, err := p.serviceRepo.FindByAppAndType(ctx, appID, serviceType)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return existing, nil
+	}
+	svc, err := p.persistService(ctx, appID, serviceType, dbName, creds)
+	if err != nil {
+		existing, findErr := p.serviceRepo.FindByAppAndType(ctx, appID, serviceType)
+		if findErr == nil && existing != nil {
+			return existing, nil
+		}
+		return nil, err
+	}
+	return svc, nil
+}
+
+func (p *Provisioner) persistService(ctx context.Context, appID uuid.UUID, serviceType model.ServiceType, dbName string, creds map[string]string) (*model.AppService, error) {
 	credsJSON, _ := json.Marshal(creds)
 	encrypted, err := crypto.Encrypt(string(credsJSON), p.encryptionKey)
 	if err != nil {
@@ -287,6 +311,9 @@ func (p *Provisioner) Deprovision(ctx context.Context, svc *model.AppService) er
 			log.Warn().Err(err).Str("email", svc.DBName).Msg("failed to deprovision email")
 		}
 	case model.ServiceMySQL:
+		if p.skipSharedDrop(svc) {
+			break
+		}
 		if err := p.deprovisionMySQL(ctx, svc.DBName); err != nil {
 			log.Warn().Err(err).Str("db", svc.DBName).Msg("failed to deprovision mysql")
 		}
@@ -533,6 +560,40 @@ func (p *Provisioner) MailserverUpdatePassword(ctx context.Context, address, pas
 		return fmt.Errorf("setup email update: %s — %w", string(output), err)
 	}
 	return nil
+}
+
+func (p *Provisioner) decryptCreds(svc *model.AppService) map[string]string {
+	if svc == nil {
+		return nil
+	}
+	if len(svc.CredentialsPlain) > 0 {
+		return svc.CredentialsPlain
+	}
+	var encrypted string
+	if err := json.Unmarshal(svc.Credentials, &encrypted); err != nil {
+		return nil
+	}
+	decrypted, err := crypto.Decrypt(encrypted, p.encryptionKey)
+	if err != nil {
+		return nil
+	}
+	var creds map[string]string
+	if err := json.Unmarshal([]byte(decrypted), &creds); err != nil {
+		return nil
+	}
+	return creds
+}
+
+func (p *Provisioner) skipSharedDrop(svc *model.AppService) bool {
+	creds := p.decryptCreds(svc)
+	if creds == nil {
+		return false
+	}
+	if creds["location"] == "embedded" {
+		return true
+	}
+	host := creds["host"]
+	return host == "127.0.0.1" || host == "localhost" || host == "::1"
 }
 
 func (p *Provisioner) mysqlExec(ctx context.Context, sql string) error {

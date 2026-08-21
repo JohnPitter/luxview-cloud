@@ -94,7 +94,7 @@ func NewRouter(deps Deps) *chi.Mux {
 	appHandler := handlers.NewAppHandler(deps.AppRepo, deps.RepositoryRepo, deps.UserRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.RepositorySvc, deps.BuildQueue, deps.EncryptKey, deps.AuditSvc, webhookURL, deps.Config.InternalToken, deps.GameConfigRepo, deps.GameServerSvc)
 	deployHandler := handlers.NewDeploymentHandler(deps.DeployRepo, deps.AppRepo, deps.BuildQueue, deps.AuditSvc)
 	actionHandler := handlers.NewActionHandler(deps.ActionRepo, deps.AppRepo, deps.ActionSvc, deps.AuditSvc)
-	serviceHandler := handlers.NewServiceHandler(deps.ServiceRepo, deps.AppRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)
+	serviceHandler := handlers.NewServiceHandler(deps.ServiceRepo, deps.AppRepo, deps.GameConfigRepo, deps.Provisioner, deps.EncryptKey, deps.AuditSvc)
 	metricHandler := handlers.NewMetricHandler(deps.MetricRepo, deps.AppRepo)
 	alertHandler := handlers.NewAlertHandler(deps.AlertRepo, deps.AppRepo, deps.AuditSvc)
 	adminHandler := handlers.NewAdminHandler(deps.UserRepo, deps.AppRepo, deps.DeployRepo, deps.ServiceRepo, deps.Container, deps.Provisioner, deps.AuditSvc)

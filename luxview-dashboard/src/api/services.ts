@@ -1,6 +1,6 @@
 import { api, apiRaw } from './client';
 
-export type ServiceType = 'postgres' | 'redis' | 'mongodb' | 'rabbitmq' | 'storage' | 'email';
+export type ServiceType = 'postgres' | 'redis' | 'mongodb' | 'rabbitmq' | 'storage' | 'email' | 'mysql';
 
 export interface AppService {
   id: string;

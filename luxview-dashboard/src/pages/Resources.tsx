@@ -44,6 +44,13 @@ const serviceConfig: Record<
     borderColor: 'border-blue-500/20',
     explorable: true,
   },
+  mysql: {
+    labelKey: 'resources.service.mysql',
+    icon: 'MY',
+    color: 'text-sky-400',
+    bgColor: 'bg-sky-500/10',
+    borderColor: 'border-sky-500/20',
+  },
   redis: {
     labelKey: 'resources.service.redis',
     icon: 'RD',
@@ -103,7 +110,7 @@ export function Resources() {
       label: t('resources.categories.databases'),
       description: t('resources.categories.databasesDescription'),
       icon: Database,
-      types: ['postgres', 'mongodb'] as ServiceType[],
+      types: ['postgres', 'mysql', 'mongodb'] as ServiceType[],
     },
     {
       key: 'cache',
@@ -211,7 +218,7 @@ export function Resources() {
           { label: t('resources.stats.totalResources'), value: services.length, icon: HardDrive, color: 'text-amber-400' },
           {
             label: t('resources.stats.databases'),
-            value: totalByType(['postgres', 'mongodb']),
+            value: totalByType(['postgres', 'mysql', 'mongodb']),
             icon: Database,
             color: 'text-blue-400',
           },
@@ -369,6 +376,7 @@ export function Resources() {
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {catServices.map((svc) => {
                       const cfg = serviceConfig[svc.serviceType];
+                      if (!cfg) return null;
                       const creds = svc.credentials;
                       const urlKey = `url-${svc.id}`;
                       const pwKey = `pw-${svc.id}`;

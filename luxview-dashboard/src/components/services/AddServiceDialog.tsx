@@ -21,6 +21,7 @@ const services: Array<{
   color: string;
 }> = [
   { type: 'postgres', labelKey: 'services.dialog.postgres.label', descriptionKey: 'services.dialog.postgres.description', icon: 'PG', color: 'border-blue-500/30 hover:border-blue-500/60' },
+  { type: 'mysql', labelKey: 'services.dialog.mysql.label', descriptionKey: 'services.dialog.mysql.description', icon: 'MY', color: 'border-sky-500/30 hover:border-sky-500/60' },
   { type: 'redis', labelKey: 'services.dialog.redis.label', descriptionKey: 'services.dialog.redis.description', icon: 'RD', color: 'border-red-500/30 hover:border-red-500/60' },
   { type: 'mongodb', labelKey: 'services.dialog.mongodb.label', descriptionKey: 'services.dialog.mongodb.description', icon: 'MG', color: 'border-emerald-500/30 hover:border-emerald-500/60' },
   { type: 'rabbitmq', labelKey: 'services.dialog.rabbitmq.label', descriptionKey: 'services.dialog.rabbitmq.description', icon: 'RQ', color: 'border-orange-500/30 hover:border-orange-500/60' },

@@ -12,6 +12,7 @@ interface ServiceCardProps {
 
 const serviceConfig: Record<ServiceType, { labelKey: string; color: string; icon: string }> = {
   postgres: { labelKey: 'resources.service.postgresql', color: 'text-blue-400', icon: 'PG' },
+  mysql: { labelKey: 'resources.service.mysql', color: 'text-sky-400', icon: 'MY' },
   redis: { labelKey: 'resources.service.redis', color: 'text-red-400', icon: 'RD' },
   mongodb: { labelKey: 'resources.service.mongodb', color: 'text-emerald-400', icon: 'MG' },
   rabbitmq: { labelKey: 'resources.service.rabbitmq', color: 'text-orange-400', icon: 'RQ' },
@@ -63,6 +64,9 @@ export function ServiceCard({ service, onDelete }: ServiceCardProps) {
               {t(config.labelKey)}
             </h4>
             <p className="text-[11px] text-zinc-500">{service.dbName}</p>
+            {service.credentials?.location === 'embedded' && (
+              <p className="text-[11px] text-amber-500/80">{t('services.card.embeddedMysql')}</p>
+            )}
           </div>
         </div>
         <button
