@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -17,6 +19,52 @@ func TestMuEncodeHostAndPortMatchOpenMULauncher(t *testing.T) {
 	}
 	if muEncodePort(ip, 44405) != 44402 {
 		t.Fatalf("encoded port %d", muEncodePort(ip, 44405))
+	}
+}
+
+func TestPatchMuServerInfoRewritesIGCConnection(t *testing.T) {
+	raw := []byte("; header\r\n[Connection]\r\nIP=\"192.168.0.168\"\r\nPort=44405\r\nChatPort=56980\r\n\r\n[Main]\r\nVersion=\"1.05.25\"\r\nSerial=\"PoweredByIGCN800\"\r\n")
+	got := string(patchMuServerInfo(raw, "187.77.227.65", 44405, 55980))
+	for _, want := range []string{`IP="187.77.227.65"`, "Port=44405", "ChatPort=55980", `Serial="PoweredByIGCN800"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in %q", want, got)
+		}
+	}
+	if strings.Contains(got, "192.168.0.168") || strings.Contains(got, "ChatPort=56980") {
+		t.Fatalf("old connection still present: %q", got)
+	}
+}
+
+func TestPatchMuPackedIPSameLength(t *testing.T) {
+	raw := []byte("pre\x00192.168.0.168\x00post")
+	got := patchMuPackedIP(raw, "187.77.227.65")
+	if !bytes.Contains(got, []byte("187.77.227.65")) {
+		t.Fatalf("missing vps ip: %q", got)
+	}
+	if bytes.Contains(got, []byte("192.168.0.168")) {
+		t.Fatal("old lan ip still present")
+	}
+}
+
+func TestPatchMuServerInfoFiles(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "Data", "Local")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "ServerInfo.bmd")
+	if err := os.WriteFile(path, []byte("IP=\"192.168.0.168\"\nPort=1\nChatPort=2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := patchMuServerInfoFiles(root, "187.77.227.65", 44405, 55980); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), `IP="187.77.227.65"`) {
+		t.Fatalf("got %q", got)
 	}
 }
 

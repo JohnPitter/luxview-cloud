@@ -46,6 +46,54 @@ func TestWriteOpenMUClientZipReplacesLauncherConfig(t *testing.T) {
 	assertContains(t, got["launcher.config"], "<Port>44405</Port>")
 }
 
+func TestWriteOpenMUClientZipPatchesIGCServerInfo(t *testing.T) {
+	var base bytes.Buffer
+	baseZip := zip.NewWriter(&base)
+	addZipEntry(t, baseZip, "Data/Local/ServerInfo.bmd", "IP=\"192.168.0.168\"\nPort=44405\nChatPort=56980\nSerial=\"PoweredByIGCN800\"\n")
+	addZipEntry(t, baseZip, "main.exe", "fake-main")
+	if err := baseZip.Close(); err != nil {
+		t.Fatalf("close base zip: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := WriteOpenMUClientZip(bytes.NewReader(base.Bytes()), int64(base.Len()), &out, OpenMUClientOptions{
+		ServerName: "Aida MU",
+		ServerIP:   "187.77.227.65",
+		GamePort:   44405,
+	}); err != nil {
+		t.Fatalf("write client zip: %v", err)
+	}
+	got := readZipEntries(t, out.Bytes())["Data/Local/ServerInfo.bmd"]
+	assertContains(t, got, `IP="187.77.227.65"`)
+	assertContains(t, got, "ChatPort=55980")
+	assertContains(t, got, `Serial="PoweredByIGCN800"`)
+	if strings.Contains(got, "192.168.0.168") {
+		t.Fatalf("old lan ip still present: %q", got)
+	}
+}
+
+func TestWriteOpenMUClientZipPatchesPackedConnectIP(t *testing.T) {
+	var base bytes.Buffer
+	baseZip := zip.NewWriter(&base)
+	addZipEntry(t, baseZip, "IGC.dll", "x\x00192.168.0.168\x00y")
+	addZipEntry(t, baseZip, "main.exe", "fake-main")
+	if err := baseZip.Close(); err != nil {
+		t.Fatalf("close base zip: %v", err)
+	}
+	var out bytes.Buffer
+	if err := WriteOpenMUClientZip(bytes.NewReader(base.Bytes()), int64(base.Len()), &out, OpenMUClientOptions{
+		ServerIP: "187.77.227.65",
+		GamePort: 44405,
+	}); err != nil {
+		t.Fatalf("write client zip: %v", err)
+	}
+	got := readZipEntries(t, out.Bytes())
+	assertContains(t, got["IGC.dll"], "187.77.227.65")
+	if strings.Contains(got["IGC.dll"], "192.168.0.168") {
+		t.Fatalf("old lan ip in IGC.dll: %q", got["IGC.dll"])
+	}
+}
+
 func TestWriteOpenMUClientPatchRetagsEncTerrainWorldID(t *testing.T) {
 	donor := muEncryptMapFile([]byte{0x00, 0x4f, 0x00, 0x00})
 	var base bytes.Buffer

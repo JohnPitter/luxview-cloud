@@ -9,7 +9,10 @@ import (
 	"strings"
 )
 
-const muDefaultConnectPort = 44405
+const (
+	muDefaultConnectPort = 44405
+	muDefaultChatPort    = 55980
+)
 
 func muExecutable(clientDir string) string {
 	for _, name := range []string{"main.exe", "Main.exe", "Mu.exe"} {
@@ -55,7 +58,87 @@ func patchMuClient(clientDir string, card GameCard) error {
 	xml.WriteString("    </ServerHostSettings>\n")
 	xml.WriteString("  </Hosts>\n")
 	xml.WriteString("</LauncherSettings>\n")
-	return os.WriteFile(muLauncherConfigPath(clientDir), []byte(xml.String()), 0o644)
+	if err := os.WriteFile(muLauncherConfigPath(clientDir), []byte(xml.String()), 0o644); err != nil {
+		return err
+	}
+	if err := patchMuServerInfoFiles(clientDir, ip, muDefaultConnectPort, muDefaultChatPort); err != nil {
+		return err
+	}
+	return patchMuPackedIPFiles(clientDir, ip)
+}
+
+var muPackedDefaultIP = []byte("192.168.0.168")
+
+func patchMuPackedIP(raw []byte, ip string) []byte {
+	repl := []byte(ip)
+	if len(repl) == 0 || len(repl) > len(muPackedDefaultIP) || !bytes.Contains(raw, muPackedDefaultIP) {
+		return raw
+	}
+	padded := make([]byte, len(muPackedDefaultIP))
+	copy(padded, repl)
+	return bytes.ReplaceAll(raw, muPackedDefaultIP, padded)
+}
+
+func patchMuPackedIPFiles(clientDir, ip string) error {
+	for _, name := range []string{"main.exe", "Main.exe", "IGC.dll", "igc.dll"} {
+		path := filepath.Join(clientDir, name)
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return err
+		}
+		patched := patchMuPackedIP(raw, ip)
+		if bytes.Equal(raw, patched) {
+			continue
+		}
+		if err := os.WriteFile(path, patched, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var (
+	muServerInfoIP       = regexp.MustCompile(`(?i)IP="[^"]*"`)
+	muServerInfoPort     = regexp.MustCompile(`(?im)^Port=\d+`)
+	muServerInfoChatPort = regexp.MustCompile(`(?im)^ChatPort=\d+`)
+)
+
+func patchMuServerInfo(raw []byte, ip string, port, chatPort int) []byte {
+	out := muServerInfoIP.ReplaceAll(raw, []byte(`IP="`+ip+`"`))
+	out = muServerInfoChatPort.ReplaceAll(out, []byte("ChatPort="+strconv.Itoa(chatPort)))
+	out = muServerInfoPort.ReplaceAll(out, []byte("Port="+strconv.Itoa(port)))
+	return out
+}
+
+func patchMuServerInfoFiles(clientDir, ip string, port, chatPort int) error {
+	var files []string
+	root := filepath.Join(clientDir, "Data")
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if strings.EqualFold(d.Name(), "ServerInfo.bmd") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	for _, path := range files {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		patched := patchMuServerInfo(raw, ip, port, chatPort)
+		if bytes.Equal(raw, patched) {
+			continue
+		}
+		if err := os.WriteFile(path, patched, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func xmlEscape(s string) string {

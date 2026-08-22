@@ -686,7 +686,7 @@ func clientRevision(templateID, fileHash, serverIP, authHost string, cfg *model.
 	case openMUTemplateID, pristonTemplateID:
 		fmt.Fprintf(sum, "|%d", cfg.GamePort)
 	case muemuTemplateID:
-		fmt.Fprintf(sum, "|%d|encterrain-obj-worldid", cfg.GamePort)
+		fmt.Fprintf(sum, "|%d|encterrain-obj-worldid|serverinfo-ip|packed-cs-ip", cfg.GamePort)
 	}
 	return hex.EncodeToString(sum.Sum(nil))
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/xml"
 	"io"
 	"path"
@@ -9,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 )
+
+const muDefaultChatPort = 55980
 
 const (
 	openMULauncherConfigName = "launcher.config"
@@ -64,6 +67,18 @@ func WriteOpenMUClientZip(base io.ReaderAt, size int64, out io.Writer, opts Open
 		if strings.EqualFold(file.Name, openMULauncherConfigName) {
 			continue
 		}
+		if isMuServerInfoPath(file.Name) {
+			if err := writePatchedMuServerInfo(writer, file, opts); err != nil {
+				return err
+			}
+			continue
+		}
+		if isMuPackedIPPath(file.Name) {
+			if err := writePatchedMuPackedIP(writer, file, opts); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := copyZipFile(writer, file); err != nil {
 			return err
 		}
@@ -98,7 +113,83 @@ func WriteOpenMUClientPatch(base io.ReaderAt, size int64, out io.Writer, opts Op
 	if err != nil {
 		return err
 	}
+	for _, file := range reader.File {
+		switch {
+		case isMuServerInfoPath(file.Name):
+			if err := writePatchedMuServerInfo(writer, file, opts); err != nil {
+				return err
+			}
+		case isMuPackedIPPath(file.Name):
+			if err := writePatchedMuPackedIP(writer, file, opts); err != nil {
+				return err
+			}
+		}
+	}
 	return writeMuEncTerrainStubs(writer, reader.File)
+}
+
+var (
+	muServerInfoIP       = regexp.MustCompile(`(?i)IP="[^"]*"`)
+	muServerInfoPort     = regexp.MustCompile(`(?im)^Port=\d+`)
+	muServerInfoChatPort = regexp.MustCompile(`(?im)^ChatPort=\d+`)
+)
+
+func isMuServerInfoPath(name string) bool {
+	base := path.Base(strings.ReplaceAll(name, "\\", "/"))
+	return strings.EqualFold(base, "ServerInfo.bmd")
+}
+
+func isMuPackedIPPath(name string) bool {
+	base := path.Base(strings.ReplaceAll(name, "\\", "/"))
+	return strings.EqualFold(base, "main.exe") || strings.EqualFold(base, "IGC.dll")
+}
+
+var muPackedDefaultIP = []byte("192.168.0.168")
+
+func patchMuPackedIP(raw []byte, ip string) []byte {
+	repl := []byte(ip)
+	if len(repl) == 0 || len(repl) > len(muPackedDefaultIP) || !bytes.Contains(raw, muPackedDefaultIP) {
+		return raw
+	}
+	padded := make([]byte, len(muPackedDefaultIP))
+	copy(padded, repl)
+	return bytes.ReplaceAll(raw, muPackedDefaultIP, padded)
+}
+
+func writePatchedMuPackedIP(writer *zip.Writer, file *zip.File, opts OpenMUClientOptions) error {
+	raw, err := readZipFile(file)
+	if err != nil {
+		return err
+	}
+	target, err := writer.Create(file.Name)
+	if err != nil {
+		return err
+	}
+	_, err = target.Write(patchMuPackedIP(raw, opts.ServerIP))
+	return err
+}
+
+func patchMuServerInfo(raw []byte, ip string, port, chatPort int) []byte {
+	if strings.TrimSpace(ip) == "" {
+		return raw
+	}
+	out := muServerInfoIP.ReplaceAll(raw, []byte(`IP="`+ip+`"`))
+	out = muServerInfoChatPort.ReplaceAll(out, []byte("ChatPort="+strconv.Itoa(chatPort)))
+	out = muServerInfoPort.ReplaceAll(out, []byte("Port="+strconv.Itoa(port)))
+	return out
+}
+
+func writePatchedMuServerInfo(writer *zip.Writer, file *zip.File, opts OpenMUClientOptions) error {
+	raw, err := readZipFile(file)
+	if err != nil {
+		return err
+	}
+	target, err := writer.Create(file.Name)
+	if err != nil {
+		return err
+	}
+	_, err = target.Write(patchMuServerInfo(raw, opts.ServerIP, opts.GamePort, muDefaultChatPort))
+	return err
 }
 
 var (
