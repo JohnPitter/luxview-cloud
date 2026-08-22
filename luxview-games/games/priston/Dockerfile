@@ -32,6 +32,7 @@ RUN dpkg --add-architecture i386 \
         wget \
         wine32 \
         winbind \
+        xauth \
         xvfb \
         xz-utils \
     && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
