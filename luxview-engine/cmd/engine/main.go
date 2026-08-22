@@ -69,6 +69,7 @@ func main() {
 	backupRepo := repository.NewBackupRepo(db)
 	gameConfigRepo := repository.NewGameServerConfigRepo(db)
 	playerRepo := repository.NewPlayerRepo(db)
+	communityRepo := repository.NewCommunityRepo(db)
 
 	// Services
 	portManager := service.NewPortManager(appRepo, cfg.PortRangeStart, cfg.PortRangeEnd)
@@ -210,6 +211,7 @@ func main() {
 		GameConfigRepo:       gameConfigRepo,
 		GameServerSvc:        gameServerSvc,
 		PlayerRepo:           playerRepo,
+		CommunityRepo:        communityRepo,
 	})
 
 	// HTTP server

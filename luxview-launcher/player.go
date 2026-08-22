@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 )
@@ -105,6 +106,82 @@ func (a *App) PlayerLink(appID, templateID, nick string) error {
 		return fmt.Errorf("%s", stringsTrimError(raw))
 	}
 	return nil
+}
+
+type ShopItem struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	TemplateID  string `json:"template_id"`
+	Currency    string `json:"currency"`
+	Price       int64  `json:"price"`
+	Grant       string `json:"grant"`
+	Amount      int64  `json:"amount"`
+}
+
+type ShopBuyResult struct {
+	Item         ShopItem `json:"item"`
+	CashPoints   int64    `json:"cash_points"`
+	RewardPoints int64    `json:"reward_points"`
+}
+
+func (a *App) ShopCatalog(templateID string) ([]ShopItem, error) {
+	origin, err := platformOrigin()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := a.client.Get(origin + "/api/public/shop?template=" + url.QueryEscape(templateID))
+	if err != nil {
+		return nil, fmt.Errorf("não consegui carregar a loja: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return nil, fmt.Errorf("%s", stringsTrimError(raw))
+	}
+	var items []ShopItem
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&items); err != nil {
+		return nil, fmt.Errorf("catálogo inválido")
+	}
+	if items == nil {
+		items = []ShopItem{}
+	}
+	return items, nil
+}
+
+func (a *App) ShopBuy(appID, itemID string) (ShopBuyResult, error) {
+	var out ShopBuyResult
+	origin, err := platformOrigin()
+	if err != nil {
+		return out, err
+	}
+	sess, err := loadPlayerSession()
+	if err != nil || sess.Token == "" {
+		return out, fmt.Errorf("entre na conta LuxView")
+	}
+	body, _ := json.Marshal(map[string]string{"app_id": appID, "item_id": itemID})
+	req, err := http.NewRequest(http.MethodPost, origin+"/api/players/shop/buy", bytes.NewReader(body))
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+sess.Token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return out, fmt.Errorf("não consegui concluir a compra: %w", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode >= 300 {
+		return out, fmt.Errorf("%s", stringsTrimError(raw))
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return out, fmt.Errorf("resposta inválida")
+	}
+	sess.CashPoints = out.CashPoints
+	sess.RewardPoints = out.RewardPoints
+	_ = savePlayerSession(sess)
+	return out, nil
 }
 
 func (a *App) playerAuth(path, username, password string) (PlayerSession, error) {

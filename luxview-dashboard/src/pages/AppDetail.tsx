@@ -34,6 +34,8 @@ import { RuntimeLogs } from '../components/monitoring/RuntimeLogs';
 import { ServiceCard } from '../components/services/ServiceCard';
 import { AddServiceDialog } from '../components/services/AddServiceDialog';
 import { GameConfigPanel } from '../components/games/GameConfigPanel';
+import { GamePlayersPanel } from '../components/games/GamePlayersPanel';
+import { CommunityPostsPanel } from '../components/games/CommunityPostsPanel';
 import { appDetailTourSteps } from '../tours/appDetail';
 import { useAppsStore } from '../stores/apps.store';
 import { useThemeStore } from '../stores/theme.store';
@@ -51,7 +53,7 @@ import { CustomDomainSettings } from '../components/apps/CustomDomainSettings';
 import { ActionRunList } from '../components/actions/ActionRunList';
 import { DockerfileEditor } from '../components/deploy/DockerfileEditor';
 
-type Tab = 'overview' | 'dockerfile' | 'deployments' | 'logs' | 'env' | 'services' | 'metrics' | 'alerts' | 'actions' | 'settings' | 'game';
+type Tab = 'overview' | 'dockerfile' | 'deployments' | 'logs' | 'env' | 'services' | 'metrics' | 'alerts' | 'actions' | 'settings' | 'game' | 'players' | 'community';
 
 export function AppDetail() {
   const { t } = useTranslation();
@@ -79,6 +81,8 @@ export function AppDetail() {
   const gameTabs: Array<{ id: Tab; label: string }> = [
     { id: 'overview', label: t('app.tabs.overview') },
     { id: 'game', label: 'Configurações do Jogo' },
+    { id: 'players', label: 'Jogadores' },
+    { id: 'community', label: 'Comunidade' },
     { id: 'logs', label: t('app.tabs.logs') },
     { id: 'env', label: t('app.tabs.environment') },
     { id: 'services', label: t('app.tabs.services') },
@@ -1165,6 +1169,14 @@ export function AppDetail() {
         {/* ==================== GAME CONFIG ==================== */}
         {activeTab === 'game' && appId && (
           <GameConfigPanel appId={appId} />
+        )}
+
+        {activeTab === 'players' && appId && (
+          <GamePlayersPanel appId={appId} />
+        )}
+
+        {activeTab === 'community' && appId && (
+          <CommunityPostsPanel appId={appId} />
         )}
 
         {/* ==================== SETTINGS ==================== */}

@@ -94,6 +94,26 @@ func RakionPassword(password string) string {
 	return clipRunes(strings.ToLower(password), 11)
 }
 
+func PristonLogin(username string) string {
+	var b strings.Builder
+	for _, r := range username {
+		if r > unicode.MaxASCII {
+			continue
+		}
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
+			b.WriteRune(r)
+		}
+	}
+	login := clipRunes(b.String(), 16)
+	if login == "" {
+		return ""
+	}
+	if login[0] < 'A' || (login[0] > 'Z' && login[0] < 'a') || login[0] > 'z' {
+		login = clipRunes("p"+login, 16)
+	}
+	return login
+}
+
 func SHA1Hex(plain string) string {
 	sum := sha1.Sum([]byte(plain))
 	return hex.EncodeToString(sum[:])

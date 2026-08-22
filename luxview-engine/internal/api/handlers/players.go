@@ -15,11 +15,12 @@ import (
 type Players struct {
 	players   *service.Player
 	accounts  *service.GameAccount
+	shop      *service.Shop
 	jwtSecret string
 }
 
-func NewPlayers(players *service.Player, accounts *service.GameAccount, jwtSecret string) *Players {
-	return &Players{players: players, accounts: accounts, jwtSecret: jwtSecret}
+func NewPlayers(players *service.Player, accounts *service.GameAccount, shop *service.Shop, jwtSecret string) *Players {
+	return &Players{players: players, accounts: accounts, shop: shop, jwtSecret: jwtSecret}
 }
 
 type playerAuthBody struct {
@@ -127,6 +128,78 @@ func (h *Players) ProvisionAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, info)
+}
+
+func (h *Players) Catalog(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, service.ShopCatalog(r.URL.Query().Get("template")))
+}
+
+func (h *Players) Buy(w http.ResponseWriter, r *http.Request) {
+	acct := middleware.GetPlayer(r.Context())
+	if acct == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if h.shop == nil {
+		writeError(w, http.StatusInternalServerError, "loja indisponível")
+		return
+	}
+	var body struct {
+		AppID  string `json:"app_id"`
+		ItemID string `json:"item_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "corpo inválido")
+		return
+	}
+	appID, err := uuid.Parse(body.AppID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "jogo inválido")
+		return
+	}
+	result, err := h.shop.Buy(r.Context(), acct, appID, strings.TrimSpace(body.ItemID))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Players) AdminCredit(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Username string `json:"username"`
+		Kind     string `json:"kind"`
+		Amount   int64  `json:"amount"`
+		Reason   string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "corpo inválido")
+		return
+	}
+	kind := model.LedgerKind(body.Kind)
+	if kind != model.LedgerCash && kind != model.LedgerReward {
+		writeError(w, http.StatusBadRequest, "kind deve ser cash ou reward")
+		return
+	}
+	acct, err := h.players.FindByUsername(r.Context(), body.Username)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	reason := strings.TrimSpace(body.Reason)
+	if reason == "" {
+		reason = "admin-credit"
+	}
+	updated, err := h.players.Credit(r.Context(), acct.ID, kind, body.Amount, reason)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"username":      updated.Username,
+		"cash_points":   updated.CashPoints,
+		"reward_points": updated.RewardPoints,
+	})
 }
 
 func (h *Players) writeSession(w http.ResponseWriter, r *http.Request, status int, acct *model.PlayerAccount) {

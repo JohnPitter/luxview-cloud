@@ -15,6 +15,10 @@ mysql_password="${METIN_DB_PASSWORD:-pw}"
 root_password="${MYSQL_ROOT_PASSWORD:-root}"
 public_ip="${LUXVIEW_PUBLIC_IP:-${METIN_PUBLIC_IP:-127.0.0.1}}"
 bind_ip="${METIN_BIND_IP:-127.0.0.1}"
+rate_exp="${METIN_RATE_EXP:-10}"
+rate_yang="${METIN_RATE_YANG:-10}"
+rate_drop="${METIN_RATE_DROP:-5}"
+max_level="${METIN_MAX_LEVEL:-99}"
 process_names=()
 declare -A process_directories process_executables process_pids
 
@@ -33,6 +37,47 @@ validate_config_value() {
 
 sql_escape() {
     printf '%s' "$1" | sed "s/'/''/g"
+}
+
+rate_to_priv_pct() {
+    # 10x EXP → +900% no priv_empire (100 = +100% = 2x).
+    awk -v r="${1:-1}" 'BEGIN { v = int((r - 1) * 100 + 0.5); if (v < 0) v = 0; print v }'
+}
+
+upsert_config_key() {
+    local file="$1" key="$2" value="$3"
+    if grep -qiE "^${key}:" "$file"; then
+        sed -E -i "s#^${key}:.*#${key}: ${value}#I" "$file"
+    else
+        printf '\n%s: %s\n' "$key" "$value" >>"$file"
+    fi
+}
+
+apply_metin_rates() {
+    local exp_pct yang_pct drop_pct
+    exp_pct="$(rate_to_priv_pct "$rate_exp")"
+    yang_pct="$(rate_to_priv_pct "$rate_yang")"
+    drop_pct="$(rate_to_priv_pct "$rate_drop")"
+    log "taxas: EXP ${rate_exp}x (+${exp_pct}%) yang ${rate_yang}x drop ${rate_drop}x"
+
+    local mysql=(mariadb -h"$mysql_host" -P"$mysql_port" -u"$mysql_user" -p"$mysql_password")
+    if [[ "$mysql_host" == "127.0.0.1" || "$mysql_host" == "localhost" ]]; then
+        mysql=(mariadb -h 127.0.0.1 -P "$mysql_port" -uroot -p"$root_password")
+    fi
+
+    "${mysql[@]}" common <<SQL || log "aviso: não deu para gravar priv_settings (taxas ficam 1x até o schema existir)"
+CREATE TABLE IF NOT EXISTS priv_settings (
+  priv_type INT NOT NULL,
+  id INT NOT NULL DEFAULT 0,
+  value INT NOT NULL DEFAULT 0,
+  duration INT NOT NULL DEFAULT 2147483647,
+  PRIMARY KEY (priv_type, id)
+);
+REPLACE INTO priv_settings (priv_type, id, value, duration) VALUES
+  (1, 0, ${drop_pct}, 2147483647),
+  (2, 0, ${yang_pct}, 2147483647),
+  (4, 0, ${exp_pct}, 2147483647);
+SQL
 }
 
 wait_for_socket() {
@@ -195,7 +240,10 @@ configure_game() {
         else
             printf '\nBIND_IP: %s\n' "$bind_ip" >>"$config"
         fi
+        upsert_config_key "$config" "MAX_LEVEL" "$max_level"
     done < <(find /usr/game/core -name CONFIG -type f)
+
+    apply_metin_rates
 }
 
 start_process() {

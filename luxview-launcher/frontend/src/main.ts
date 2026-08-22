@@ -1,11 +1,12 @@
 import './style.css';
 import './app.css';
-import { GetGames, InstallGame, Play, GetSettings, SaveSettings, GetMetin2Settings, SaveMetin2Settings, OpenInstallFolder, Version, IsGameRunning, IsInstalled, CheckForUpdate, ApplyUpdate, PlayerRegister, PlayerLogin, PlayerMe, PlayerLogout } from '../wailsjs/go/main/App';
+import { GetGames, InstallGame, Play, GetSettings, SaveSettings, GetMetin2Settings, SaveMetin2Settings, OpenInstallFolder, Version, IsGameRunning, IsInstalled, CheckForUpdate, ApplyUpdate, PlayerRegister, PlayerLogin, PlayerMe, PlayerLogout, CommunitySnapshot, CommunitySend, CommunityHere, ShopCatalog, ShopBuy } from '../wailsjs/go/main/App';
 import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
 import rakionImg from './assets/games/rakion.jpg';
 import muImg from './assets/games/mu.jpg';
 import metin2Img from './assets/games/metin2.jpg';
 import tibiaImg from './assets/games/tibia.jpg';
+import pristonImg from './assets/games/priston.jpg';
 
 // Arte por jogo, usada no hero E no ícone do chip (quando houver; senão gradiente).
 const IMAGES: Record<string, string> = {
@@ -14,6 +15,7 @@ const IMAGES: Record<string, string> = {
   muemu: muImg,
   metin2: metin2Img,
   tibia: tibiaImg,
+  priston: pristonImg,
 };
 
 type Card = {
@@ -24,9 +26,12 @@ type Card = {
   description: string;
   enabled: boolean;
   download_url: string;
+  patch_url?: string;
+  base_url?: string;
   server_ip: string;
   auth_host: string;
   client_hash: string;
+  base_hash?: string;
   installed: boolean;
   update_available: boolean;
 };
@@ -54,7 +59,9 @@ type Theme = { grad: string; accent: string; tag: string; initials: string };
 
 const gameId = (raw: string = ''): string => {
   const id = raw.trim().toLowerCase().replaceAll('_', '-');
-  return id.includes('tibia') ? 'tibia' : id;
+  if (id.includes('tibia')) return 'tibia';
+  if (id.includes('priston')) return 'priston';
+  return id;
 };
 
 const normalizeCard = (card: Card): Card => ({
@@ -66,8 +73,8 @@ const cardGame = (card: Card): string => gameId(card.game || card.display_name |
 
 const THEMES: Record<string, Theme> = {
   rakion:   { grad: 'linear-gradient(135deg,#7f1d1d 0%,#2a0a0a 100%)', accent: '#e0392b', tag: 'Chaos Force', initials: 'R' },
-  openmu:   { grad: 'linear-gradient(135deg,#581c87 0%,#1b0a2e 100%)', accent: '#a855f7', tag: 'MMORPG', initials: 'M' },
-  muemu:    { grad: 'linear-gradient(135deg,#581c87 0%,#1b0a2e 100%)', accent: '#a855f7', tag: 'MMORPG', initials: 'M' },
+  openmu:   { grad: 'linear-gradient(135deg,#581c87 0%,#1b0a2e 100%)', accent: '#a855f7', tag: '97D + S2', initials: 'M' },
+  muemu:    { grad: 'linear-gradient(135deg,#581c87 0%,#1b0a2e 100%)', accent: '#a855f7', tag: '97D + S2', initials: 'M' },
   metin2:   { grad: 'linear-gradient(135deg,#7c2d12 0%,#2a1505 100%)', accent: '#fb923c', tag: 'MMORPG', initials: 'M2' },
   tibia:    { grad: 'linear-gradient(135deg,#14532d 0%,#052e16 100%)', accent: '#fbbf24', tag: 'MMORPG', initials: 'T' },
   priston:  { grad: 'linear-gradient(135deg,#0e7490 0%,#082530 100%)', accent: '#22d3ee', tag: 'Tale', initials: 'PT' },
@@ -78,8 +85,8 @@ const theme = (g: string): Theme => THEMES[gameId(g)] || FALLBACK;
 // Frases amigáveis (substituem a descrição técnica do servidor no hero).
 const BLURBS: Record<string, string> = {
   rakion:  'Ação 3D em arenas frenéticas. Escolha seu mercenário e domine a batalha.',
-  openmu:  'O MMORPG de ação clássico. Evolua seu herói, cace e enfrente chefes épicos.',
-  muemu:   'O MMORPG de ação clássico. Evolua seu herói, cace e enfrente chefes épicos.',
+  openmu:  '97D e Season 2+ no mesmo client — escolha o mundo 97D ou o servidor 99.',
+  muemu:   '97D e Season 2+ no mesmo client — escolha o mundo 97D ou o servidor 99.',
   metin2:  'MMORPG de ação oriental com três reinos em guerra constante.',
   tibia:   'Aventure-se em um mundo de fantasia medieval: escolha sua vocação (cavaleiro, paladino, druida ou mago) e enfrente monstros, explore masmorras, complete quests épicas e domine o combate por turnos com magias e feitiços.',
   priston: 'MMORPG isométrico clássico, com caçadas intensas e bosses lendários.',
@@ -97,13 +104,30 @@ function ph(game: string, name: string, desc: string): Card {
 }
 // Próximos jogos da LuxView Cloud (cinza até ter servidor deployado + listado).
 const PLACEHOLDERS: Card[] = [
-  ph('openmu', 'Mu Online', 'MMORPG de ação clássico (OpenMU). Em breve na LuxView Cloud.'),
+  ph('openmu', 'Mu Online', '97D + Season 2+ no mesmo client. Em breve na LuxView Cloud.'),
   ph('metin2', 'Metin2', 'MMORPG de ação oriental. Em breve na LuxView Cloud.'),
-  ph('priston', 'Priston Tale', 'MMORPG isométrico clássico. Em breve na LuxView Cloud.'),
 ];
+
+type CommunityPost = {
+  id: string; app_id: string; game: string; game_name: string; display_name: string;
+  title: string; body: string; created_at: string;
+};
+type CommunityMessage = { id: string; username: string; body: string; created_at: string };
+type CommunityGame = {
+  app_id: string; game: string; name: string; display_name: string;
+  players: number; max_players: number;
+};
+type Snapshot = {
+  players_online: number; chat_online: number;
+  games: CommunityGame[]; posts: CommunityPost[]; chat: CommunityMessage[];
+};
 
 let games: Card[] = [];
 let selected = 0;
+let communityOpen = false;
+let community: Snapshot | null = null;
+let communityTimer: number | undefined;
+let communitySending = false;
 let installing = false;
 let online = false;
 let version = '';
@@ -169,10 +193,15 @@ async function load() {
 
 function applyCatalog(real: Card[], pickDefault: boolean) {
   online = true;
+  const keepCommunity = !pickDefault && communityOpen;
   const keepID = !pickDefault && games[selected] ? games[selected].app_id : '';
   const have = new Set(real.map((r) => r.game));
   games = [...real, ...PLACEHOLDERS.filter((p) => !have.has(p.game))];
   if (games.length === 0) games = [...PLACEHOLDERS];
+  if (keepCommunity) {
+    communityOpen = true;
+    return;
+  }
   const kept = keepID ? games.findIndex((g) => g.app_id === keepID) : -1;
   if (kept >= 0) {
     selected = kept;
@@ -212,11 +241,49 @@ async function refreshPlayer() {
   paintStatus();
 }
 
+function fmtPoints(n: number) {
+  return new Intl.NumberFormat('pt-BR').format(n ?? 0);
+}
+
+function iconCoin() {
+  return `<svg class="acct-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.2" fill="#f59e0b"/><circle cx="12" cy="12" r="7.1" fill="#fbbf24"/><circle cx="12" cy="12" r="5.2" fill="none" stroke="#92400e" stroke-width="1.3"/><path d="M12 8.2v7.6M10.1 9.6c.5-.5 1.2-.8 1.9-.8 1.4 0 2.2.8 2.2 1.8 0 2.4-4.2 1.3-4.2 3.4 0 1 .9 1.8 2.2 1.8.8 0 1.5-.3 2-.8" fill="none" stroke="#78350f" stroke-width="1.35" stroke-linecap="round"/></svg>`;
+}
+
+function iconGem() {
+  return `<svg class="acct-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.4 4.6 9.2 12 20.6 19.4 9.2Z" fill="#a78bfa"/><path d="M12 3.4 8.2 9.2h7.6Z" fill="#c4b5fd"/><path d="M4.6 9.2h14.8L12 20.6Z" fill="#7c3aed"/><path d="M8.2 9.2 12 20.6 15.8 9.2Z" fill="#8b5cf6"/></svg>`;
+}
+
 function openPlayerAccount() {
   if (player) {
+    const initial = (player.username.trim()[0] || '?').toUpperCase();
     showModal(`
       <h3>Conta LuxView</h3>
-      <p class="modal-hint">${esc(player.username)} · cash ${player.cash_points} · prêmios ${player.reward_points}</p>
+      <div class="acct-panel">
+        <div class="acct-profile">
+          <div class="acct-avatar">${esc(initial)}</div>
+          <div class="acct-who">
+            <b>${esc(player.username)}</b>
+            <span>Jogador</span>
+          </div>
+        </div>
+        <div class="acct-wallet">
+          <div class="acct-bal cash">
+            <span class="acct-ico">${iconCoin()}</span>
+            <div class="acct-amt">
+              <span>Cash</span>
+              <b id="acctCash">${fmtPoints(player.cash_points)}</b>
+            </div>
+          </div>
+          <div class="acct-bal prize">
+            <span class="acct-ico">${iconGem()}</span>
+            <div class="acct-amt">
+              <span>Prêmios</span>
+              <b id="acctPrize">${fmtPoints(player.reward_points)}</b>
+            </div>
+          </div>
+        </div>
+        <div class="acct-shop" id="acctShop"><p class="acct-shop-empty">Carregando loja…</p></div>
+      </div>
       <div class="modal-actions">
         <button class="btn" id="acctOut">Sair</button>
         <button class="btn primary" id="acctOk">Ok</button>
@@ -228,7 +295,10 @@ function openPlayerAccount() {
       player = null;
       closeModal();
       paintStatus();
+      paintFooter();
+      if (communityOpen) paintHero();
     };
+    void fillAccountShop();
     return;
   }
   showModal(`
@@ -251,6 +321,8 @@ function openPlayerAccount() {
       player = { username: me.username, cash_points: me.cash_points, reward_points: me.reward_points };
       closeModal();
       paintStatus();
+      paintFooter();
+      if (communityOpen) void refreshCommunity();
       toast('Conta conectada.');
     } catch (e) {
       errEl.textContent = String(e).replace(/^Error:\s*/, '');
@@ -258,6 +330,62 @@ function openPlayerAccount() {
   };
   document.getElementById('pGo')!.onclick = () => apply(PlayerLogin);
   document.getElementById('pReg')!.onclick = () => apply(PlayerRegister);
+}
+
+async function fillAccountShop() {
+  const box = document.getElementById('acctShop');
+  if (!box) return;
+  const g = games[selected];
+  if (!g) {
+    box.innerHTML = `<p class="acct-shop-empty">Nenhum servidor no catálogo.</p>`;
+    return;
+  }
+  try {
+    const items = await ShopCatalog(g.game);
+    if (!items.length) {
+      box.innerHTML = `<p class="acct-shop-empty">A loja do ${esc(g.display_name || g.game)} ainda não entrega itens neste servidor.</p>`;
+      return;
+    }
+    box.innerHTML = `
+      <div class="acct-shop-head">Loja · ${esc(g.display_name || g.game)}</div>
+      ${items.map((item) => `
+        <button class="acct-item" data-item="${esc(item.id)}" type="button">
+          <span class="acct-item-ico">${item.currency === 'reward' ? iconGem() : iconCoin()}</span>
+          <span class="acct-item-info">
+            <b>${esc(item.name)}</b>
+            <small>${esc(item.description)}</small>
+          </span>
+          <span class="acct-item-price">${fmtPoints(item.price)}</span>
+        </button>
+      `).join('')}
+      <div class="modal-err" id="acctShopErr"></div>
+    `;
+    box.querySelectorAll<HTMLButtonElement>('.acct-item').forEach((btn) => {
+      btn.onclick = async () => {
+        const errEl = document.getElementById('acctShopErr');
+        if (errEl) errEl.textContent = '';
+        btn.disabled = true;
+        try {
+          const result = await ShopBuy(g.app_id, btn.dataset.item || '');
+          if (player) {
+            player.cash_points = result.cash_points;
+            player.reward_points = result.reward_points;
+          }
+          const cashEl = document.getElementById('acctCash');
+          const prizeEl = document.getElementById('acctPrize');
+          if (cashEl) cashEl.textContent = fmtPoints(result.cash_points);
+          if (prizeEl) prizeEl.textContent = fmtPoints(result.reward_points);
+          toast(`${result.item.name} entregue no servidor.`);
+        } catch (e) {
+          if (errEl) errEl.textContent = String(e).replace(/^Error:\s*/, '');
+        } finally {
+          btn.disabled = false;
+        }
+      };
+    });
+  } catch (e) {
+    box.innerHTML = `<p class="acct-shop-empty">${esc(String(e).replace(/^Error:\s*/, ''))}</p>`;
+  }
 }
 
 function mount() {
@@ -362,19 +490,29 @@ async function applyUpdate() {
 function paintChips() {
   const strip = document.getElementById('strip');
   if (!strip) return;
-  strip.innerHTML = games.map((g, i) => chip(g, i)).join('');
+  strip.innerHTML = games.map((g, i) => chip(g, i)).join('') + communityChip();
   games.forEach((_, i) => {
     const el = document.getElementById('chip-' + i);
     if (!el) return;
     el.style.animationDelay = `${i * 70}ms`;
     el.addEventListener('click', () => {
-      if (installing || i === selected) return;
+      if (installing || (i === selected && !communityOpen)) return;
+      communityOpen = false;
+      stopCommunity();
       selected = i;
       document.querySelectorAll('.chip').forEach((c, j) => c.classList.toggle('selected', j === selected));
       paintHero();
       paintFooter();
     });
   });
+  const comm = document.getElementById('chip-community');
+  if (comm) {
+    comm.style.animationDelay = `${games.length * 70}ms`;
+    comm.addEventListener('click', () => {
+      if (installing || communityOpen) return;
+      openCommunity();
+    });
+  }
   requestAnimationFrame(() => requestAnimationFrame(updateCarousel));
 }
 
@@ -409,7 +547,7 @@ function chip(g: Card, i: number): string {
   const id = cardGame(g);
   const t = theme(id);
   const cls = ['chip'];
-  if (i === selected) cls.push('selected');
+  if (i === selected && !communityOpen) cls.push('selected');
   if (!g.enabled) cls.push('disabled');
   const pill = !g.enabled
     ? `<span class="pill soon">em breve</span>`
@@ -431,9 +569,27 @@ function chip(g: Card, i: number): string {
     </div>`;
 }
 
+function communityChip(): string {
+  const cls = ['chip', 'community-chip'];
+  if (communityOpen) cls.push('selected');
+  return `
+    <div class="${cls.join(' ')}" id="chip-community">
+      <span class="pill on">live</span>
+      <div class="ico" style="background:linear-gradient(135deg,#b45309 0%,#1c1917 100%);box-shadow:0 0 16px #f59e0b66">⌂</div>
+      <div class="meta">
+        <div class="nm">Comunidade</div>
+        <div class="tg">Eventos & chat</div>
+      </div>
+    </div>`;
+}
+
 function paintHero() {
-  const g = games[selected];
   const host = document.getElementById('hero')!;
+  if (communityOpen) {
+    paintCommunity(host);
+    return;
+  }
+  const g = games[selected];
   if (!g) { host.innerHTML = '<div class="hero hero-empty">Conectando à LuxView Cloud…</div>'; return; }
   const id = cardGame(g);
   const t = theme(id);
@@ -454,6 +610,159 @@ function paintHero() {
     </div>`;
 }
 
+function openCommunity() {
+  communityOpen = true;
+  document.querySelectorAll('.chip').forEach((c) => c.classList.remove('selected'));
+  document.getElementById('chip-community')?.classList.add('selected');
+  paintHero();
+  paintFooter();
+  startCommunity();
+}
+
+function startCommunity() {
+  stopCommunity();
+  void refreshCommunity();
+  communityTimer = window.setInterval(() => { void refreshCommunity(); }, 3000);
+}
+
+function stopCommunity() {
+  if (communityTimer) {
+    clearInterval(communityTimer);
+    communityTimer = undefined;
+  }
+}
+
+async function refreshCommunity() {
+  if (!communityOpen) return;
+  try {
+    community = await CommunitySnapshot() as unknown as Snapshot;
+    if (player) {
+      try { await CommunityHere(); } catch { /* sessão expirada — o chat pede login */ }
+    }
+  } catch (e) {
+    if (!community) toast(String(e), true);
+  }
+  if (communityOpen) {
+    paintHero();
+    paintFooter();
+  }
+}
+
+let chatDraft = '';
+
+function gameLabel(game: string, fallback: string): string {
+  return NAMES[gameId(game)] || fallback || game;
+}
+
+function ago(raw: string): string {
+  const then = new Date(raw).getTime();
+  if (!Number.isFinite(then)) return '';
+  const min = Math.max(0, Math.floor((Date.now() - then) / 60_000));
+  if (min < 1) return 'agora';
+  if (min < 60) return `${min} min`;
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return `${hours} h`;
+  return `${Math.floor(hours / 24)} d`;
+}
+
+function paintCommunity(host: HTMLElement) {
+  const inputEl = document.getElementById('commInput') as HTMLInputElement | null;
+  if (inputEl) chatDraft = inputEl.value;
+  const keepFocus = document.activeElement === inputEl;
+  const chatEl = document.getElementById('commChat');
+  const stickBottom = chatEl ? chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 48 : true;
+
+  const snap = community;
+  const players = snap?.players_online ?? 0;
+  const chatting = snap?.chat_online ?? 0;
+  const gamesOnline = snap?.games || [];
+  const posts = snap?.posts || [];
+  const msgs = snap?.chat || [];
+
+  const perGame = gamesOnline.length
+    ? gamesOnline.map((g) => {
+        const cap = g.max_players > 0 ? `/${g.max_players}` : '';
+        return `<span class="comm-pill">${esc(gameLabel(g.game, g.display_name))} <b>${g.players}${cap}</b></span>`;
+      }).join('')
+    : `<span class="comm-muted">Nenhum servidor listado ainda.</span>`;
+
+  const feed = posts.length
+    ? posts.map((p) => `
+        <article class="comm-post">
+          <div class="comm-post-head">
+            <span class="comm-game">${esc(gameLabel(p.game, p.display_name || p.game_name))}</span>
+            <span class="comm-time">${esc(ago(p.created_at))}</span>
+          </div>
+          <h3>${esc(p.title)}</h3>
+          <p>${esc(p.body)}</p>
+        </article>`).join('')
+    : `<div class="comm-empty">Nenhum evento publicado ainda. Os donos dos servidores postam da aplicação do game no painel.</div>`;
+
+  const chat = msgs.length
+    ? msgs.map((m) => `
+        <div class="comm-msg ${player && m.username === player.username ? 'mine' : ''}">
+          <b>${esc(m.username)}</b>
+          <span>${esc(m.body)}</span>
+        </div>`).join('')
+    : `<div class="comm-empty">Seja o primeiro a falar.</div>`;
+
+  host.innerHTML = `
+    <div class="community">
+      <div class="comm-feed">
+        <div class="comm-stats">
+          <div class="comm-stat"><b>${players}</b> jogadores nos games</div>
+          <div class="comm-stat"><b>${chatting}</b> no chat</div>
+        </div>
+        <div class="comm-games">${perGame}</div>
+        <div class="comm-posts">${feed}</div>
+      </div>
+      <div class="comm-side">
+        <div class="comm-side-head">Chat global</div>
+        <div class="comm-chat" id="commChat">${chat}</div>
+        <form class="comm-compose" id="commForm">
+          <input id="commInput" type="text" maxlength="280" placeholder="${player ? 'Escreva uma mensagem…' : 'Entre na conta para conversar'}" ${player ? '' : 'disabled'} value="${esc(chatDraft)}">
+          <button type="submit" class="btn primary" ${player && !communitySending ? '' : 'disabled'}>Enviar</button>
+        </form>
+      </div>
+    </div>`;
+
+  const form = document.getElementById('commForm') as HTMLFormElement | null;
+  form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    void sendCommunity();
+  });
+  const nextChat = document.getElementById('commChat');
+  if (nextChat && stickBottom) nextChat.scrollTop = nextChat.scrollHeight;
+  const nextInput = document.getElementById('commInput') as HTMLInputElement | null;
+  if (keepFocus) nextInput?.focus();
+}
+
+async function sendCommunity() {
+  if (!player) {
+    openPlayerAccount();
+    return;
+  }
+  const input = document.getElementById('commInput') as HTMLInputElement | null;
+  const text = (input?.value || '').trim();
+  if (!text || communitySending) return;
+  communitySending = true;
+  paintFooter();
+  try {
+    const msg = await CommunitySend(text) as unknown as CommunityMessage;
+    chatDraft = '';
+    if (community) community.chat = [...(community.chat || []), msg];
+    if (input) input.value = '';
+    paintHero();
+  } catch (e) {
+    const message = String(e).replace(/^Error:\s*/, '');
+    if (message.includes('entre na conta LuxView')) openPlayerAccount();
+    toast(message, true);
+  } finally {
+    communitySending = false;
+    paintFooter();
+  }
+}
+
 function paintFooter() {
   const g = games[selected];
   const id = g ? cardGame(g) : '';
@@ -462,6 +771,17 @@ function paintFooter() {
   const fill = document.getElementById('pbar') as HTMLElement | null;
   const actions = document.getElementById('actions');
   if (!line || !bar || !fill || !actions) return;
+  if (communityOpen) {
+    line.textContent = player
+      ? 'Chat aberto com quem estiver online no launcher.'
+      : 'Entre na conta LuxView para conversar com a comunidade.';
+    if (!installing) { bar.classList.remove('active', 'indet'); fill.style.width = '0%'; }
+    actions.innerHTML = player
+      ? `<button class="btn" id="acctFromComm">Conta: ${esc(player.username)}</button>`
+      : `<button class="btn primary" id="acctFromComm">Entrar para conversar</button>`;
+    document.getElementById('acctFromComm')?.addEventListener('click', openPlayerAccount);
+    return;
+  }
   line.textContent = footerLine(g);
   if (!installing) { bar.classList.remove('active', 'indet'); fill.style.width = '0%'; }
   actions.innerHTML = `

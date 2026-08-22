@@ -36,7 +36,16 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
     try {
       const cfg = await gameServersApi.getConfig(appId);
       setConfig(cfg);
-      setFields(cfg.configFields ?? {});
+      const next = { ...(cfg.configFields ?? {}) };
+      for (const field of cfg.template?.configFields ?? []) {
+        if (field.type !== 'number' && field.type !== 'text') {
+          continue;
+        }
+        if ((next[field.key] === undefined || next[field.key] === '') && field.placeholder) {
+          next[field.key] = field.placeholder;
+        }
+      }
+      setFields(next);
     } catch {
       addNotification({ type: 'error', title: 'Falha ao carregar configuração do servidor' });
     } finally {
@@ -333,6 +342,11 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
                   className={inputClass}
                 />
               )}
+              {fieldDef.hint && (
+                <p className={`mt-1 text-[11px] leading-snug ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                  {fieldDef.hint}
+                </p>
+              )}
             </div>
           ))}
         </div>
@@ -392,9 +406,16 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
                       }`}>
                         {player.name.charAt(0).toUpperCase()}
                       </div>
-                      <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
-                        {player.name}
-                      </span>
+                      <div>
+                        <span className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                          {player.character || player.name}
+                        </span>
+                        {(player.class || player.location) && (
+                          <div className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                            {[player.class, player.location].filter(Boolean).join(' · ')}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-3">
                       {player.score > 0 && (

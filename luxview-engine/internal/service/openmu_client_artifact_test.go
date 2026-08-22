@@ -46,6 +46,22 @@ func TestWriteOpenMUClientZipReplacesLauncherConfig(t *testing.T) {
 	assertContains(t, got["launcher.config"], "<Port>44405</Port>")
 }
 
+func TestWriteOpenMUClientPatchContainsOnlyLauncherConfig(t *testing.T) {
+	var out bytes.Buffer
+	if err := WriteOpenMUClientPatch(&out, OpenMUClientOptions{
+		ServerName: "Aida MU",
+		ServerIP:   "187.77.227.65",
+		GamePort:   44405,
+	}); err != nil {
+		t.Fatalf("patch: %v", err)
+	}
+	got := readZipEntries(t, out.Bytes())
+	if len(got) != 1 {
+		t.Fatalf("patch entries = %v", got)
+	}
+	assertContains(t, got["launcher.config"], "<Address>187.77.227.65</Address>")
+}
+
 func addZipEntry(t *testing.T, zw *zip.Writer, name string, content string) {
 	t.Helper()
 	w, err := zw.Create(name)

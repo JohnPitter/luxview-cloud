@@ -17,6 +17,9 @@ func TestLoadUsesRepoOpenMUClientAssetsPathByDefault(t *testing.T) {
 	if cfg.OpenMUClientBaseZipPath != "/data/luxview/storage/_global/openmu-assets/openmu-s6-base.zip" {
 		t.Fatalf("OpenMUClientBaseZipPath = %q", cfg.OpenMUClientBaseZipPath)
 	}
+	if cfg.MuEmuClientBaseZipPath != "/data/luxview/storage/_global/muemu-assets/mu-97d-s2-base.zip" {
+		t.Fatalf("MuEmuClientBaseZipPath = %q", cfg.MuEmuClientBaseZipPath)
+	}
 	if cfg.Metin2LegacyClientBaseZipPath != "/data/luxview/storage/_global/metin2-legacy-assets/metin2-legacy-client-base.zip" {
 		t.Fatalf("Metin2LegacyClientBaseZipPath = %q", cfg.Metin2LegacyClientBaseZipPath)
 	}

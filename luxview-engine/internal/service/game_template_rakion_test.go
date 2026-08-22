@@ -47,4 +47,14 @@ func TestRakionTemplateRegistered(t *testing.T) {
 			t.Error("mysql volume must not stay on the game container")
 		}
 	}
+
+	var hasExp bool
+	for _, field := range tmpl.ConfigFields {
+		if field.Key == "RAKION_EXP_SCALE" {
+			hasExp = true
+		}
+	}
+	if !hasExp {
+		t.Error("missing RAKION_EXP_SCALE")
+	}
 }

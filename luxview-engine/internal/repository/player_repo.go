@@ -91,6 +91,31 @@ func (r *PlayerRepo) ListLinks(ctx context.Context, playerID uuid.UUID) ([]model
 	return out, rows.Err()
 }
 
+func (r *PlayerRepo) FindLink(ctx context.Context, playerID, appID uuid.UUID) (*model.PlayerGameLink, error) {
+	var l model.PlayerGameLink
+	err := r.db.Pool.QueryRow(ctx,
+		`SELECT id, player_id, app_id, template_id, in_game_nick, created_at
+		 FROM player_game_links WHERE player_id = $1 AND app_id = $2`,
+		playerID, appID,
+	).Scan(&l.ID, &l.PlayerID, &l.AppID, &l.TemplateID, &l.InGameNick, &l.CreatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("player link: %w", err)
+	}
+	return &l, nil
+}
+
+func (r *PlayerRepo) CreateOrder(ctx context.Context, order *model.ShopOrder) error {
+	return r.db.Pool.QueryRow(ctx,
+		`INSERT INTO player_shop_orders (player_id, app_id, item_id, currency, price, status)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 RETURNING id, created_at`,
+		order.PlayerID, order.AppID, order.ItemID, order.Currency, order.Price, order.Status,
+	).Scan(&order.ID, &order.CreatedAt)
+}
+
 func (r *PlayerRepo) AppendLedger(ctx context.Context, playerID uuid.UUID, kind model.LedgerKind, delta int64, reason string) (*model.PlayerAccount, error) {
 	tx, err := r.db.Pool.Begin(ctx)
 	if err != nil {

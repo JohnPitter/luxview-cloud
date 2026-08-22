@@ -46,6 +46,15 @@ func buildMounts(subdomain string, cfg *model.GameServerConfig) []mount.Mount {
 	if len(cfg.Volumes) > 0 {
 		mounts := make([]mount.Mount, 0, len(cfg.Volumes))
 		for _, v := range cfg.Volumes {
+			if strings.TrimSpace(v.HostPath) != "" {
+				mounts = append(mounts, mount.Mount{
+					Type:     mount.TypeBind,
+					Source:   v.HostPath,
+					Target:   v.MountPath,
+					ReadOnly: v.MountPath == "/client",
+				})
+				continue
+			}
 			mounts = append(mounts, mount.Mount{
 				Type:   mount.TypeVolume,
 				Source: v.Name,
@@ -217,7 +226,120 @@ func gameEnv(cfg *model.GameServerConfig, publicIP string) []string {
 	if publicIP != "" {
 		envList = append(envList, "LUXVIEW_PUBLIC_IP="+publicIP)
 	}
+	if cfg.GamePort > 0 {
+		envList = append(envList, fmt.Sprintf("LUXVIEW_GAME_PORT=%d", cfg.GamePort))
+	}
 	return envList
+}
+
+// LiveStatus reports whether the game is up and an estimated player count.
+// Templates with A2S use the query protocol; the others count established TCP
+// connections on the in-game ports (Wine/legacy emulators have no A2S).
+func (s *GameServerService) LiveStatus(ctx context.Context, app *model.App, cfg *model.GameServerConfig) *model.GameServerStatus {
+	status := &model.GameServerStatus{Running: app != nil && app.Status == model.AppStatusRunning}
+	if app == nil || cfg == nil || !status.Running {
+		return status
+	}
+	tmpl := Template(cfg.TemplateID)
+	if tmpl != nil && tmpl.SupportsQuery {
+		got, err := s.QueryStatus(ctx, cfg, ContainerName(app.Subdomain))
+		if err == nil && got != nil {
+			return got
+		}
+	}
+	status.MaxPlayers = advertisedMaxPlayers(cfg)
+	ports := estimateGamePorts(cfg)
+	if len(ports) == 0 {
+		return status
+	}
+	if n, err := s.CountConnections(ctx, ContainerName(app.Subdomain), ports); err == nil {
+		status.Players = n
+	}
+	return status
+}
+
+func advertisedMaxPlayers(cfg *model.GameServerConfig) int {
+	if cfg == nil || cfg.ConfigFields == nil {
+		return 0
+	}
+	keys := []string{"OPENMU_MAX_CONNECTIONS", "TIBIA_MAX_PLAYERS"}
+	for _, key := range keys {
+		if v := strings.TrimSpace(cfg.ConfigFields[key]); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				return n
+			}
+		}
+	}
+	return 0
+}
+
+func estimateGamePorts(cfg *model.GameServerConfig) map[int]bool {
+	ports := map[int]bool{}
+	if cfg == nil {
+		return ports
+	}
+	switch cfg.TemplateID {
+	case "openmu", "muemu":
+		if cfg.QueryPort > 0 {
+			ports[cfg.QueryPort] = true
+		}
+		for _, ep := range cfg.ExtraPorts {
+			if strings.Contains(strings.ToLower(ep.Label), "gameserver") {
+				ports[ep.Port] = true
+			}
+		}
+	case "tibia":
+		if cfg.GamePort > 0 {
+			ports[cfg.GamePort] = true
+		}
+	case "rakion":
+		if cfg.GamePort > 0 {
+			ports[cfg.GamePort] = true
+		}
+		if cfg.QueryPort > 0 {
+			ports[cfg.QueryPort] = true
+		}
+	case "metin2":
+		if cfg.QueryPort > 0 {
+			ports[cfg.QueryPort] = true
+		}
+		n := 1
+		if v := strings.TrimSpace(cfg.ConfigFields["METIN_CORE_COUNT"]); v != "" {
+			if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+				n = parsed
+			}
+		}
+		for _, ep := range cfg.ExtraPorts {
+			if !strings.EqualFold(ep.Protocol, "tcp") {
+				continue
+			}
+			switch ep.Port {
+			case 13002:
+				if n >= 2 {
+					ports[ep.Port] = true
+				}
+			case 13003:
+				if n >= 3 {
+					ports[ep.Port] = true
+				}
+			case 13004:
+				if n >= 4 {
+					ports[ep.Port] = true
+				}
+			case 13099:
+				if n >= 2 {
+					ports[ep.Port] = true
+				}
+			default:
+				ports[ep.Port] = true
+			}
+		}
+	default:
+		if cfg.GamePort > 0 {
+			ports[cfg.GamePort] = true
+		}
+	}
+	return ports
 }
 
 // QueryStatus queries live player count via the A2S Steam protocol.
@@ -237,9 +359,15 @@ func (s *GameServerService) QueryStatus(ctx context.Context, cfg *model.GameServ
 	}, nil
 }
 
-// QueryPlayers returns the list of connected players via the A2S_PLAYER protocol.
+// QueryPlayers lists who is online. MMORPG templates read the game DB (character,
+// class, map); Steam/A2S is the fallback for games that expose that protocol.
 func (s *GameServerService) QueryPlayers(ctx context.Context, cfg *model.GameServerConfig, serverIP string) ([]model.PlayerInfo, error) {
-	if cfg.QueryPort == 0 {
+	if cfg != nil {
+		if players, err := s.queryGamePlayers(ctx, cfg, serverIP); err == nil {
+			return players, nil
+		}
+	}
+	if cfg == nil || cfg.QueryPort == 0 {
 		return nil, fmt.Errorf("query port not configured")
 	}
 	addr := net.JoinHostPort(serverIP, strconv.Itoa(cfg.QueryPort))
@@ -282,7 +410,7 @@ func (s *GameServerService) CountConnections(ctx context.Context, containerNameO
 
 // GetTemplates returns all available game server templates.
 func Templates() []model.GameTemplate {
-	return []model.GameTemplate{vrisingTemplate(), openmuTemplate(), muemuTemplate(), rakionTemplate(), metin2Template(), tibiaTemplate()}
+	return []model.GameTemplate{vrisingTemplate(), openmuTemplate(), muemuTemplate(), rakionTemplate(), metin2Template(), tibiaTemplate(), pristonTemplate()}
 }
 
 func Template(id string) *model.GameTemplate {

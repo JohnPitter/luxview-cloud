@@ -1,5 +1,147 @@
 export namespace main {
 	
+	export class CommunityGamePlayers {
+	    app_id: string;
+	    game: string;
+	    name: string;
+	    display_name: string;
+	    players: number;
+	    max_players: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CommunityGamePlayers(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.app_id = source["app_id"];
+	        this.game = source["game"];
+	        this.name = source["name"];
+	        this.display_name = source["display_name"];
+	        this.players = source["players"];
+	        this.max_players = source["max_players"];
+	    }
+	}
+	export class CommunityMessage {
+	    id: string;
+	    username: string;
+	    body: string;
+	    // Go type: time
+	    created_at: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new CommunityMessage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.username = source["username"];
+	        this.body = source["body"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CommunityPost {
+	    id: string;
+	    app_id: string;
+	    game: string;
+	    game_name: string;
+	    display_name: string;
+	    title: string;
+	    body: string;
+	    // Go type: time
+	    created_at: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new CommunityPost(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.app_id = source["app_id"];
+	        this.game = source["game"];
+	        this.game_name = source["game_name"];
+	        this.display_name = source["display_name"];
+	        this.title = source["title"];
+	        this.body = source["body"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CommunitySnapshot {
+	    players_online: number;
+	    chat_online: number;
+	    games: CommunityGamePlayers[];
+	    posts: CommunityPost[];
+	    chat: CommunityMessage[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CommunitySnapshot(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.players_online = source["players_online"];
+	        this.chat_online = source["chat_online"];
+	        this.games = this.convertValues(source["games"], CommunityGamePlayers);
+	        this.posts = this.convertValues(source["posts"], CommunityPost);
+	        this.chat = this.convertValues(source["chat"], CommunityMessage);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class GameCard {
 	    app_id: string;
 	    name: string;
@@ -8,9 +150,12 @@ export namespace main {
 	    description: string;
 	    enabled: boolean;
 	    download_url: string;
+	    patch_url: string;
+	    base_url: string;
 	    server_ip: string;
 	    auth_host: string;
 	    client_hash: string;
+	    base_hash: string;
 	    installed: boolean;
 	    update_available: boolean;
 	
@@ -27,9 +172,12 @@ export namespace main {
 	        this.description = source["description"];
 	        this.enabled = source["enabled"];
 	        this.download_url = source["download_url"];
+	        this.patch_url = source["patch_url"];
+	        this.base_url = source["base_url"];
 	        this.server_ip = source["server_ip"];
 	        this.auth_host = source["auth_host"];
 	        this.client_hash = source["client_hash"];
+	        this.base_hash = source["base_hash"];
 	        this.installed = source["installed"];
 	        this.update_available = source["update_available"];
 	    }
@@ -144,11 +292,91 @@ export namespace main {
 	        this.shadow_level = source["shadow_level"];
 	    }
 	}
+	export class PlayerSession {
+	    token: string;
+	    username: string;
+	    cash_points: number;
+	    reward_points: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PlayerSession(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.token = source["token"];
+	        this.username = source["username"];
+	        this.cash_points = source["cash_points"];
+	        this.reward_points = source["reward_points"];
+	    }
+	}
+	export class ShopItem {
+	    id: string;
+	    name: string;
+	    description: string;
+	    template_id: string;
+	    currency: string;
+	    price: number;
+	    grant: string;
+	    amount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShopItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.template_id = source["template_id"];
+	        this.currency = source["currency"];
+	        this.price = source["price"];
+	        this.grant = source["grant"];
+	        this.amount = source["amount"];
+	    }
+	}
+	export class ShopBuyResult {
+	    item: ShopItem;
+	    cash_points: number;
+	    reward_points: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShopBuyResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.item = this.convertValues(source["item"], ShopItem);
+	        this.cash_points = source["cash_points"];
+	        this.reward_points = source["reward_points"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class UpdateInfo {
 	    available: boolean;
 	    current: string;
 	    version: string;
 	    url: string;
+	    sha256: string;
 	    notes: string;
 	
 	    static createFrom(source: any = {}) {
@@ -161,26 +389,8 @@ export namespace main {
 	        this.current = source["current"];
 	        this.version = source["version"];
 	        this.url = source["url"];
-	    this.notes = source["notes"];
-	    }
-	}
-
-	export class PlayerSession {
-	    token: string;
-	    username: string;
-	    cash_points: number;
-	    reward_points: number;
-
-	    static createFrom(source: any = {}) {
-	        return new PlayerSession(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.token = source["token"];
-	        this.username = source["username"];
-	        this.cash_points = source["cash_points"];
-	        this.reward_points = source["reward_points"];
+	        this.sha256 = source["sha256"];
+	        this.notes = source["notes"];
 	    }
 	}
 

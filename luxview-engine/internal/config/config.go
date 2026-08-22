@@ -78,9 +78,11 @@ type Config struct {
 	AcmeStorePath string // Path to Traefik acme.json (read-only mount), used for cert status
 
 	OpenMUClientBaseZipPath       string // Base Season 6 client zip used to generate configured downloads
+	MuEmuClientBaseZipPath        string // Base 97D + Season 2+ client zip used to generate configured downloads
 	RakionClientBaseZipPath       string // Base Rakion client zip used to generate configured downloads
 	Metin2LegacyClientBaseZipPath string // Base legacy Metin2 client zip used to generate configured downloads
 	TibiaClientBaseZipPath        string // Base OTClient zip used to generate configured downloads
+	PristonClientBaseZipPath      string // Base Priston Tale 4420 client zip used to generate configured downloads
 
 	LauncherReleaseRepo string // GitHub "owner/name" whose Releases publish the launcher .exe
 	LauncherAssetName   string // Release asset filename for the launcher (e.g. luxview-launcher.exe)
@@ -169,9 +171,11 @@ func Load() (*Config, error) {
 		AcmeStorePath: envStr("ACME_STORE_PATH", "/letsencrypt/acme.json"),
 
 		OpenMUClientBaseZipPath:       envStr("OPENMU_CLIENT_BASE_ZIP", "/data/luxview/storage/_global/openmu-assets/openmu-s6-base.zip"),
+		MuEmuClientBaseZipPath:        envStr("MUEMU_CLIENT_BASE_ZIP", "/data/luxview/storage/_global/muemu-assets/mu-97d-s2-base.zip"),
 		RakionClientBaseZipPath:       envStr("RAKION_CLIENT_BASE_ZIP", "/data/luxview/storage/_global/rakion-assets/rakion-client-base.zip"),
 		Metin2LegacyClientBaseZipPath: envStr("METIN2_LEGACY_CLIENT_BASE_ZIP", "/data/luxview/storage/_global/metin2-legacy-assets/metin2-legacy-client-base.zip"),
 		TibiaClientBaseZipPath:        envStr("TIBIA_CLIENT_BASE_ZIP", "/data/luxview/storage/_global/tibia-assets/tibia-client-base.zip"),
+		PristonClientBaseZipPath:      envStr("PRISTON_CLIENT_BASE_ZIP", "/data/luxview/storage/_global/priston-assets/priston-4420-base.zip"),
 
 		LauncherReleaseRepo: envStr("LAUNCHER_RELEASE_REPO", "JohnPitter/luxview-cloud"),
 		LauncherAssetName:   envStr("LAUNCHER_ASSET_NAME", "luxview-launcher.exe"),

@@ -13,6 +13,7 @@ export interface ConfigFieldDef {
   type: 'text' | 'password' | 'number' | 'select' | 'global_file';
   options?: ConfigFieldOption[];
   placeholder?: string;
+  hint?: string;
   section?: string;
 }
 
@@ -45,8 +46,13 @@ export interface GameServerStatus {
 
 export interface PlayerInfo {
   name: string;
+  character?: string;
+  class?: string;
+  location?: string;
+  account?: string;
+  level?: number;
   score: number;
-  duration: number; // seconds
+  duration: number;
 }
 
 export const gameServersApi = {

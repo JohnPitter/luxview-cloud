@@ -51,6 +51,19 @@ func TestGameAccountSQLMetin(t *testing.T) {
 	}
 }
 
+func TestGameAccountSQLPriston(t *testing.T) {
+	info, sql, err := gameAccountSQL("priston", "testando", "Secret99", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Login != "testando" {
+		t.Fatalf("login %s", info.Login)
+	}
+	if sql != "" {
+		t.Fatalf("priston must not emit SQL, got %q", sql)
+	}
+}
+
 func TestGameAccountSQLRakion(t *testing.T) {
 	info, sql, err := gameAccountSQL("rakion", "testando", "Secret99", "", "")
 	if err != nil {

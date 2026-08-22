@@ -12,8 +12,9 @@ const (
 )
 
 type GameVolume struct {
-	Name      string `json:"name"`       // Docker volume name
-	MountPath string `json:"mount_path"` // container path
+	Name      string `json:"name"`                // Docker volume name
+	MountPath string `json:"mount_path"`          // container path
+	HostPath  string `json:"host_path,omitempty"` // if set, bind-mount this host directory instead of a named volume
 }
 
 type ExtraPort struct {
@@ -46,9 +47,14 @@ type GameServerStatus struct {
 }
 
 type PlayerInfo struct {
-	Name     string  `json:"name"`
-	Score    int     `json:"score"`
-	Duration float64 `json:"duration"` // seconds connected
+	Name      string  `json:"name"`
+	Character string  `json:"character,omitempty"`
+	Class     string  `json:"class,omitempty"`
+	Location  string  `json:"location,omitempty"`
+	Account   string  `json:"account,omitempty"`
+	Level     int     `json:"level,omitempty"`
+	Score     int     `json:"score,omitempty"`
+	Duration  float64 `json:"duration,omitempty"`
 }
 
 type SelectOptionDef struct {
@@ -56,14 +62,15 @@ type SelectOptionDef struct {
 	Label string `json:"label"`
 }
 
-type ConfigFieldDef struct {
-	Key         string            `json:"key"`
-	Label       string            `json:"label"`
-	Type        string            `json:"type"` // "text", "password", "number", "select", "global_file"
-	Options     []SelectOptionDef `json:"options,omitempty"`
-	Placeholder string            `json:"placeholder,omitempty"`
-	Section     string            `json:"section,omitempty"`
-}
+	type ConfigFieldDef struct {
+		Key         string            `json:"key"`
+		Label       string            `json:"label"`
+		Type        string            `json:"type"` // "text", "password", "number", "select", "global_file"
+		Options     []SelectOptionDef `json:"options,omitempty"`
+		Placeholder string            `json:"placeholder,omitempty"`
+		Hint        string            `json:"hint,omitempty"`
+		Section     string            `json:"section,omitempty"`
+	}
 
 type GameTemplate struct {
 	ID                string           `json:"id"`

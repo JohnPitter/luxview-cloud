@@ -59,6 +59,12 @@ func (p *Player) Register(ctx context.Context, username, password string) (*mode
 	if err := p.repo.Create(ctx, acct); err != nil {
 		return nil, err
 	}
+	if credited, err := p.repo.AppendLedger(ctx, acct.ID, model.LedgerCash, welcomeCash, "welcome"); err == nil {
+		acct = credited
+	}
+	if credited, err := p.repo.AppendLedger(ctx, acct.ID, model.LedgerReward, welcomeReward, "welcome"); err == nil {
+		acct = credited
+	}
 	return acct, nil
 }
 
@@ -69,6 +75,17 @@ func (p *Player) Login(ctx context.Context, username, password string) (*model.P
 	}
 	if acct == nil || bcrypt.CompareHashAndPassword([]byte(acct.PasswordHash), []byte(password)) != nil {
 		return nil, fmt.Errorf("usuário ou senha incorretos")
+	}
+	return acct, nil
+}
+
+func (p *Player) FindByUsername(ctx context.Context, username string) (*model.PlayerAccount, error) {
+	acct, err := p.repo.FindByUsername(ctx, strings.TrimSpace(username))
+	if err != nil {
+		return nil, err
+	}
+	if acct == nil {
+		return nil, fmt.Errorf("jogador não encontrado")
 	}
 	return acct, nil
 }

@@ -30,6 +30,10 @@ func rakionTemplate() model.GameTemplate {
 		DBService:     model.ServiceMySQL,
 		SupportsQuery: false,
 		ConfigFields: []model.ConfigFieldDef{
+			{Key: "RAKION_SERVER_NAME", Label: "Nome do Servidor", Type: "text", Placeholder: "LuxView Rakion", Section: "Servidor"},
+			{Key: "RAKION_EXP_SCALE", Label: "Experiência (×)", Type: "number", Placeholder: "18", Section: "Taxas", Hint: "fEXP_SCALE do WorldServer v258. Oficial ~1; PSs usam 18–50. O binário rejeita valores extremos (Wrong Game Point)."},
+			{Key: "RAKION_GOLD_SCALE", Label: "Gold (×)", Type: "number", Placeholder: "18", Section: "Taxas", Hint: "fMONEY_DROP_SCALE. Mesmo cap do EXP no WorldServer original."},
+			{Key: "RAKION_ITEM_DROP_SCALE", Label: "Drop de itens (×)", Type: "number", Placeholder: "60", Section: "Taxas", Hint: "fITEM_DROP_SCALE. Oficial baixo; 60 é o valor comum nos files v258."},
 			{Key: model.GameClientGlobalFileField, Label: "Arquivo do client no armazenamento global", Type: model.ConfigFieldTypeGlobalFile, Placeholder: "rakion-assets/rakion-client-base.zip", Section: "Launcher"},
 			{Key: "LUXVIEW_LISTED", Label: "Exibir no launcher LuxView", Type: "select", Options: sel("true", "Sim", "false", "Não"), Section: "Launcher"},
 			{Key: "RAKION_ADMIN_PASS", Label: "Senha do Painel Admin", Type: "password", Placeholder: "admin123", Section: "Avançado"},

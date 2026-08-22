@@ -57,6 +57,32 @@ func TestPatchLegacyMetin2RootDataSupportsS1llClientLayout(t *testing.T) {
 	}
 }
 
+func TestPatchLegacyMetin2RootDataSupportsPTBRClientLayout(t *testing.T) {
+	content := []byte("SERVER_NAME = \"Metin2\"\nSERVER_IP = \"127.000.000.001\"\nCH1_PORT = 13101\nMARKADDR = 13101\nAUTH_PORT = 11100\n")
+	originalLength := len(content)
+	patched, err := patchLegacyMetin2RootData(content, LegacyMetin2ClientOptions{
+		ServerIP:  "187.77.227.65",
+		AuthPort:  11000,
+		WorldPort: 13001,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(patched)
+	if strings.Contains(text, "127.000.000.001") {
+		t.Fatalf("placeholder IP still present: %s", text)
+	}
+	if !strings.Contains(text, `SERVER_IP = "187.0x4D.227.65"`) {
+		t.Fatalf("pt-BR root.data missing padded IP: %s", text)
+	}
+	if !strings.Contains(text, "CH1_PORT = 13001") || !strings.Contains(text, "AUTH_PORT = 11000") {
+		t.Fatalf("pt-BR root.data missing patched ports: %s", text)
+	}
+	if len(patched) != originalLength {
+		t.Fatalf("root.data length changed from %d to %d", originalLength, len(patched))
+	}
+}
+
 func TestWriteLegacyMetin2ClientZipPatchesRootAndLocale(t *testing.T) {
 	base := newZip(t, map[string]string{
 		"Metin2FullClient/pack/root.data":       "SERVER_IP = \"000.000.000.000\"\nCH1_PORT = 13101\nMARKADDR = 13101\nAUTH_PORT = 11100\n",

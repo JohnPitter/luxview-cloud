@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.66"
+var appVersion = "v1.69"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -58,9 +58,12 @@ type GameCard struct {
 	Description     string `json:"description"`
 	Enabled         bool   `json:"enabled"`
 	DownloadURL     string `json:"download_url"`
+	PatchURL        string `json:"patch_url"`
+	BaseURL         string `json:"base_url"`
 	ServerIP        string `json:"server_ip"`
 	AuthHost        string `json:"auth_host"`
 	ClientHash      string `json:"client_hash"`
+	BaseHash        string `json:"base_hash"`
 	Installed       bool   `json:"installed"`        // computed locally
 	UpdateAvailable bool   `json:"update_available"` // computed locally
 }
@@ -99,6 +102,11 @@ var launchSpecs = map[string]launchSpec{
 		clientDir:   "",
 		gameExe:     "otclient.exe",
 		processName: "otclient.exe",
+	},
+	"priston": {
+		clientDir:   "",
+		gameExe:     "game.exe",
+		processName: "game.exe",
 	},
 }
 
@@ -258,6 +266,9 @@ func (a *App) isInstalled(c GameCard) bool {
 }
 
 func clientFilesReady(installRoot, game string, spec launchSpec) bool {
+	if normalizeGameID(game) == "priston" {
+		return pristonExecutable(filepath.Join(installRoot, spec.clientDir)) != ""
+	}
 	for _, relativePath := range requiredClientFiles(game, spec) {
 		if _, err := os.Stat(filepath.Join(installRoot, spec.clientDir, relativePath)); err != nil {
 			return false
@@ -285,10 +296,10 @@ func (a *App) IsInstalled(appID, game string) bool {
 	return a.isInstalled(GameCard{AppID: appID, Game: game})
 }
 
-// InstallGame downloads the configured client zip and extracts it, emitting
-// "install:progress" events ({game, phase, percent}) so the UI can show a bar.
+// InstallGame downloads the client. After the first install, a matching base
+// hash downloads only the per-server overlay (P-02) instead of the whole zip.
 func (a *App) InstallGame(card GameCard) error {
-	if card.DownloadURL == "" {
+	if card.DownloadURL == "" && !usesSplitClient(card) {
 		return fmt.Errorf("este jogo não tem client para download")
 	}
 	dir, err := installDir(card.AppID)
@@ -302,58 +313,11 @@ func (a *App) InstallGame(card GameCard) error {
 		return err
 	}
 
-	a.progress(card.Game, "download", 0)
 	updating := a.isInstalled(card)
-	tmp, err := os.CreateTemp("", "luxview-*.zip")
-	if err != nil {
-		return err
+	if usesSplitClient(card) {
+		return a.installSplitClient(card, dir, updating)
 	}
-	tmpPath := tmp.Name()
-	tmp.Close()
-	defer os.Remove(tmpPath)
-
-	// Retry como rede de segurança (queda de conexão no meio do stream).
-	var dlErr error
-	for attempt := 1; attempt <= 3; attempt++ {
-		if dlErr = a.downloadZip(card, tmpPath); dlErr == nil {
-			break
-		}
-		if attempt < 3 {
-			a.progressMsg(card.Game, "download", -1, fmt.Sprintf("conexão caiu, tentando de novo (%d/3)…", attempt))
-			time.Sleep(2 * time.Second)
-		}
-	}
-	if dlErr != nil {
-		return fmt.Errorf("falha no download após 3 tentativas: %w", dlErr)
-	}
-
-	a.progress(card.Game, "extract", 0)
-	restoreSettings := a.backupGameSettings(card, updating)
-	if err := unzip(tmpPath, dir, func(done, count int) {
-		if count > 0 {
-			a.progress(card.Game, "extract", int(float64(done)/float64(count)*100))
-		}
-	}); err != nil {
-		if restoreSettings != nil {
-			restoreSettings()
-		}
-		return fmt.Errorf("falha ao extrair: %w", err)
-	}
-	if restoreSettings != nil {
-		restoreSettings()
-	}
-	game := normalizeGameID(card.Game)
-	if spec, ok := launchSpecForGame(game); ok && !clientFilesReady(dir, game, spec) {
-		return fmt.Errorf("client extraído incompleto — arquivos obrigatórios não encontrados")
-	}
-	if !updating {
-		a.applyDefaultDisplay(card)
-	}
-	if err := saveInstalledClientHash(card.AppID, card.ClientHash); err != nil {
-		return fmt.Errorf("client instalado, mas não gravei a versão local: %w", err)
-	}
-	a.progress(card.Game, "done", 100)
-	return nil
+	return a.installFullClient(card, dir, updating)
 }
 
 // applyDefaultDisplay makes a fresh install default to exclusive fullscreen at a
@@ -396,26 +360,7 @@ func (a *App) backupGameSettings(card GameCard, updating bool) func() {
 
 // downloadZip streams the client zip to path (one attempt), emitting progress.
 func (a *App) downloadZip(card GameCard, path string) error {
-	out, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	resp, err := a.dl.Get(card.DownloadURL)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-
-	pw := &progressWriter{a: a, game: card.Game, total: resp.ContentLength}
-	if _, err := io.Copy(out, io.TeeReader(resp.Body, pw)); err != nil {
-		return err
-	}
-	return nil
+	return a.downloadURL(card.Game, card.DownloadURL, path)
 }
 
 // Login authenticates against the game's web auth (replacing the original
@@ -535,6 +480,15 @@ func (a *App) Play(card GameCard, user, pass string) error {
 		return launchTibiaExecutable(exePath, clientDir)
 	}
 	if game == "metin2" {
+		return launchExecutable(exePath, clientDir)
+	}
+	if game == "priston" {
+		if resolved := pristonExecutable(clientDir); resolved != "" {
+			exePath = resolved
+		}
+		if err := patchPristonClient(clientDir, card); err != nil {
+			return err
+		}
 		return launchExecutable(exePath, clientDir)
 	}
 

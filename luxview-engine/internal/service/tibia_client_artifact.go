@@ -3,6 +3,7 @@ package service
 import (
 	"archive/zip"
 	"bytes"
+	"fmt"
 	"io"
 	"strings"
 )
@@ -86,6 +87,40 @@ func WriteTibiaClientZip(base io.ReaderAt, size int64, out io.Writer, opts Tibia
 		if err := copyZipFile(writer, file); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// WriteTibiaClientPatch writes only init.lua — the files the engine actually
+// rewrites. First install still uses the static base zip; later updates do not.
+func WriteTibiaClientPatch(base io.ReaderAt, size int64, out io.Writer, opts TibiaClientOptions) error {
+	if opts.LoginPort == 0 {
+		opts.LoginPort = 8088
+	}
+	if opts.ServerIP == "" {
+		opts.ServerIP = "127.0.0.1"
+	}
+
+	reader, err := zip.NewReader(base, size)
+	if err != nil {
+		return err
+	}
+
+	writer := zip.NewWriter(out)
+	defer writer.Close()
+
+	found := false
+	for _, file := range reader.File {
+		if !isTibiaInitLua(file.Name) {
+			continue
+		}
+		if err := writePatchedInitLua(writer, file, opts); err != nil {
+			return err
+		}
+		found = true
+	}
+	if !found {
+		return fmt.Errorf("tibia client zip does not contain %s", tibiaInitLuaPath)
 	}
 	return nil
 }

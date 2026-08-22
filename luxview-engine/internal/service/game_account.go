@@ -66,11 +66,13 @@ func (g *GameAccount) Provision(ctx context.Context, player *model.PlayerAccount
 	if err != nil {
 		return nil, err
 	}
-	container := ContainerName(app.Subdomain)
-	if err := g.execSQL(ctx, container, cfg.TemplateID, cfg.ConfigFields, sql); err != nil {
-		log := logger.With("game-account")
-		log.Warn().Err(err).Str("container", container).Str("template", cfg.TemplateID).Msg("provision game account")
-		return nil, fmt.Errorf("não consegui criar a conta no servidor")
+	if strings.TrimSpace(sql) != "" {
+		container := ContainerName(app.Subdomain)
+		if err := g.execSQL(ctx, container, cfg.TemplateID, cfg.ConfigFields, sql); err != nil {
+			log := logger.With("game-account")
+			log.Warn().Err(err).Str("container", container).Str("template", cfg.TemplateID).Msg("provision game account")
+			return nil, fmt.Errorf("não consegui criar a conta no servidor")
+		}
 	}
 	nick := info.Login
 	if info.Character != "" {
@@ -141,6 +143,12 @@ func gameAccountSQL(templateID, username, password, characterName, vocation stri
 			mysqlQuote(id), mysqlQuote(pass), mysqlQuote(email), mysqlQuote(id), mysqlQuote(id), mysqlQuote(id),
 		)
 		return &GameAccountInfo{TemplateID: templateID, Login: id, Email: email}, sql, nil
+	case "priston":
+		login := PristonLogin(username)
+		if login == "" {
+			return nil, "", fmt.Errorf("usuário LuxView precisa de letras ou números para o Priston Tale")
+		}
+		return &GameAccountInfo{TemplateID: templateID, Login: login, Email: TibiaEmail(username)}, "", nil
 	default:
 		return nil, "", fmt.Errorf("este jogo ainda não cria conta pelo launcher")
 	}

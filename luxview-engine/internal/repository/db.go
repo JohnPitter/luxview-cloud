@@ -567,6 +567,39 @@ func (db *DB) migrate(ctx context.Context) error {
 			CONSTRAINT chk_player_ledger_kind CHECK (kind IN ('cash','reward'))
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_player_ledger_player ON player_ledger(player_id, created_at)`,
+		`CREATE TABLE IF NOT EXISTS player_shop_orders (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			player_id UUID NOT NULL REFERENCES player_accounts(id) ON DELETE CASCADE,
+			app_id UUID NOT NULL,
+			item_id VARCHAR(64) NOT NULL,
+			currency VARCHAR(16) NOT NULL,
+			price BIGINT NOT NULL,
+			status VARCHAR(16) NOT NULL DEFAULT 'granted',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			CONSTRAINT chk_player_shop_orders_currency CHECK (currency IN ('cash','reward')),
+			CONSTRAINT chk_player_shop_orders_status CHECK (status IN ('granted','refunded'))
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_player_shop_orders_player ON player_shop_orders(player_id, created_at DESC)`,
+
+		`CREATE TABLE IF NOT EXISTS community_posts (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			app_id UUID NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
+			author_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			title VARCHAR(120) NOT NULL,
+			body TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_community_posts_created ON community_posts(created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_community_posts_app ON community_posts(app_id, created_at DESC)`,
+
+		`CREATE TABLE IF NOT EXISTS community_chat_messages (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			player_id UUID REFERENCES player_accounts(id) ON DELETE SET NULL,
+			username VARCHAR(32) NOT NULL,
+			body VARCHAR(280) NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_community_chat_created ON community_chat_messages(created_at DESC)`,
 	}
 
 	for i, m := range migrations {

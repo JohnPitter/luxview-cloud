@@ -134,12 +134,14 @@ services:
       # Global client assets live in the central storage tab; each game app
       # receives its own seeded copy in its storage service on first use.
       - OPENMU_CLIENT_BASE_ZIP=${OPENMU_CLIENT_BASE_ZIP:-/data/luxview/storage/_global/openmu-assets/openmu-s6-base.zip}
+      - MUEMU_CLIENT_BASE_ZIP=${MUEMU_CLIENT_BASE_ZIP:-/data/luxview/storage/_global/muemu-assets/mu-97d-s2-base.zip}
       # Rakion base client zip — config.xfs é injetado por servidor (subdomínio).
       - RAKION_CLIENT_BASE_ZIP=${RAKION_CLIENT_BASE_ZIP:-/data/luxview/storage/_global/rakion-assets/rakion-client-base.zip}
       # Metin2 legado base client zip — IP/portas são injetados no root.data.
       - METIN2_LEGACY_CLIENT_BASE_ZIP=${METIN2_LEGACY_CLIENT_BASE_ZIP:-/data/luxview/storage/_global/metin2-legacy-assets/metin2-legacy-client-base.zip}
       # Tibia base client zip — init.lua do OTClient é injetado por servidor.
       - TIBIA_CLIENT_BASE_ZIP=${TIBIA_CLIENT_BASE_ZIP:-/data/luxview/storage/_global/tibia-assets/tibia-client-base.zip}
+      - PRISTON_CLIENT_BASE_ZIP=${PRISTON_CLIENT_BASE_ZIP:-/data/luxview/storage/_global/priston-assets/priston-4420-base.zip}
     networks:
       - luxview-net
       - traefik-public

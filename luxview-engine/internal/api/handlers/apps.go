@@ -196,6 +196,7 @@ func (h *AppHandler) Create(w http.ResponseWriter, r *http.Request) {
 				volumes = append(volumes, model.GameVolume{
 					Name:      defaultVolumeName(subdomain, dv.MountPath),
 					MountPath: dv.MountPath,
+					HostPath:  dv.HostPath,
 				})
 			}
 			extraPorts = tmpl.DefaultExtraPorts

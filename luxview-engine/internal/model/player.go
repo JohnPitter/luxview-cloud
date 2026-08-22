@@ -40,6 +40,45 @@ type PlayerLedger struct {
 	CreatedAt time.Time  `json:"created_at"`
 }
 
+type ShopGrant string
+
+const (
+	ShopGrantGold     ShopGrant = "gold"
+	ShopGrantCash     ShopGrant = "cash"
+	ShopGrantCoins    ShopGrant = "coins"
+	ShopGrantPremDays ShopGrant = "premdays"
+	ShopGrantBank     ShopGrant = "bank"
+	ShopGrantYang     ShopGrant = "yang"
+)
+
+type ShopItem struct {
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	TemplateID  string     `json:"template_id"`
+	Currency    LedgerKind `json:"currency"`
+	Price       int64      `json:"price"`
+	Grant       ShopGrant  `json:"grant"`
+	Amount      int64      `json:"amount"`
+}
+
+type ShopOrder struct {
+	ID        uuid.UUID `json:"id"`
+	PlayerID  uuid.UUID `json:"player_id"`
+	AppID     uuid.UUID `json:"app_id"`
+	ItemID    string    `json:"item_id"`
+	Currency  LedgerKind `json:"currency"`
+	Price     int64     `json:"price"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ShopBuyResult struct {
+	Item         ShopItem `json:"item"`
+	CashPoints   int64    `json:"cash_points"`
+	RewardPoints int64    `json:"reward_points"`
+}
+
 type PlayerPublic struct {
 	ID           uuid.UUID        `json:"id"`
 	Username     string           `json:"username"`

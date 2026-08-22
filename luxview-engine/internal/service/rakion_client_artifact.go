@@ -173,6 +173,75 @@ func WriteRakionClientZip(base io.ReaderAt, size int64, out io.Writer, opts Raki
 	return nil
 }
 
+// WriteRakionClientPatch writes only the per-server files (config.xfs,
+// NyxLauncher.ini, NyxLauncherEnc.xfs). The ~287 MiB client body is not resent.
+func WriteRakionClientPatch(base io.ReaderAt, size int64, out io.Writer, opts RakionClientOptions) error {
+	reader, err := zip.NewReader(base, size)
+	if err != nil {
+		return err
+	}
+
+	configXfs, err := BuildRakionConfigXfs(opts.AuthHost)
+	if err != nil {
+		return err
+	}
+
+	writer := zip.NewWriter(out)
+	defer writer.Close()
+
+	found := false
+	for _, file := range reader.File {
+		if isRakionConfigEntry(file.Name) {
+			w, err := writer.Create(file.Name)
+			if err != nil {
+				return err
+			}
+			if _, err := w.Write(configXfs); err != nil {
+				return err
+			}
+			found = true
+			continue
+		}
+		if isRakionLauncherINI(file.Name) {
+			content, err := readZipFile(file)
+			if err != nil {
+				return err
+			}
+			w, err := writer.Create(file.Name)
+			if err != nil {
+				return err
+			}
+			if _, err := w.Write(rewriteNyxLauncherINI(content, opts.AuthHost)); err != nil {
+				return err
+			}
+			found = true
+			continue
+		}
+		if isRakionLauncherEnc(file.Name) {
+			content, err := readZipFile(file)
+			if err != nil {
+				return err
+			}
+			rewritten, err := rewriteRakionLauncherEnc(content, opts.AuthHost, opts.ServerIP)
+			if err != nil {
+				return err
+			}
+			w, err := writer.Create(file.Name)
+			if err != nil {
+				return err
+			}
+			if _, err := w.Write(rewritten); err != nil {
+				return err
+			}
+			found = true
+		}
+	}
+	if !found {
+		return fmt.Errorf("rakion client zip does not contain config.xfs")
+	}
+	return nil
+}
+
 // rewriteNyxLauncherINI swaps the hard-coded dev host for the server's auth host
 // in NyxLauncher.ini (notice/patch/auto-download/signup URLs). The "www." form is
 // replaced first so it doesn't become "www.<host>" (which wouldn't resolve).

@@ -9,7 +9,7 @@ import (
 func TestGameClientDownloadURLForConfiguredClientTemplates(t *testing.T) {
 	const appID = "8f18612d-8cb3-4b0e-b67d-94d26b1ce53f"
 
-	for _, template := range []string{"openmu", "rakion", "metin2", "tibia"} {
+	for _, template := range []string{"openmu", "muemu", "rakion", "metin2", "tibia"} {
 		if got := gameClientDownloadURL(appID, template); got != "/api/apps/"+appID+"/game-client/download" {
 			t.Fatalf("%s client url = %q", template, got)
 		}
@@ -17,6 +17,20 @@ func TestGameClientDownloadURLForConfiguredClientTemplates(t *testing.T) {
 
 	if got := gameClientDownloadURL(appID, "vrising"); got != "" {
 		t.Fatalf("vrising client url = %q", got)
+	}
+}
+
+func TestGameClientPublicPatchAndBaseURLs(t *testing.T) {
+	const appID = "8f18612d-8cb3-4b0e-b67d-94d26b1ce53f"
+	origin := "https://luxview.cloud"
+	if got := gameClientPublicPatchURL(origin, appID, "tibia"); got != origin+"/api/public/game-client/"+appID+"/patch" {
+		t.Fatalf("patch url = %q", got)
+	}
+	if got := gameClientPublicBaseURL(origin, appID, "metin2"); got != origin+"/api/public/game-client/"+appID+"/base" {
+		t.Fatalf("base url = %q", got)
+	}
+	if got := gameClientPublicPatchURL(origin, appID, "vrising"); got != "" {
+		t.Fatalf("vrising patch url = %q", got)
 	}
 }
 

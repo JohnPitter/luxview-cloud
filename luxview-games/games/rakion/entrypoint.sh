@@ -101,6 +101,28 @@ sed -i "s/\$config\['db_pass'\] = '[^']*'/\$config['db_pass'] = '${MYSQL_PASSWOR
 # Senha do painel admin
 sed -i "s/define('ADMIN_PASS', '[^']*')/define('ADMIN_PASS', '${RAKION_ADMIN_PASS}')/" "$WEB/admin/config_admin.php" 2>/dev/null || true
 
+apply_rakion_rates() {
+    local exp="${RAKION_EXP_SCALE:-18}"
+    local gold="${RAKION_GOLD_SCALE:-18}"
+    local drop="${RAKION_ITEM_DROP_SCALE:-60}"
+    local name="${RAKION_SERVER_NAME:-LuxView Rakion}"
+    log "taxas: EXP ${exp}x gold ${gold}x drop ${drop}x"
+    # Files v258 guardam fEXP_SCALE em default.charclass / *.ini texto.
+    find "$SRV" \( -iname '*.ini' -o -iname '*.cfg' -o -iname '*charclass*' -o -iname '*.txt' \) -type f -print0 2>/dev/null |
+    while IFS= read -r -d '' f; do
+        grep -qI '' "$f" 2>/dev/null || continue
+        sed -i -E \
+            -e "s/fEXP_SCALE[[:space:]]+[0-9.]+[fF]?/fEXP_SCALE ${exp}/g" \
+            -e "s/fMONEY_DROP_SCALE[[:space:]]+[0-9.]+[fF]?/fMONEY_DROP_SCALE ${gold}/g" \
+            -e "s/fITEM_DROP_SCALE[[:space:]]+[0-9.]+[fF]?/fITEM_DROP_SCALE ${drop}/g" \
+            "$f" 2>/dev/null || true
+        if grep -qiE '^name=' "$f"; then
+            sed -i "s/^name=.*/name=${name}/" "$f" 2>/dev/null || true
+        fi
+    done
+}
+apply_rakion_rates
+
 log "ajustando IPs nos *.ini do servidor (192.168.1.x -> 127.0.0.1)..."
 find "$SRV" -name '*.ini' -print0 2>/dev/null | while IFS= read -r -d '' f; do
     sed -i 's/192\.168\.1\.[0-9]\+/127.0.0.1/g' "$f"

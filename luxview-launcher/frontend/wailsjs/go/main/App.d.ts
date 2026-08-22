@@ -6,6 +6,12 @@ export function ApplyUpdate(arg1:string):Promise<void>;
 
 export function CheckForUpdate():Promise<main.UpdateInfo>;
 
+export function CommunityHere():Promise<void>;
+
+export function CommunitySend(arg1:string):Promise<main.CommunityMessage>;
+
+export function CommunitySnapshot():Promise<main.CommunitySnapshot>;
+
 export function GetGames():Promise<Array<main.GameCard>>;
 
 export function GetMetin2Settings(arg1:main.GameCard):Promise<main.Metin2Settings>;
@@ -39,5 +45,9 @@ export function Register(arg1:main.GameCard,arg2:string,arg3:string,arg4:string)
 export function SaveMetin2Settings(arg1:main.GameCard,arg2:main.Metin2Settings):Promise<void>;
 
 export function SaveSettings(arg1:main.GameCard,arg2:main.GameSettings):Promise<void>;
+
+export function ShopBuy(arg1:string,arg2:string):Promise<main.ShopBuyResult>;
+
+export function ShopCatalog(arg1:string):Promise<Array<main.ShopItem>>;
 
 export function Version():Promise<string>;

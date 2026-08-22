@@ -10,6 +10,18 @@ export function CheckForUpdate() {
   return window['go']['main']['App']['CheckForUpdate']();
 }
 
+export function CommunityHere() {
+  return window['go']['main']['App']['CommunityHere']();
+}
+
+export function CommunitySend(arg1) {
+  return window['go']['main']['App']['CommunitySend'](arg1);
+}
+
+export function CommunitySnapshot() {
+  return window['go']['main']['App']['CommunitySnapshot']();
+}
+
 export function GetGames() {
   return window['go']['main']['App']['GetGames']();
 }
@@ -76,6 +88,14 @@ export function SaveMetin2Settings(arg1, arg2) {
 
 export function SaveSettings(arg1, arg2) {
   return window['go']['main']['App']['SaveSettings'](arg1, arg2);
+}
+
+export function ShopBuy(arg1, arg2) {
+  return window['go']['main']['App']['ShopBuy'](arg1, arg2);
+}
+
+export function ShopCatalog(arg1) {
+  return window['go']['main']['App']['ShopCatalog'](arg1);
 }
 
 export function Version() {

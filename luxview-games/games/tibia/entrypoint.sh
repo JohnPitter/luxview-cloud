@@ -11,9 +11,12 @@
 #   TIBIA_GAME_PORT     porta de jogo (default 7172)
 #   TIBIA_STATUS_PORT   porta de status (default 7173)
 #   TIBIA_MAX_PLAYERS   limite de jogadores (0 = sem limite)
-#   TIBIA_RATE_EXP/SKILL/MAGIC/LOOT/SPAWN   rates
-#   TIBIA_DEATH_LOSE_PERCENT  perda em morte (0 = nenhuma)
-#   TIBIA_FREE_PREMIUM  premium gratuito (true/false)
+#   TIBIA_RATE_EXP/SKILL/MAGIC/LOOT/SPAWN   rates (1 = oficial)
+#   TIBIA_RATE_MONSTER_HEALTH/ATTACK/DEFENSE
+#   TIBIA_WORLD_TYPE / TIBIA_PROTECTION_LEVEL / TIBIA_PZ_LOCK_SECONDS
+#   TIBIA_DEATH_LOSE_PERCENT  perda em morte (0 = nenhuma, -1 = fórmula oficial)
+#   TIBIA_FREE_PREMIUM / TIBIA_AUTO_LOOT / TIBIA_STAMINA_SYSTEM
+#   TIBIA_HOUSE_RENT / TIBIA_KICK_IDLE_MINUTES / TIBIA_MOTD
 #   TIBIA_DB_PASSWORD   senha do banco interno (default "canary")
 # =============================================================================
 set -Eeuo pipefail
@@ -46,8 +49,20 @@ rate_skill="${TIBIA_RATE_SKILL:-20}"
 rate_magic="${TIBIA_RATE_MAGIC:-20}"
 rate_loot="${TIBIA_RATE_LOOT:-5}"
 rate_spawn="${TIBIA_RATE_SPAWN:-2}"
+rate_monster_hp="${TIBIA_RATE_MONSTER_HEALTH:-1}"
+rate_monster_atk="${TIBIA_RATE_MONSTER_ATTACK:-1}"
+rate_monster_def="${TIBIA_RATE_MONSTER_DEFENSE:-1}"
+world_type="${TIBIA_WORLD_TYPE:-pvp}"
+protection_level="${TIBIA_PROTECTION_LEVEL:-7}"
+pz_lock_seconds="${TIBIA_PZ_LOCK_SECONDS:-60}"
 death_lose="${TIBIA_DEATH_LOSE_PERCENT:-0}"
 free_premium="${TIBIA_FREE_PREMIUM:-true}"
+auto_loot="${TIBIA_AUTO_LOOT:-false}"
+stamina_system="${TIBIA_STAMINA_SYSTEM:-true}"
+one_player="${TIBIA_ONE_PLAYER_PER_ACCOUNT:-true}"
+house_rent="${TIBIA_HOUSE_RENT:-never}"
+kick_idle="${TIBIA_KICK_IDLE_MINUTES:-15}"
+motd="${TIBIA_MOTD:-Bem-vindo ao Tibia LuxView!}"
 
 db_pid=""
 login_pid=""
@@ -235,9 +250,23 @@ configure_canary() {
     set_lua_number "rateMagic" "$rate_magic"
     set_lua_number "rateLoot" "$rate_loot"
     set_lua_number "rateSpawn" "$rate_spawn"
+    set_lua_number "rateMonsterHealth" "$rate_monster_hp"
+    set_lua_number "rateMonsterAttack" "$rate_monster_atk"
+    set_lua_number "rateMonsterDefense" "$rate_monster_def"
+    # Sem stages.lua: senão rateExp do dashboard é ignorado (fallback só).
+    set_lua_line "rateUseStages" "rateUseStages = false"
+    set_lua_string "worldType" "$world_type"
+    set_lua_number "protectionLevel" "$protection_level"
+    set_lua_number "pzLocked" "$((pz_lock_seconds * 1000))"
     set_lua_number "deathLosePercent" "$death_lose"
     set_lua_line "freePremium" "freePremium = $free_premium"
-    log "config.lua atualizado"
+    set_lua_line "autoLoot" "autoLoot = $auto_loot"
+    set_lua_line "staminaSystem" "staminaSystem = $stamina_system"
+    set_lua_line "onePlayerOnlinePerAccount" "onePlayerOnlinePerAccount = $one_player"
+    set_lua_string "houseRentPeriod" "$house_rent"
+    set_lua_number "kickIdlePlayerAfterMinutes" "$kick_idle"
+    set_lua_string "motd" "$motd"
+    log "config.lua atualizado (exp ${rate_exp}x spawn ${rate_spawn}x loot ${rate_loot}x)"
 }
 
 start_login_server() {

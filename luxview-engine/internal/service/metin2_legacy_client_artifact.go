@@ -72,6 +72,47 @@ func WriteLegacyMetin2ClientZip(base io.ReaderAt, size int64, out io.Writer, opt
 	return nil
 }
 
+// WriteLegacyMetin2ClientPatch writes only root.data and locale.cfg. The rest of
+// the multi-gigabyte client stays on disk (or is served as the static base zip).
+func WriteLegacyMetin2ClientPatch(base io.ReaderAt, size int64, out io.Writer, opts LegacyMetin2ClientOptions) error {
+	reader, err := zip.NewReader(base, size)
+	if err != nil {
+		return err
+	}
+	if err := validateLegacyMetin2Options(opts); err != nil {
+		return err
+	}
+
+	writer := zip.NewWriter(out)
+	defer writer.Close()
+	rootFound := false
+	for _, file := range reader.File {
+		switch {
+		case strings.EqualFold(baseName(file.Name), metin2RootDataName):
+			content, err := readZipFile(file)
+			if err != nil {
+				return err
+			}
+			patched, err := patchLegacyMetin2RootData(content, opts)
+			if err != nil {
+				return err
+			}
+			if err := writeZipEntry(writer, file.Name, patched); err != nil {
+				return err
+			}
+			rootFound = true
+		case strings.EqualFold(baseName(file.Name), metin2LocaleCfgName):
+			if err := writeZipEntry(writer, file.Name, []byte("1252 pt")); err != nil {
+				return err
+			}
+		}
+	}
+	if !rootFound {
+		return fmt.Errorf("legacy Metin2 client zip does not contain %s", metin2RootDataName)
+	}
+	return nil
+}
+
 func validateLegacyMetin2Options(opts LegacyMetin2ClientOptions) error {
 	if net.ParseIP(opts.ServerIP).To4() == nil {
 		return fmt.Errorf("legacy Metin2 client requires a valid IPv4 server address")
@@ -102,6 +143,7 @@ func patchLegacyMetin2RootData(content []byte, opts LegacyMetin2ClientOptions) (
 	mainIPCount += replaceFixedBytes(patched, []byte("127.000.00.001"), []byte(publicIP))
 	mainIPCount += replaceFixedBytes(patched, []byte("192.168.2.100"), []byte(privateIP))
 	mainIPCount += replaceFixedBytes(patched, []byte("127.000.000.1"), []byte(privateIP))
+	mainIPCount += replaceFixedBytes(patched, []byte("127.000.000.001"), []byte(publicIP))
 	mainIPCount += replaceFixedBytes(
 		patched,
 		[]byte(fmt.Sprintf(`SERVER_IP = "%s"`, metin2ServerIPPlaceholder)),

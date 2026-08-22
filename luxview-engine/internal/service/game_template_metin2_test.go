@@ -28,12 +28,22 @@ func TestMetin2TemplateRegistered(t *testing.T) {
 	}
 
 	var listed bool
+	var hasExp bool
 	for _, field := range tmpl.ConfigFields {
 		if field.Key == "LUXVIEW_LISTED" {
 			listed = true
 		}
+		if field.Key == "METIN_RATE_EXP" {
+			hasExp = true
+			if field.Section != "Taxas" {
+				t.Errorf("METIN_RATE_EXP section = %q, want Taxas", field.Section)
+			}
+		}
 	}
 	if !listed {
 		t.Error("missing LUXVIEW_LISTED launcher opt-in field")
+	}
+	if !hasExp {
+		t.Error("missing METIN_RATE_EXP (wiki rates belong in the dashboard)")
 	}
 }

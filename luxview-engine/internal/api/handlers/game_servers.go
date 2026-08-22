@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -180,28 +181,10 @@ func (h *GameServerHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ctx := r.Context()
-
-	// OpenMU has no A2S query protocol; estimate online players by counting
-	// established connections on its game-server ports inside the container.
-	if cfg.TemplateID == openMUTemplateID {
-		writeJSON(w, http.StatusOK, h.openMUStatus(ctx, app, cfg))
-		return
-	}
-
-	if status := staticGameServerStatus(app, service.Template(cfg.TemplateID)); status != nil {
-		writeJSON(w, http.StatusOK, status)
-		return
-	}
-
-	// Query via internal Docker network (container name) so the engine
-	// can reach the game server without hairpinning through the public IP.
-	containerAddr := service.ContainerName(app.Subdomain)
-	status, _ := h.gameServerSvc.QueryStatus(ctx, cfg, containerAddr)
-	writeJSON(w, http.StatusOK, status)
+	writeJSON(w, http.StatusOK, h.gameServerSvc.LiveStatus(r.Context(), app, cfg))
 }
 
-// GetPlayers returns the list of connected players via A2S_PLAYER.
+// GetPlayers lists online characters (name, class, map) from the game database.
 func (h *GameServerHandler) GetPlayers(w http.ResponseWriter, r *http.Request) {
 	app, cfg, ok := h.loadGame(w, r)
 	if !ok {
@@ -231,24 +214,52 @@ func (h *GameServerHandler) DownloadClient(w http.ResponseWriter, r *http.Reques
 // unauthenticated link so players can share it with friends. No owner check —
 // the client is meant to be distributed; it carries only the public server host.
 func (h *GameServerHandler) DownloadClientPublic(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	app := h.loadPublicListedGame(w, r)
+	if app == nil {
+		return
+	}
+	h.serveGameClient(w, r, app)
+}
 
+func (h *GameServerHandler) loadPublicListedGame(w http.ResponseWriter, r *http.Request) *model.App {
+	ctx := r.Context()
 	appID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid app id")
-		return
+		return nil
 	}
 	app, err := h.appRepo.FindByID(ctx, appID)
 	if err != nil || app == nil {
 		writeError(w, http.StatusNotFound, "app not found")
-		return
+		return nil
 	}
 	cfg, err := h.gameConfigRepo.GetByAppID(ctx, app.ID)
 	if err != nil || cfg == nil || !gameListed(cfg) {
 		writeError(w, http.StatusNotFound, "app not found")
+		return nil
+	}
+	return app
+}
+
+// DownloadClientPatchPublic streams only the per-server overlay (config, locale,
+// launcher.config). The launcher uses this after the first install so a one-file
+// change does not re-download hundreds of MiB on the same NIC as the game tick.
+func (h *GameServerHandler) DownloadClientPatchPublic(w http.ResponseWriter, r *http.Request) {
+	app := h.loadPublicListedGame(w, r)
+	if app == nil {
 		return
 	}
-	h.serveGameClient(w, r, app)
+	h.serveGameClientPatch(w, r, app)
+}
+
+// DownloadClientBasePublic serves the unmodified client zip (sendfile / Range).
+// The launcher caches it by base_hash and only re-downloads when the zip itself changes.
+func (h *GameServerHandler) DownloadClientBasePublic(w http.ResponseWriter, r *http.Request) {
+	app := h.loadPublicListedGame(w, r)
+	if app == nil {
+		return
+	}
+	h.serveGameClientBase(w, r, app)
 }
 
 // PublicGameCard is one entry in the public launcher catalog.
@@ -260,9 +271,12 @@ type PublicGameCard struct {
 	Description string `json:"description"`
 	Enabled     bool   `json:"enabled"`      // running + has a downloadable client
 	DownloadURL string `json:"download_url"` // public, shareable client zip
+	PatchURL    string `json:"patch_url,omitempty"`
+	BaseURL     string `json:"base_url,omitempty"`
 	ServerIP    string `json:"server_ip"`
 	AuthHost    string `json:"auth_host"` // <subdomain>.<domain> — onde o launcher faz login
 	ClientHash  string `json:"client_hash,omitempty"`
+	BaseHash    string `json:"base_hash,omitempty"`
 }
 
 // ListPublicGames returns the public catalog consumed by the LuxView launcher.
@@ -291,6 +305,7 @@ func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Reque
 		}
 		clientReady := true
 		clientHash := ""
+		baseHash := ""
 		authHost := fmt.Sprintf("%s.%s", app.Subdomain, h.domain)
 		if h.gameClientStorage != nil && gameClientWithDownload[cfg.TemplateID] {
 			path, err := h.gameClientStorage.Resolve(ctx, app.ID, cfg.TemplateID, cfg.ConfigFields[model.GameClientGlobalFileField])
@@ -304,6 +319,7 @@ func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Reque
 					log := logger.With("game-client-storage")
 					log.Warn().Err(hashErr).Str("app", app.Subdomain).Msg("failed to hash launcher client")
 				} else {
+					baseHash = fileHash
 					clientHash = clientRevision(cfg.TemplateID, fileHash, h.serverIP, authHost, cfg)
 				}
 			}
@@ -313,17 +329,27 @@ func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Reque
 			display = tmpl.DisplayName
 			desc = tmpl.Description
 		}
+		origin := "https://" + h.domain
+		appID := app.ID.String()
+		patchURL, baseURL := "", ""
+		if clientReady && gameClientWithDownload[cfg.TemplateID] {
+			patchURL = gameClientPublicPatchURL(origin, appID, cfg.TemplateID)
+			baseURL = gameClientPublicBaseURL(origin, appID, cfg.TemplateID)
+		}
 		cards = append(cards, PublicGameCard{
-			AppID:       app.ID.String(),
+			AppID:       appID,
 			Name:        app.Name,
 			Game:        cfg.TemplateID,
 			DisplayName: display,
 			Description: desc,
 			Enabled:     app.Status == model.AppStatusRunning && gameClientWithDownload[cfg.TemplateID] && clientReady,
-			DownloadURL: gameClientPublicURL("https://"+h.domain, app.ID.String(), cfg.TemplateID),
+			DownloadURL: gameClientPublicURL(origin, appID, cfg.TemplateID),
+			PatchURL:    patchURL,
+			BaseURL:     baseURL,
 			ServerIP:    h.serverIP,
 			AuthHost:    authHost,
 			ClientHash:  clientHash,
+			BaseHash:    baseHash,
 		})
 	}
 	writeJSON(w, http.StatusOK, cards)
@@ -413,16 +439,153 @@ func (h *GameServerHandler) serveGameClient(w http.ResponseWriter, r *http.Reque
 			writeError(w, http.StatusInternalServerError, "failed to generate Tibia client")
 			return
 		}
-	default: // openMUTemplateID
+	case pristonTemplateID:
+		serverName := app.Name
+		if cfg.ConfigFields != nil {
+			if name := strings.TrimSpace(cfg.ConfigFields["PRISTON_SERVER_NAME"]); name != "" {
+				serverName = name
+			}
+		}
+		if err := service.WritePristonClientZip(baseZip, stat.Size(), w, service.PristonClientOptions{
+			ServerName: serverName,
+			ServerIP:   h.serverIP,
+			GamePort:   cfg.GamePort,
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to generate Priston client")
+			return
+		}
+	default: // openmu, muemu — launcher.config with ConnectServer IP/port
 		if err := service.WriteOpenMUClientZip(baseZip, stat.Size(), w, service.OpenMUClientOptions{
 			ServerName: app.Name,
 			ServerIP:   h.serverIP,
 			GamePort:   cfg.GamePort,
 		}); err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to generate OpenMU client")
+			writeError(w, http.StatusInternalServerError, "failed to generate MU client")
 			return
 		}
 	}
+}
+
+func (h *GameServerHandler) serveGameClientPatch(w http.ResponseWriter, r *http.Request, app *model.App) {
+	cfg, baseZip, stat, ok := h.openClientBaseZip(w, r, app)
+	if !ok {
+		return
+	}
+	defer baseZip.Close()
+
+	clearClientWriteDeadline(w)
+
+	var buf bytes.Buffer
+	var err error
+	switch cfg.TemplateID {
+	case rakionTemplateID:
+		err = service.WriteRakionClientPatch(baseZip, stat.Size(), &buf, service.RakionClientOptions{
+			AuthHost: fmt.Sprintf("%s.%s", app.Subdomain, h.domain),
+			ServerIP: h.serverIP,
+		})
+	case metin2TemplateID:
+		err = service.WriteLegacyMetin2ClientPatch(baseZip, stat.Size(), &buf, service.LegacyMetin2ClientOptions{
+			ServerIP:  h.serverIP,
+			AuthPort:  cfg.GamePort,
+			WorldPort: cfg.QueryPort,
+		})
+	case tibiaTemplateID:
+		err = service.WriteTibiaClientPatch(baseZip, stat.Size(), &buf, service.TibiaClientOptions{
+			ServerName: app.Name,
+			ServerIP:   h.serverIP,
+			LoginPort:  tibiaLoginHTTPPort(cfg),
+		})
+	case pristonTemplateID:
+		err = service.WritePristonClientPatch(baseZip, stat.Size(), &buf, service.PristonClientOptions{
+			ServerName: pristonClientServerName(app, cfg),
+			ServerIP:   h.serverIP,
+			GamePort:   cfg.GamePort,
+		})
+	default:
+		err = service.WriteOpenMUClientPatch(&buf, service.OpenMUClientOptions{
+			ServerName: app.Name,
+			ServerIP:   h.serverIP,
+			GamePort:   cfg.GamePort,
+		})
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate client patch")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-client-patch.zip", app.Subdomain))
+	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
+	_, _ = w.Write(buf.Bytes())
+}
+
+func (h *GameServerHandler) serveGameClientBase(w http.ResponseWriter, r *http.Request, app *model.App) {
+	_, baseZip, stat, ok := h.openClientBaseZip(w, r, app)
+	if !ok {
+		return
+	}
+	defer baseZip.Close()
+
+	clearClientWriteDeadline(w)
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-client-base.zip", app.Subdomain))
+	http.ServeContent(w, r, stat.Name(), stat.ModTime(), baseZip)
+}
+
+func (h *GameServerHandler) openClientBaseZip(w http.ResponseWriter, r *http.Request, app *model.App) (*model.GameServerConfig, *os.File, os.FileInfo, bool) {
+	ctx := r.Context()
+	if app.AppType != model.AppTypeGame {
+		writeError(w, http.StatusBadRequest, "app is not a game server")
+		return nil, nil, nil, false
+	}
+	cfg, err := h.gameConfigRepo.GetByAppID(ctx, app.ID)
+	if err != nil || cfg == nil {
+		writeError(w, http.StatusNotFound, "game config not found")
+		return nil, nil, nil, false
+	}
+	if h.serverIP == "" {
+		writeError(w, http.StatusInternalServerError, "server IP is not configured")
+		return nil, nil, nil, false
+	}
+	baseZipPath := h.clientBaseZips[cfg.TemplateID]
+	if h.gameClientStorage != nil {
+		baseZipPath, err = h.gameClientStorage.Resolve(ctx, app.ID, cfg.TemplateID, cfg.ConfigFields[model.GameClientGlobalFileField])
+		if err != nil {
+			writeError(w, http.StatusNotFound, "client is not available in global storage")
+			return nil, nil, nil, false
+		}
+	}
+	if baseZipPath == "" {
+		writeError(w, http.StatusNotFound, "client download is not available for this template")
+		return nil, nil, nil, false
+	}
+	baseZip, err := os.Open(baseZipPath)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "client base zip not found")
+		return nil, nil, nil, false
+	}
+	stat, err := baseZip.Stat()
+	if err != nil {
+		baseZip.Close()
+		writeError(w, http.StatusInternalServerError, "failed to read client base zip")
+		return nil, nil, nil, false
+	}
+	return cfg, baseZip, stat, true
+}
+
+func clearClientWriteDeadline(w http.ResponseWriter) {
+	if rc := http.NewResponseController(w); rc != nil {
+		_ = rc.SetWriteDeadline(time.Time{})
+	}
+}
+
+func pristonClientServerName(app *model.App, cfg *model.GameServerConfig) string {
+	if cfg != nil && cfg.ConfigFields != nil {
+		if name := strings.TrimSpace(cfg.ConfigFields["PRISTON_SERVER_NAME"]); name != "" {
+			return name
+		}
+	}
+	return app.Name
 }
 
 func (h *GameServerHandler) configTemplate(templateID string) *model.GameTemplate {
@@ -459,18 +622,22 @@ func cloneGameConfig(cfg *model.GameServerConfig) *model.GameServerConfig {
 }
 
 const (
-	openMUTemplateID = "openmu"
-	rakionTemplateID = "rakion"
-	metin2TemplateID = "metin2"
-	tibiaTemplateID  = "tibia"
+	openMUTemplateID  = "openmu"
+	muemuTemplateID   = "muemu"
+	rakionTemplateID  = "rakion"
+	metin2TemplateID  = "metin2"
+	tibiaTemplateID   = "tibia"
+	pristonTemplateID = "priston"
 )
 
 // gameClientWithDownload lists templates that offer a configured client download.
 var gameClientWithDownload = map[string]bool{
-	openMUTemplateID: true,
-	rakionTemplateID: true,
-	metin2TemplateID: true,
-	tibiaTemplateID:  true,
+	openMUTemplateID:  true,
+	muemuTemplateID:   true,
+	rakionTemplateID:  true,
+	metin2TemplateID:  true,
+	tibiaTemplateID:   true,
+	pristonTemplateID: true,
 }
 
 func gameClientDownloadURL(appID string, templateID string) string {
@@ -490,6 +657,20 @@ func gameClientPublicURL(baseURL, appID, templateID string) string {
 	return baseURL + "/api/public/game-client/" + appID
 }
 
+func gameClientPublicPatchURL(baseURL, appID, templateID string) string {
+	if u := gameClientPublicURL(baseURL, appID, templateID); u != "" {
+		return u + "/patch"
+	}
+	return ""
+}
+
+func gameClientPublicBaseURL(baseURL, appID, templateID string) string {
+	if u := gameClientPublicURL(baseURL, appID, templateID); u != "" {
+		return u + "/base"
+	}
+	return ""
+}
+
 // clientRevision fingerprints the zip the launcher would download: the base
 // client file plus the values patched into that zip at download time.
 func clientRevision(templateID, fileHash, serverIP, authHost string, cfg *model.GameServerConfig) string {
@@ -502,7 +683,7 @@ func clientRevision(templateID, fileHash, serverIP, authHost string, cfg *model.
 		fmt.Fprintf(sum, "|%d|%d", cfg.GamePort, cfg.QueryPort)
 	case tibiaTemplateID:
 		fmt.Fprintf(sum, "|%d", tibiaLoginHTTPPort(cfg))
-	case openMUTemplateID:
+	case openMUTemplateID, muemuTemplateID, pristonTemplateID:
 		fmt.Fprintf(sum, "|%d", cfg.GamePort)
 	}
 	return hex.EncodeToString(sum.Sum(nil))
@@ -513,45 +694,6 @@ func staticGameServerStatus(app *model.App, tmpl *model.GameTemplate) *model.Gam
 		return nil
 	}
 	return &model.GameServerStatus{Running: app.Status == model.AppStatusRunning}
-}
-
-// openMUStatus reports the OpenMU server status, estimating the online player
-// count from established connections on the game-server ports (OpenMU has no
-// query protocol). Uses the container name so it survives container recreation.
-func (h *GameServerHandler) openMUStatus(ctx context.Context, app *model.App, cfg *model.GameServerConfig) *model.GameServerStatus {
-	status := &model.GameServerStatus{Running: app.Status == model.AppStatusRunning}
-	if !status.Running {
-		return status
-	}
-	status.MaxPlayers = openMUMaxPlayers(cfg)
-	if n, err := h.gameServerSvc.CountConnections(ctx, service.ContainerName(app.Subdomain), openMUGamePorts(cfg)); err == nil {
-		status.Players = n
-	}
-	return status
-}
-
-// openMUGamePorts is the set of ports players hold a connection on while in-game:
-// the main game port (QueryPort) plus the extra "GameServer" ports.
-func openMUGamePorts(cfg *model.GameServerConfig) map[int]bool {
-	ports := make(map[int]bool)
-	if cfg.QueryPort > 0 {
-		ports[cfg.QueryPort] = true
-	}
-	for _, ep := range cfg.ExtraPorts {
-		if strings.Contains(strings.ToLower(ep.Label), "gameserver") {
-			ports[ep.Port] = true
-		}
-	}
-	return ports
-}
-
-func openMUMaxPlayers(cfg *model.GameServerConfig) int {
-	if v := cfg.ConfigFields["OPENMU_MAX_CONNECTIONS"]; v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
-	}
-	return 1000
 }
 
 // tibiaLoginHTTPPort é a porta publicada do login HTTP (login-server) que o

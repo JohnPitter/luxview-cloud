@@ -74,6 +74,19 @@ func WriteOpenMUClientZip(base io.ReaderAt, size int64, out io.Writer, opts Open
 	return err
 }
 
+// WriteOpenMUClientPatch writes only launcher.config. The Season 6 / 97D client
+// body is served as the static base zip and cached by the launcher.
+func WriteOpenMUClientPatch(out io.Writer, opts OpenMUClientOptions) error {
+	writer := zip.NewWriter(out)
+	defer writer.Close()
+	configWriter, err := writer.Create(openMULauncherConfigName)
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(configWriter, BuildOpenMULauncherConfig(opts.ServerName, opts.ServerIP, opts.GamePort))
+	return err
+}
+
 // copyZipFile copies an entry from the base zip into the output without
 // recompressing it: CreateRaw + OpenRaw stream the already-compressed bytes
 // directly. For a ~700MB client this turns a CPU-bound recompression (tens of

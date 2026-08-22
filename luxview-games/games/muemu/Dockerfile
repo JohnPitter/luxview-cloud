@@ -46,15 +46,22 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/gameserver /opt/muemu/gameserver
+COPY --from=build /app/gameserver /opt/muemu/gameserver99
 COPY --from=build /app/connectserver /opt/muemu/connectserver
 
 COPY entrypoint.sh /opt/entrypoint.sh
 COPY supervisord.conf /etc/supervisor/conf.d/muemu.conf
-RUN chmod +x /opt/entrypoint.sh
+RUN tr -d '\r' < /opt/entrypoint.sh > /opt/entrypoint.unix && \
+    mv /opt/entrypoint.unix /opt/entrypoint.sh && \
+    chmod +x /opt/entrypoint.sh
 
 # ConnectServer (players first connect here)
 EXPOSE 44405/tcp
-# GameServer (actual gameplay)
+# GameServer 0 (97D / selected season)
 EXPOSE 55901/tcp
+# GameServer 99 (Season 2+ in Classic99)
+EXPOSE 55919/tcp
+# ChatServer
+EXPOSE 55980/tcp
 
 ENTRYPOINT ["/opt/entrypoint.sh"]

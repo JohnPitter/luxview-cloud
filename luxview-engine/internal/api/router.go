@@ -51,6 +51,7 @@ type Deps struct {
 	GameConfigRepo       *repository.GameServerConfigRepo
 	GameServerSvc        *service.GameServerService
 	PlayerRepo           *repository.PlayerRepo
+	CommunityRepo        *repository.CommunityRepo
 }
 
 // NewRouter creates the main HTTP router with all routes.
@@ -84,10 +85,12 @@ func NewRouter(deps Deps) *chi.Mux {
 	authHandler := handlers.NewAuthHandler(deps.Config, deps.UserRepo, deps.SettingsRepo, deps.EncryptKey, deps.AuditSvc, deps.GitHubAppSvc)
 	webhookURL := deps.Config.BaseURL + "/api/webhooks/github"
 	gameClientBaseZips := map[string]string{
-		"openmu": deps.Config.OpenMUClientBaseZipPath,
-		"rakion": deps.Config.RakionClientBaseZipPath,
-		"metin2": deps.Config.Metin2LegacyClientBaseZipPath,
-		"tibia":  deps.Config.TibiaClientBaseZipPath,
+		"openmu":  deps.Config.OpenMUClientBaseZipPath,
+		"muemu":   deps.Config.MuEmuClientBaseZipPath,
+		"rakion":  deps.Config.RakionClientBaseZipPath,
+		"metin2":  deps.Config.Metin2LegacyClientBaseZipPath,
+		"tibia":   deps.Config.TibiaClientBaseZipPath,
+		"priston": deps.Config.PristonClientBaseZipPath,
 	}
 	globalStorageRoot := filepath.Join(deps.Config.StorageBasePath, "_global")
 	gameClientStorage := service.NewClientStore(deps.ServiceRepo, deps.EncryptKey, globalStorageRoot, gameClientBaseZips)
@@ -121,7 +124,10 @@ func NewRouter(deps Deps) *chi.Mux {
 	domainChecker := service.NewDomainChecker(deps.Config.VPSPublicIP, deps.Config.AcmeStorePath)
 	domainCheckHandler := handlers.NewDomainCheckHandler(deps.AppRepo, domainChecker)
 	gameServerHandler := handlers.NewGameServerHandler(deps.AppRepo, deps.GameConfigRepo, deps.GameServerSvc, gameClientStorage, deps.Config.VPSPublicIP, deps.Config.Domain, gameClientBaseZips)
-	playerHandler := handlers.NewPlayers(service.NewPlayer(deps.PlayerRepo), service.NewGameAccount(deps.Docker, deps.AppRepo, deps.GameConfigRepo, deps.PlayerRepo), deps.Config.JWTSecret)
+	playerSvc := service.NewPlayer(deps.PlayerRepo)
+	gameAccounts := service.NewGameAccount(deps.Docker, deps.AppRepo, deps.GameConfigRepo, deps.PlayerRepo)
+	playerHandler := handlers.NewPlayers(playerSvc, gameAccounts, service.NewShop(playerSvc, gameAccounts, deps.PlayerRepo), deps.Config.JWTSecret)
+	communityHandler := handlers.NewCommunity(deps.CommunityRepo, deps.AppRepo, deps.GameConfigRepo, deps.GameServerSvc, service.NewCommunityHub())
 	launcherHandler := handlers.NewLauncherHandler(deps.Config.LauncherReleaseRepo, deps.Config.LauncherAssetName, deps.Config.GitHubAPIToken)
 	globalStorageHandler := handlers.NewGlobalStorageHandler(deps.Config.StorageBasePath)
 
@@ -185,10 +191,14 @@ func NewRouter(deps Deps) *chi.Mux {
 		r.Post("/webhooks/github", webhookHandler.GitHubWebhook)
 
 		// Public game client download — shareable link for players (no auth).
+		r.Get("/public/game-client/{id}/patch", gameServerHandler.DownloadClientPatchPublic)
+		r.Get("/public/game-client/{id}/base", gameServerHandler.DownloadClientBasePublic)
 		r.Get("/public/game-client/{id}", gameServerHandler.DownloadClientPublic)
 
 		// Public game catalog — consumed by the LuxView launcher (no auth).
 		r.Get("/public/games", gameServerHandler.ListPublicGames)
+		r.Get("/public/community", communityHandler.Snapshot)
+		r.Get("/public/shop", playerHandler.Catalog)
 
 		// Public launcher distribution — download redirect (landing page) and
 		// latest-release JSON (launcher auto-update). No auth.
@@ -200,6 +210,9 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Get("/players/me", playerHandler.Me)
 			r.Post("/players/links", playerHandler.Link)
 			r.Post("/players/games/{id}/account", playerHandler.ProvisionAccount)
+			r.Post("/players/shop/buy", playerHandler.Buy)
+			r.Post("/players/community/chat", communityHandler.SendChat)
+			r.Post("/players/community/here", communityHandler.Here)
 		})
 
 		// Internal (Traefik)
@@ -311,6 +324,9 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Put("/apps/{id}/game-config", gameServerHandler.UpdateConfig)
 			r.Get("/apps/{id}/game-status", gameServerHandler.GetStatus)
 			r.Get("/apps/{id}/game-players", gameServerHandler.GetPlayers)
+			r.Get("/apps/{id}/community/posts", communityHandler.ListPosts)
+			r.Post("/apps/{id}/community/posts", communityHandler.CreatePost)
+			r.Delete("/apps/{id}/community/posts/{postId}", communityHandler.DeletePost)
 
 			// AI Analyze
 			r.Post("/apps/{id}/analyze", analyzeHandler.Analyze)
@@ -383,6 +399,7 @@ func NewRouter(deps Deps) *chi.Mux {
 				adminRL := middleware.NewRateLimiter(5, 10)
 				r.Use(adminRL.Middleware)
 				r.Get("/admin/users", adminHandler.ListUsers)
+				r.Post("/admin/players/credit", playerHandler.AdminCredit)
 				r.Get("/admin/stats", adminHandler.Stats)
 				r.Delete("/admin/apps/{id}", adminHandler.ForceDeleteApp)
 				r.Get("/admin/apps", adminHandler.ListAllApps)
