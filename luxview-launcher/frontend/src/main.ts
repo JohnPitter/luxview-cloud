@@ -61,6 +61,13 @@ const gameId = (raw: string = ''): string => {
   const id = raw.trim().toLowerCase().replaceAll('_', '-');
   if (id.includes('tibia')) return 'tibia';
   if (id.includes('priston')) return 'priston';
+  if (id === 'openmu' || id === 'muemu') return 'muemu';
+  return id;
+};
+
+const gameFamily = (raw: string = ''): string => {
+  const id = gameId(raw);
+  if (id === 'muemu') return 'mu';
   return id;
 };
 
@@ -104,7 +111,6 @@ function ph(game: string, name: string, desc: string): Card {
 }
 // Próximos jogos da LuxView Cloud (cinza até ter servidor deployado + listado).
 const PLACEHOLDERS: Card[] = [
-  ph('openmu', 'Mu Online', '97D + Season 2+ no mesmo client. Em breve na LuxView Cloud.'),
   ph('metin2', 'Metin2', 'MMORPG de ação oriental. Em breve na LuxView Cloud.'),
 ];
 
@@ -195,8 +201,8 @@ function applyCatalog(real: Card[], pickDefault: boolean) {
   online = true;
   const keepCommunity = !pickDefault && communityOpen;
   const keepID = !pickDefault && games[selected] ? games[selected].app_id : '';
-  const have = new Set(real.map((r) => r.game));
-  games = [...real, ...PLACEHOLDERS.filter((p) => !have.has(p.game))];
+  const have = new Set(real.map((r) => gameFamily(r.game)));
+  games = [...real, ...PLACEHOLDERS.filter((p) => !have.has(gameFamily(p.game)))];
   if (games.length === 0) games = [...PLACEHOLDERS];
   if (keepCommunity) {
     communityOpen = true;

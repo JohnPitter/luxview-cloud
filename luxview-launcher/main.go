@@ -17,10 +17,10 @@ func main() {
 
 	err := wails.Run(&options.App{
 		Title:            "LuxView Cloud Games",
-		Width:            1000,
-		Height:           600,
-		MinWidth:         1000,
-		MinHeight:        600,
+		Width:            1024,
+		Height:           682,
+		MinWidth:         1024,
+		MinHeight:        682,
 		Frameless:        true, // sem moldura nativa; controles próprios no titlebar
 		AssetServer:      &assetserver.Options{Assets: assets},
 		BackgroundColour: &options.RGBA{R: 9, G: 9, B: 11, A: 1}, // zinc-950
