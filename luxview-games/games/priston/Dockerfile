@@ -30,6 +30,7 @@ RUN dpkg --add-architecture i386 \
         iproute2 \
         python3 \
         wget \
+        wine \
         wine32 \
         winbind \
         xauth \
