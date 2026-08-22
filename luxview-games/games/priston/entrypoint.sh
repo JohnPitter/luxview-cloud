@@ -63,9 +63,7 @@ if [ -n "$mssql_password" ]; then
   i=0
   while [ "$i" -lt 30 ]; do
     if /opt/mssql-tools18/bin/sqlcmd -S "$mssql_host" -U sa -P "$mssql_password" -C -Q "SELECT 1" >/dev/null 2>&1; then
-      if ! /opt/mssql-tools18/bin/sqlcmd -S "$mssql_host" -U sa -P "$mssql_password" -C -d accountdb -h -1 -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.tables WHERE name LIKE '[A-Z]GameUser'" 2>/dev/null | grep -q 26; then
-        /opt/mssql-tools18/bin/sqlcmd -S "$mssql_host" -U sa -P "$mssql_password" -C -Q "IF DB_ID(N'accountdb') IS NULL CREATE DATABASE [accountdb];"
-      fi
+      echo "[priston] mssql $mssql_host ok"
       break
     fi
     i=$((i + 1))
