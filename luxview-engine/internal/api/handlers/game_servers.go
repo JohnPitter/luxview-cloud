@@ -501,12 +501,12 @@ func (h *GameServerHandler) serveGameClientPatch(w http.ResponseWriter, r *http.
 			ServerIP:   h.serverIP,
 			GamePort:   cfg.GamePort,
 		})
-	default:
-		err = service.WriteOpenMUClientPatch(&buf, service.OpenMUClientOptions{
-			ServerName: app.Name,
-			ServerIP:   h.serverIP,
-			GamePort:   cfg.GamePort,
-		})
+		default:
+			err = service.WriteOpenMUClientPatch(baseZip, stat.Size(), &buf, service.OpenMUClientOptions{
+				ServerName: app.Name,
+				ServerIP:   h.serverIP,
+				GamePort:   cfg.GamePort,
+			})
 	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate client patch")
@@ -683,8 +683,10 @@ func clientRevision(templateID, fileHash, serverIP, authHost string, cfg *model.
 		fmt.Fprintf(sum, "|%d|%d", cfg.GamePort, cfg.QueryPort)
 	case tibiaTemplateID:
 		fmt.Fprintf(sum, "|%d", tibiaLoginHTTPPort(cfg))
-	case openMUTemplateID, muemuTemplateID, pristonTemplateID:
+	case openMUTemplateID, pristonTemplateID:
 		fmt.Fprintf(sum, "|%d", cfg.GamePort)
+	case muemuTemplateID:
+		fmt.Fprintf(sum, "|%d|encterrain-obj-stub", cfg.GamePort)
 	}
 	return hex.EncodeToString(sum.Sum(nil))
 }

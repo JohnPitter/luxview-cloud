@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -49,12 +50,31 @@ func launchMuClient(exePath, workingDir, ip string, port int) error {
 	if strings.TrimSpace(ip) == "" {
 		return fmt.Errorf("servidor MU sem IP")
 	}
+	writeMuConnectionRegistry(ip, port)
 	command := exec.Command(exePath, "connect", "/u"+ip, "/p"+strconv.Itoa(port))
 	command.Dir = workingDir
 	if err := command.Start(); err != nil {
 		return fmt.Errorf("falha ao iniciar o MU: %w", err)
 	}
 	return nil
+}
+
+func writeMuConnectionRegistry(ip string, port int) {
+	host := muEncodeHost(ip)
+	encodedPort := uint32(muEncodePort(ip, port))
+	write := func(root registry.Key, path string) {
+		key, _, err := registry.CreateKey(root, path, registry.SET_VALUE)
+		if err != nil {
+			return
+		}
+		defer key.Close()
+		_ = key.SetDWordValue("Key", uint32(time.Now().Unix()))
+		_ = key.SetStringValue("ParameterA", host)
+		_ = key.SetDWordValue("ParameterB", encodedPort)
+	}
+	write(registry.CURRENT_USER, `SOFTWARE\WebZen\Mu\Connection`)
+	write(registry.LOCAL_MACHINE, `SOFTWARE\WebZen\Mu\Connection`)
+	write(registry.LOCAL_MACHINE, `SOFTWARE\WOW6432Node\WebZen\Mu\Connection`)
 }
 
 // gameProcessPID returns the PID of the first process with the given image name,

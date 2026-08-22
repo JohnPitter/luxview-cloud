@@ -64,3 +64,12 @@ func TestClientRevisionChangesWhenBaseZipOrEndpointChanges(t *testing.T) {
 		t.Fatal("patched server IP should change the revision")
 	}
 }
+
+func TestClientRevisionMuEmuIncludesEncTerrainStub(t *testing.T) {
+	cfg := &model.GameServerConfig{GamePort: 44405}
+	mu := clientRevision("muemu", "abc", "1.2.3.4", "mu.luxview.cloud", cfg)
+	open := clientRevision("openmu", "abc", "1.2.3.4", "mu.luxview.cloud", cfg)
+	if mu == "" || mu == open {
+		t.Fatalf("muemu revision should include EncTerrain stub marker: %q / %q", mu, open)
+	}
+}

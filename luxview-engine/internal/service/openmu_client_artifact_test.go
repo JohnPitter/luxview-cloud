@@ -46,9 +46,17 @@ func TestWriteOpenMUClientZipReplacesLauncherConfig(t *testing.T) {
 	assertContains(t, got["launcher.config"], "<Port>44405</Port>")
 }
 
-func TestWriteOpenMUClientPatchContainsOnlyLauncherConfig(t *testing.T) {
+func TestWriteOpenMUClientPatchContainsLauncherConfigAndEncTerrainStubs(t *testing.T) {
+	var base bytes.Buffer
+	baseZip := zip.NewWriter(&base)
+	addZipEntry(t, baseZip, "Data/World79/EncTerrain79.obj", "donor-obj")
+	addZipEntry(t, baseZip, "Data/World95/EncTerrain95.map", "map-95")
+	if err := baseZip.Close(); err != nil {
+		t.Fatalf("close base zip: %v", err)
+	}
+
 	var out bytes.Buffer
-	if err := WriteOpenMUClientPatch(&out, OpenMUClientOptions{
+	if err := WriteOpenMUClientPatch(bytes.NewReader(base.Bytes()), int64(base.Len()), &out, OpenMUClientOptions{
 		ServerName: "Aida MU",
 		ServerIP:   "187.77.227.65",
 		GamePort:   44405,
@@ -56,10 +64,10 @@ func TestWriteOpenMUClientPatchContainsOnlyLauncherConfig(t *testing.T) {
 		t.Fatalf("patch: %v", err)
 	}
 	got := readZipEntries(t, out.Bytes())
-	if len(got) != 1 {
-		t.Fatalf("patch entries = %v", got)
-	}
 	assertContains(t, got["launcher.config"], "<Address>187.77.227.65</Address>")
+	if got["Data/World95/EncTerrain95.obj"] != "donor-obj" {
+		t.Fatalf("World95 stub = %q entries=%v", got["Data/World95/EncTerrain95.obj"], got)
+	}
 }
 
 func addZipEntry(t *testing.T, zw *zip.Writer, name string, content string) {
