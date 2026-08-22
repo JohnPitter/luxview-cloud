@@ -10,7 +10,8 @@ mssql_password="${PRISTON_MSSQL_PASSWORD:-}"
 export WINEARCH="${WINEARCH:-win32}"
 export WINEPREFIX="${WINEPREFIX:-/wine}"
 export WINEDEBUG="${WINEDEBUG:--all}"
-export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-mscoree,mshtml=}"
+export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-mscoree,mshtml=;odbc32,odbccp32,odbcint=b;msvcr70,mfc70,d3dx9_43,d3dx9_35=n;d3d9=b}"
+export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
 export PRISTON_MSSQL_HOST="$mssql_host"
 export PRISTON_MSSQL_PASSWORD="$mssql_password"
 export PATH="/opt/mssql-tools18/bin:${PATH}"
@@ -102,7 +103,8 @@ echo "[priston] LuxView $server_name native 4220 bind=${bind_ip} advertise=${pub
 cd "$server_root"
 # -ac disables X authority so Wine can create the (headless) server window.
 rm -f /tmp/.X99-lock
-Xvfb :99 -ac -screen 0 1024x768x16 -nolisten tcp >/artifacts/xvfb.log 2>&1 &
+# 24-bit: native 4220 imports d3d9/d3dx9_43 even in *MODE SERVER.
+Xvfb :99 -ac -screen 0 1024x768x24 -nolisten tcp >/artifacts/xvfb.log 2>&1 &
 export DISPLAY=:99
 sleep 1
 exec wine "$server_root/SunnyBPT_v4220.exe" >/artifacts/wine.log 2>&1

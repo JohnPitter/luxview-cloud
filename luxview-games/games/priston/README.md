@@ -18,7 +18,9 @@ docker build -t luxview-cloud-priston:latest \
   luxview-games/games/priston
 ```
 
-Na VPS, o volume `/server` é um bind de `/data/luxview/storage/_global/priston-assets/server-4220`. O MSSQL sobe à parte na `luxview-net` como `luxview-mssql` (porta 1433 só interna).
+Na VPS, o volume `/server` é um bind de `/data/luxview/storage/_global/priston-assets/server-4220`. O MSSQL sobe à parte como `luxview-mssql` na rede `game-net` (porta 1433 só interna). Use a `PristonSQLDll.dll` oficial (MSVC, ~40KB), nunca o stub MinGW `DSN=m2master`.
+
+O binário importa `d3d9`/`d3dx9_43` mesmo em `*MODE SERVER`. A imagem traz Mesa i386 + Xvfb 24-bit. Em 2026-08-22 o PE ainda cai em `TopExceptionFilter` ~12s após o start e **não abre 10012** sob Wine 32 no Debian; o client zip 4220 e o launcher v1.75 já apontam para `187.77.227.65:10012`.
 
 ## Portas
 

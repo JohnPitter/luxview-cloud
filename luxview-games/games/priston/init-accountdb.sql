@@ -3,10 +3,14 @@ IF DB_ID(N'accountdb') IS NULL
 GO
 USE [accountdb];
 GO
-DECLARE @letter CHAR(1) = 'A';
-WHILE @letter <= 'Z'
+-- Explicit A-Z: a WHILE CHAR(ASCII('Z')+1) becomes '[' and creates a bogus [GameUser table.
+DECLARE @sql nvarchar(max);
+DECLARE @letter char(1);
+DECLARE @i int = 0;
+WHILE @i < 26
 BEGIN
-    DECLARE @sql nvarchar(max) = N'
+    SET @letter = CHAR(65 + @i);
+    SET @sql = N'
 IF OBJECT_ID(N''dbo.' + @letter + N'GameUser'', N''U'') IS NULL
 BEGIN
     CREATE TABLE [dbo].[' + @letter + N'GameUser] (
@@ -41,7 +45,7 @@ BEGIN
     );
 END';
     EXEC (@sql);
-    SET @letter = CHAR(ASCII(@letter) + 1);
+    SET @i = @i + 1;
 END;
 GO
 IF OBJECT_ID(N'dbo.FPersonalMember', N'U') IS NULL

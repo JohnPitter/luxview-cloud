@@ -17,7 +17,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     WINEARCH=win32 \
     WINEPREFIX=/wine \
     WINEDEBUG=-all \
-    WINEDLLOVERRIDES=mscoree,mshtml= \
+    WINEDLLOVERRIDES="mscoree,mshtml=;odbc32,odbccp32,odbcint=b;msvcr70,mfc70,d3dx9_43,d3dx9_35=n;d3d9=b" \
     PRISTON_SERVER_ROOT=/server
 
 RUN dpkg --add-architecture i386 \
@@ -36,6 +36,11 @@ RUN dpkg --add-architecture i386 \
         xauth \
         xvfb \
         xz-utils \
+        libgl1:i386 \
+        libgl1-mesa-dri:i386 \
+        libglu1-mesa:i386 \
+        libosmesa6:i386 \
+        unixodbc:i386 \
     && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
     && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
     && apt-get update \
