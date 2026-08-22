@@ -29,7 +29,10 @@ if [ ! -f "$hotuk" ]; then
   exit 1
 fi
 
-bind_ip="0.0.0.0"
+bind_ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
+if [ -z "$bind_ip" ]; then
+  bind_ip="0.0.0.0"
+fi
 
 # Native 4220: keep official GameServer NPC/mob/field data. Only rewrite
 # listen/advertise + server name. Rates stay commented unless already present.
@@ -53,10 +56,32 @@ if [ -f /opt/patch_sql_dll.py ]; then
     echo "[priston] aviso: não consegui retargetar sql.dll para ${mssql_host},1433" >&2
 fi
 
-for dll in msvcr70.dll mfc70.dll sql.dll PristonSQLDll.dll clan.dll clan-procedure.dll; do
+for dll in msvcr70.dll mfc70.dll sql.dll PristonSQLDll.dll clan.dll clan-procedure.dll d3dx9_35.dll D3DX9_43.dll; do
   if [ -f "$server_root/$dll" ]; then
     cp -f "$server_root/$dll" "$WINEPREFIX/drive_c/windows/system32/$dll" 2>/dev/null || true
   fi
+done
+
+log_win="Z:\\server\\LogFile"
+reg_key='HKLM\Software\PristonTale\GameServer'
+wine reg add "$reg_key" /f >/dev/null 2>&1 || true
+for pair in \
+  "ServerName=$server_name" \
+  "server1=${mssql_host},1433" \
+  "LogPath=$log_win" \
+  "AccountDbIP=${mssql_host},1433" \
+  "AccountDbID=sa" \
+  "AccountDbPwd=$mssql_password" \
+  "AccountDbName=accountdb" \
+  "BillingDbIP=${mssql_host},1433" \
+  "BillingDbID=sa" \
+  "BillingDbPwd=$mssql_password" \
+  "BillingDbName=accountdb" \
+  "PCCheck=0"
+do
+  name=${pair%%=*}
+  value=${pair#*=}
+  wine reg add "$reg_key" /v "$name" /t REG_SZ /d "$value" /f >/dev/null 2>&1 || true
 done
 
 if [ -n "$mssql_password" ]; then
