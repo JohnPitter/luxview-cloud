@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -65,9 +66,52 @@ func xmlEscape(s string) string {
 	return s
 }
 
+var muMapXorTab = [...]byte{
+	0xd1, 0x73, 0x52, 0xf6, 0xd2, 0x9a, 0xcb, 0x27,
+	0x3e, 0xaf, 0x59, 0x31, 0x37, 0xb3, 0xe7, 0xa2,
+}
+
+func muDecryptMapFile(in []byte) []byte {
+	out := make([]byte, len(in))
+	key := byte(0x5e)
+	for i, encode := range in {
+		out[i] = (encode ^ muMapXorTab[i%len(muMapXorTab)]) - key
+		key = encode + 0x3d
+	}
+	return out
+}
+
+func muEncryptMapFile(in []byte) []byte {
+	out := make([]byte, len(in))
+	key := byte(0x5e)
+	for i, plain := range in {
+		out[i] = (plain + key) ^ muMapXorTab[i%len(muMapXorTab)]
+		key = out[i] + 0x3d
+	}
+	return out
+}
+
+func muRetagEncTerrain(raw []byte, world int) []byte {
+	if world < 0 || world > 0xffff || len(raw) < 4 {
+		return raw
+	}
+	plain := muDecryptMapFile(raw)
+	if len(plain) < 4 {
+		return raw
+	}
+	got := int(plain[0])<<8 | int(plain[1])
+	if got == world {
+		return raw
+	}
+	plain[0] = byte(world >> 8)
+	plain[1] = byte(world)
+	return muEncryptMapFile(plain)
+}
+
 // ensureMuEncTerrain copies a donor EncTerrain.obj into Season 9 worlds that
-// shipped with .map/.att but no .obj. The IGCN splash loads every listed world
-// and exits with "EncTerrainN.obj file not found" otherwise.
+// shipped with .map/.att but no .obj, and rewrites the world id inside the
+// encrypted header. Copying World79 onto World95 without that retag makes
+// IGCN report "EncTerrain95.obj file corrupted".
 func ensureMuEncTerrain(clientDir string) error {
 	dataDir := filepath.Join(clientDir, "Data")
 	entries, err := os.ReadDir(dataDir)
@@ -124,15 +168,29 @@ func ensureMuEncTerrain(clientDir string) error {
 			}
 		}
 	}
-	if len(donor) == 0 {
-		return nil
-	}
 	for _, info := range worlds {
-		if !info.hasMap || info.hasObj {
+		world, err := strconv.Atoi(info.number)
+		if err != nil {
 			continue
 		}
 		dest := filepath.Join(info.dir, "EncTerrain"+info.number+".obj")
-		if err := os.WriteFile(dest, donor, 0o644); err != nil {
+		if info.hasObj {
+			raw, err := os.ReadFile(dest)
+			if err != nil {
+				return err
+			}
+			fixed := muRetagEncTerrain(raw, world)
+			if !bytes.Equal(fixed, raw) {
+				if err := os.WriteFile(dest, fixed, 0o644); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if !info.hasMap || len(donor) == 0 {
+			continue
+		}
+		if err := os.WriteFile(dest, muRetagEncTerrain(donor, world), 0o644); err != nil {
 			return err
 		}
 	}

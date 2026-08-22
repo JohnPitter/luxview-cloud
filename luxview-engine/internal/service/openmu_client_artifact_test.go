@@ -46,10 +46,11 @@ func TestWriteOpenMUClientZipReplacesLauncherConfig(t *testing.T) {
 	assertContains(t, got["launcher.config"], "<Port>44405</Port>")
 }
 
-func TestWriteOpenMUClientPatchContainsLauncherConfigAndEncTerrainStubs(t *testing.T) {
+func TestWriteOpenMUClientPatchRetagsEncTerrainWorldID(t *testing.T) {
+	donor := muEncryptMapFile([]byte{0x00, 0x4f, 0x00, 0x00})
 	var base bytes.Buffer
 	baseZip := zip.NewWriter(&base)
-	addZipEntry(t, baseZip, "Data/World79/EncTerrain79.obj", "donor-obj")
+	addZipEntry(t, baseZip, "Data/World79/EncTerrain79.obj", string(donor))
 	addZipEntry(t, baseZip, "Data/World95/EncTerrain95.map", "map-95")
 	if err := baseZip.Close(); err != nil {
 		t.Fatalf("close base zip: %v", err)
@@ -65,8 +66,9 @@ func TestWriteOpenMUClientPatchContainsLauncherConfigAndEncTerrainStubs(t *testi
 	}
 	got := readZipEntries(t, out.Bytes())
 	assertContains(t, got["launcher.config"], "<Address>187.77.227.65</Address>")
-	if got["Data/World95/EncTerrain95.obj"] != "donor-obj" {
-		t.Fatalf("World95 stub = %q entries=%v", got["Data/World95/EncTerrain95.obj"], got)
+	plain := muDecryptMapFile([]byte(got["Data/World95/EncTerrain95.obj"]))
+	if len(plain) < 2 || int(plain[0])<<8|int(plain[1]) != 95 {
+		t.Fatalf("World95 world id = %x", plain)
 	}
 }
 

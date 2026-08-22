@@ -65,7 +65,7 @@ func TestClientRevisionChangesWhenBaseZipOrEndpointChanges(t *testing.T) {
 	}
 }
 
-func TestClientRevisionMuEmuIncludesEncTerrainStub(t *testing.T) {
+func TestClientRevisionMuEmuIncludesEncTerrainWorldID(t *testing.T) {
 	cfg := &model.GameServerConfig{GamePort: 44405}
 	mu := clientRevision("muemu", "abc", "1.2.3.4", "mu.luxview.cloud", cfg)
 	open := clientRevision("openmu", "abc", "1.2.3.4", "mu.luxview.cloud", cfg)

@@ -6,6 +6,7 @@ import (
 	"io"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -103,7 +104,48 @@ func WriteOpenMUClientPatch(base io.ReaderAt, size int64, out io.Writer, opts Op
 var (
 	muWorldPath     = regexp.MustCompile(`(?i)(?:^|/)world(\d+)(?:/|$)`)
 	muEncTerrainRel = regexp.MustCompile(`(?i)^encterrain(\d+)\.(obj|map)$`)
+	muMapXorTab     = [...]byte{
+		0xd1, 0x73, 0x52, 0xf6, 0xd2, 0x9a, 0xcb, 0x27,
+		0x3e, 0xaf, 0x59, 0x31, 0x37, 0xb3, 0xe7, 0xa2,
+	}
 )
+
+func muDecryptMapFile(in []byte) []byte {
+	out := make([]byte, len(in))
+	key := byte(0x5e)
+	for i, encode := range in {
+		out[i] = (encode ^ muMapXorTab[i%len(muMapXorTab)]) - key
+		key = encode + 0x3d
+	}
+	return out
+}
+
+func muEncryptMapFile(in []byte) []byte {
+	out := make([]byte, len(in))
+	key := byte(0x5e)
+	for i, plain := range in {
+		out[i] = (plain + key) ^ muMapXorTab[i%len(muMapXorTab)]
+		key = out[i] + 0x3d
+	}
+	return out
+}
+
+func muRetagEncTerrain(raw []byte, world int) []byte {
+	if world < 0 || world > 0xffff || len(raw) < 4 {
+		return raw
+	}
+	plain := muDecryptMapFile(raw)
+	if len(plain) < 4 {
+		return raw
+	}
+	got := int(plain[0])<<8 | int(plain[1])
+	if got == world {
+		return raw
+	}
+	plain[0] = byte(world >> 8)
+	plain[1] = byte(world)
+	return muEncryptMapFile(plain)
+}
 
 func writeMuEncTerrainStubs(writer *zip.Writer, files []*zip.File) error {
 	donor, missing := planMuEncTerrainStubs(files)
@@ -114,12 +156,19 @@ func writeMuEncTerrainStubs(writer *zip.Writer, files []*zip.File) error {
 	if err != nil {
 		return err
 	}
+	encName := regexp.MustCompile(`(?i)encterrain(\d+)\.obj$`)
 	for _, name := range missing {
+		payload := raw
+		if match := encName.FindStringSubmatch(strings.ReplaceAll(name, "\\", "/")); match != nil {
+			if world, err := strconv.Atoi(match[1]); err == nil {
+				payload = muRetagEncTerrain(raw, world)
+			}
+		}
 		target, err := writer.Create(name)
 		if err != nil {
 			return err
 		}
-		if _, err := target.Write(raw); err != nil {
+		if _, err := target.Write(payload); err != nil {
 			return err
 		}
 	}
