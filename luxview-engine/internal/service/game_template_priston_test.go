@@ -20,14 +20,14 @@ func TestPristonTemplateRegistered(t *testing.T) {
 		t.Errorf("DefaultImage = %q, want luxview-cloud-priston:latest", tmpl.DefaultImage)
 	}
 
-	var clientBind string
+	var serverBind string
 	for _, v := range tmpl.DefaultVolumes {
-		if v.MountPath == "/client" {
-			clientBind = v.HostPath
+		if v.MountPath == "/server" {
+			serverBind = v.HostPath
 		}
 	}
-	if clientBind != "/data/luxview/storage/_global/priston-assets/client" {
-		t.Errorf("client HostPath = %q, want global priston-assets/client bind", clientBind)
+	if serverBind != "/data/luxview/storage/_global/priston-assets/server-4220" {
+		t.Errorf("server HostPath = %q, want global priston-assets/server-4220 bind", serverBind)
 	}
 
 	want := map[int]string{10013: "tcp", 5080: "tcp"}
@@ -45,7 +45,7 @@ func TestPristonTemplateRegistered(t *testing.T) {
 	if keys["PRISTON_RATE_EXP"] != "Taxas" {
 		t.Error("missing PRISTON_RATE_EXP in Taxas")
 	}
-	if keys["PRISTON_MAX_MOBS"] != "Gameplay" {
-		t.Error("missing PRISTON_MAX_MOBS (spots) in Gameplay")
+	if keys["PRISTON_MSSQL_HOST"] != "Servidor" {
+		t.Error("missing PRISTON_MSSQL_HOST in Servidor")
 	}
 }

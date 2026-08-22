@@ -148,7 +148,7 @@ func gameAccountSQL(templateID, username, password, characterName, vocation stri
 			if login == "" {
 				return nil, "", fmt.Errorf("usuário LuxView precisa de letras ou números para o Priston Tale")
 			}
-			return &GameAccountInfo{TemplateID: templateID, Login: login, Email: TibiaEmail(username)}, "", nil
+			return &GameAccountInfo{TemplateID: templateID, Login: login, Email: TibiaEmail(username)}, pristonAccountSQL(login, password), nil
 		case "muemu", "openmu":
 			login := MuLogin(username)
 			if login == "" {
@@ -158,6 +158,20 @@ func gameAccountSQL(templateID, username, password, characterName, vocation stri
 		default:
 		return nil, "", fmt.Errorf("este jogo ainda não cria conta pelo launcher")
 	}
+}
+
+func pristonAccountSQL(login, password string) string {
+	letter := strings.ToUpper(login[:1])
+	if letter < "A" || letter > "Z" {
+		letter = "P"
+	}
+	table := letter + "GameUser"
+	user := mssqlQuote(login)
+	pass := mssqlQuote(password)
+	return fmt.Sprintf(
+		`USE [accountdb]; IF EXISTS (SELECT 1 FROM [dbo].[%s] WHERE [userid] = %s) BEGIN UPDATE [dbo].[%s] SET [Passwd] = %s, [inuse] = 0, [BlockChk] = 0, [ServerName] = N'LuxView', [EditDay] = GETDATE() WHERE [userid] = %s; END ELSE BEGIN INSERT INTO [dbo].[%s] ([userid], [Passwd], [GameCode], [GPCode], [RegistDay], [DisuseDay], [UsePeriod], [Credit], [SelectChk], [EventChk], [BlockChk], [inuse], [DelChk], [ServerName], [EditDay], [RNo], [SNo], [Channel], [BNum]) VALUES (%s, %s, N'0', N'0', GETDATE(), DATEADD(YEAR, 20, GETDATE()), 0, 0, 0, 0, 0, 0, 0, N'LuxView', GETDATE(), NULL, NULL, N'0', 0); END;`,
+		table, user, table, pass, user, table, user, pass,
+	)
 }
 
 func mysqlRootPassword(templateID string, fields map[string]string) string {
@@ -178,6 +192,10 @@ func mysqlRootPassword(templateID string, fields map[string]string) string {
 func (g *GameAccount) execSQL(ctx context.Context, container, templateID string, fields map[string]string, sql string) error {
 	if g.docker == nil {
 		return fmt.Errorf("docker indisponível")
+	}
+	if templateID == "priston" {
+		_, err := g.docker.ContainerExec(ctx, container, []string{"python3", "/opt/priston-account.py", "sql"}, "PRISTON_SQL="+sql)
+		return err
 	}
 	env := []string{"MYSQL_PWD=" + mysqlRootPassword(templateID, fields)}
 	if _, err := g.docker.ContainerExec(ctx, container, []string{"mysql", "-uroot", "-e", sql}, env...); err == nil {

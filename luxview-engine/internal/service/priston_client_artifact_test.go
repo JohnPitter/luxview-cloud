@@ -18,6 +18,13 @@ func TestWritePristonClientZipPatchesRegistryAndINI(t *testing.T) {
 	if _, err := io.WriteString(reg, `"Server1" "127.0.0.1"`+"\n"+`"ServerName" "BPT"`+"\n"); err != nil {
 		t.Fatal(err)
 	}
+	luncher, err := writer.Create("luncher.ini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(luncher, "[INITGAME]\ngameServerPORT=10012\ngameServerIP=127.0.0.1\n"); err != nil {
+		t.Fatal(err)
+	}
 	ini, err := writer.Create("openpriston.launcher.ini")
 	if err != nil {
 		t.Fatal(err)
@@ -74,6 +81,14 @@ func TestWritePristonClientZipPatchesRegistryAndINI(t *testing.T) {
 			}
 			if strings.Contains(text, "BPT") {
 				t.Fatalf("BPT leftover in ptReg.rgx: %q", text)
+			}
+		case strings.EqualFold(file.Name, "luncher.ini"):
+			foundINI = true
+			if !strings.Contains(text, "gameServerIP=187.77.227.65") || !strings.Contains(text, "gameServerPORT=10012") {
+				t.Fatalf("luncher.ini = %q", text)
+			}
+			if strings.Contains(text, "127.0.0.1") {
+				t.Fatalf("localhost leftover in luncher.ini: %q", text)
 			}
 		case strings.EqualFold(file.Name, "openpriston.launcher.ini"):
 			foundINI = true

@@ -1,56 +1,41 @@
-# Priston Tale 4420 (OpenPriston) — template LuxView Cloud
+# Priston Tale 4220 (SunnyBPT) — template LuxView Cloud
 
-Servidor .NET 9 do repositório `openpriston`, rebrandado para **LuxView** (no lugar de BPT / SunnyBPT). Drops oficiais do catálogo 4220 com taxas configuráveis; mobs G1–G3 e F1–F4 e NPCs de Ricarten/Pillai alinhados ao mapa clássico (PristonWorld EPT).
+Servidor **nativo** `SunnyBPT_v4220.exe` via Wine32 + xvfb, com MSSQL (`AGameUser`…`ZGameUser`). Não é OpenPriston .NET, Reloaded, WDPT nem Dragon.
 
 ## O que não vai para o git
 
-- Client Windows (`game.exe`, `Field/`, `Char/`) — copyright.
-- Zip de download (`priston-4420-base.zip`) — storage global da VPS.
+- Client Windows (`SunnyBPT.exe`, `Field/`, `char/`) — copyright.
+- Zip de download (`priston-4220-base.zip`) — storage global da VPS.
+- Runtime do server (`GameServer/`, `Field/`, `char/`) — volume `priston-assets/server-4220`.
 
 ## Build da imagem
 
-O contexto do Docker é a raiz do **openpriston**, não deste repositório:
+O contexto é esta pasta (Wine + entrypoint), não o repo OpenPriston:
 
 ```bash
 docker build -t luxview-cloud-priston:latest \
   -f luxview-games/games/priston/Dockerfile \
-  C:/Users/joaop/Desenvolvimento/openpriston
+  luxview-games/games/priston
 ```
 
-Na VPS:
-
-```bash
-# código do servidor (sem client)
-scp -r -i ~/.ssh/vps_key C:/Users/joaop/Desenvolvimento/openpriston \
-  root@187.77.227.65:/opt/openpriston
-
-# meshes/modelos do client 4420/5421 (Field + Char)
-scp -r -i ~/.ssh/vps_key \
-  "C:/Users/joaop/Desenvolvimento/openpriston/Priston Tale Brasil Reloaded (Beta)/Field" \
-  "C:/Users/joaop/Desenvolvimento/openpriston/Priston Tale Brasil Reloaded (Beta)/Char" \
-  root@187.77.227.65:/data/luxview/storage/_global/priston-assets/client/
-
-docker build -t luxview-cloud-priston:latest \
-  -f /opt/luxview-cloud/luxview-games/games/priston/Dockerfile \
-  /opt/openpriston
-```
-
-O volume `/client` do app é um bind read-only de `/data/luxview/storage/_global/priston-assets/client` (`Field/` e `Char/` na raiz). O estado (contas, personagens) fica no volume `/data/state`.
+Na VPS, o volume `/server` é um bind de `/data/luxview/storage/_global/priston-assets/server-4220`. O MSSQL sobe à parte na `luxview-net` como `luxview-mssql` (porta 1433 só interna).
 
 ## Portas
 
-| Porta     | Serviço                          |
-|-----------|----------------------------------|
-| 10012/tcp | Gateway do jogo (login + mundo)  |
-| 10013/tcp | Clan (anúncio no server list)    |
-| 5080/tcp  | Health HTTP `/health`            |
+| Porta     | Serviço                                      |
+|-----------|----------------------------------------------|
+| 10012/tcp | Game server nativo (hardcoded 0x271C)        |
+| 10013/tcp | Clan (anúncio; opcional no primeiro login)   |
+| 5080/tcp  | Health HTTP `/health` + register `/register` |
 
 ## Cliente
 
-Zip base em `/data/luxview/storage/_global/priston-assets/priston-4420-base.zip`. No download, a engine reescreve `ptReg.rgx` e `openpriston.launcher.ini` com o IP público e o nome **LuxView**.
+Zip base em `/data/luxview/storage/_global/priston-assets/priston-4220-base.zip`.
 
-A conta é criada no primeiro login (arquivo JSON no volume `/data/state`). O launcher LuxView não usa SQL Server.
+O launcher LuxView e a engine reescrevem `luncher.ini` (`gameServerIP` / `gameServerPORT`) e `ptReg.rgx`. O exe é **SunnyBPT.exe**, não Game.exe.
 
-## Rates padrão
+A conta é um INSERT MSSQL em `{primeira letra}GameUser` (provisionamento do launcher).
 
-- EXP 5x, ouro 3x, drop 2x (campos `PRISTON_RATE_*` no dashboard).
+## Rates
+
+EXP/gold/drop oficiais do 4220. Campos `PRISTON_RATE_*` existem no dashboard, mas o entrypoint **não** liga `*EVENT_EXPUP` no escuro.

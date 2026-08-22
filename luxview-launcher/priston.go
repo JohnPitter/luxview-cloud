@@ -16,13 +16,13 @@ const (
 
 var (
 	pristonQuotedEntry = regexp.MustCompile(`(?i)("Server(?:1|2|3|Name)")\s+"[^"]*"`)
-	pristonIniLine     = regexp.MustCompile(`(?im)^(ServerAddress|ServerPort|ServerName)=.*$`)
+	pristonIniLine     = regexp.MustCompile(`(?im)^(ServerAddress|ServerPort|ServerName|gameServerIP|gameServerPORT)\s*=.*$`)
 	pristonGameIniLine = regexp.MustCompile(`(?im)^(IP|Port|Clan)\s*=.*$`)
 	pristonBPTConnect  = []byte("189.46.228.170:30303")
 )
 
 func pristonExecutable(clientDir string) string {
-	for _, name := range []string{"game.exe", "Game.exe", "SunnyBPT.exe", "psupdate.exe"} {
+	for _, name := range []string{"SunnyBPT.exe", "game.exe", "Game.exe", "psupdate.exe"} {
 		path := filepath.Join(clientDir, name)
 		if _, err := os.Stat(path); err == nil {
 			return path
@@ -43,18 +43,29 @@ func patchPristonClient(clientDir string, card GameCard) error {
 	if err := patchPristonReg(filepath.Join(clientDir, "ptReg.rgx"), ip, name); err != nil && !os.IsNotExist(err) {
 		return err
 	}
+
+	luncher := filepath.Join(clientDir, "luncher.ini")
+	hasLuncher := false
+	if _, err := os.Stat(luncher); err == nil {
+		hasLuncher = true
+		if err := patchPristonINI(luncher, ip, name); err != nil {
+			return err
+		}
+	}
+
 	iniPath := filepath.Join(clientDir, "openpriston.launcher.ini")
 	if _, err := os.Stat(iniPath); err == nil {
 		if err := patchPristonINI(iniPath, ip, name); err != nil {
 			return err
 		}
-	} else {
+	} else if !hasLuncher {
 		if err := os.WriteFile(iniPath, []byte(
 			"ServerAddress="+ip+"\nServerPort="+strconv.Itoa(pristonGamePort)+"\nServerName="+name+"\nGameExecutable=game.exe\n",
 		), 0o644); err != nil {
 			return err
 		}
 	}
+
 	gameIni := filepath.Join(clientDir, "game.ini")
 	if _, err := os.Stat(gameIni); err == nil {
 		if err := patchPristonGameINI(gameIni, ip); err != nil {
@@ -95,17 +106,20 @@ func patchPristonINI(path, ip, name string) error {
 		return err
 	}
 	values := map[string]string{
-		"ServerAddress": ip,
-		"ServerPort":    strconv.Itoa(pristonGamePort),
-		"ServerName":    name,
+		"ServerAddress":  ip,
+		"ServerPort":     strconv.Itoa(pristonGamePort),
+		"ServerName":     name,
+		"gameServerIP":   ip,
+		"gameServerPORT": strconv.Itoa(pristonGamePort),
 	}
 	updated := pristonIniLine.ReplaceAllFunc(content, func(match []byte) []byte {
 		parts := strings.SplitN(string(match), "=", 2)
 		if len(parts) == 0 {
 			return match
 		}
-		if value, ok := values[parts[0]]; ok {
-			return []byte(parts[0] + "=" + value)
+		key := strings.TrimSpace(parts[0])
+		if value, ok := values[key]; ok {
+			return []byte(key + "=" + value)
 		}
 		return match
 	})

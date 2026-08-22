@@ -144,3 +144,9 @@ func mysqlQuote(s string) string {
 	s = strings.ReplaceAll(s, "\x00", "")
 	return "'" + s + "'"
 }
+
+func mssqlQuote(s string) string {
+	s = strings.ReplaceAll(s, "'", "''")
+	s = strings.ReplaceAll(s, "\x00", "")
+	return "N'" + s + "'"
+}

@@ -8,22 +8,23 @@ import (
 	"strings"
 )
 
-const (
-	pristonRegName         = "ptreg.rgx"
-	pristonLauncherINI     = "openpriston.launcher.ini"
-	pristonGameINI         = "game.ini"
-	pristonGameExe         = "game.exe"
-	pristonDefaultName     = "LuxView"
-	pristonDefaultPort     = 10012
-	pristonDefaultClanPort = 10013
-)
+	const (
+		pristonRegName         = "ptreg.rgx"
+		pristonLauncherINI     = "openpriston.launcher.ini"
+		pristonLuncherINI      = "luncher.ini"
+		pristonGameINI         = "game.ini"
+		pristonGameExe         = "game.exe"
+		pristonDefaultName     = "LuxView"
+		pristonDefaultPort     = 10012
+		pristonDefaultClanPort = 10013
+	)
 
-var (
-	pristonQuotedEntry = regexp.MustCompile(`(?i)("Server(?:1|2|3|Name)")\s+"[^"]*"`)
-	pristonIniLine     = regexp.MustCompile(`(?im)^(ServerAddress|ServerPort|ServerName)=.*$`)
-	pristonGameIniLine = regexp.MustCompile(`(?im)^(IP|Port|Clan)\s*=.*$`)
-	pristonBPTConnect  = []byte("189.46.228.170:30303")
-)
+	var (
+		pristonQuotedEntry = regexp.MustCompile(`(?i)("Server(?:1|2|3|Name)")\s+"[^"]*"`)
+		pristonIniLine     = regexp.MustCompile(`(?im)^(ServerAddress|ServerPort|ServerName|gameServerIP|gameServerPORT)\s*=.*$`)
+		pristonGameIniLine = regexp.MustCompile(`(?im)^(IP|Port|Clan)\s*=.*$`)
+		pristonBPTConnect  = []byte("189.46.228.170:30303")
+	)
 
 type PristonClientOptions struct {
 	ServerName string
@@ -80,8 +81,8 @@ func WritePristonClientZip(base io.ReaderAt, size int64, out io.Writer, opts Pri
 	return err
 }
 
-// WritePristonClientPatch writes ptreg.rgx, launcher.ini, game.ini and Game.exe
-// (the Reloaded client reads ConnectServer from game.ini / a BPT IP inside the exe).
+	// WritePristonClientPatch writes ptreg.rgx, luncher.ini (4220 SunnyBPT),
+	// openpriston.launcher.ini, game.ini and Game.exe (Reloaded fallback).
 func WritePristonClientPatch(base io.ReaderAt, size int64, out io.Writer, opts PristonClientOptions) error {
 	normalizePristonClientOptions(&opts)
 
@@ -145,9 +146,10 @@ func isPristonReg(name string) bool {
 	return strings.EqualFold(baseName(name), pristonRegName)
 }
 
-func isPristonLauncherINI(name string) bool {
-	return strings.EqualFold(baseName(name), pristonLauncherINI)
-}
+	func isPristonLauncherINI(name string) bool {
+		base := baseName(name)
+		return strings.EqualFold(base, pristonLauncherINI) || strings.EqualFold(base, pristonLuncherINI)
+	}
 
 func isPristonGameINI(name string) bool {
 	return strings.EqualFold(baseName(name), pristonGameINI)
@@ -226,15 +228,17 @@ func patchPristonReg(content []byte, opts PristonClientOptions) []byte {
 	return replaced
 }
 
-func patchPristonINI(content []byte, opts PristonClientOptions) []byte {
-	if len(bytes.TrimSpace(content)) == 0 {
-		return nil
-	}
-	values := map[string]string{
-		"ServerAddress": opts.ServerIP,
-		"ServerPort":    itoa(opts.GamePort),
-		"ServerName":    opts.ServerName,
-	}
+	func patchPristonINI(content []byte, opts PristonClientOptions) []byte {
+		if len(bytes.TrimSpace(content)) == 0 {
+			return nil
+		}
+		values := map[string]string{
+			"ServerAddress":  opts.ServerIP,
+			"ServerPort":     itoa(opts.GamePort),
+			"ServerName":     opts.ServerName,
+			"gameServerIP":   opts.ServerIP,
+			"gameServerPORT": itoa(opts.GamePort),
+		}
 	return pristonIniLine.ReplaceAllFunc(content, func(match []byte) []byte {
 		parts := bytes.SplitN(match, []byte("="), 2)
 		if len(parts) == 0 {

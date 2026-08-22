@@ -59,8 +59,10 @@ func TestGameAccountSQLPriston(t *testing.T) {
 	if info.Login != "testando" {
 		t.Fatalf("login %s", info.Login)
 	}
-	if sql != "" {
-		t.Fatalf("priston must not emit SQL, got %q", sql)
+	for _, part := range []string{"TGameUser", "testando", "Secret99", "accountdb"} {
+		if !strings.Contains(sql, part) {
+			t.Fatalf("missing %q in %s", part, sql)
+		}
 	}
 }
 
