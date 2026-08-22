@@ -78,4 +78,9 @@ python3 /opt/priston-account.py serve &
 
 echo "[priston] LuxView $server_name native 4220 bind=${bind_ip} advertise=${public_ip}:10012 mssql=${mssql_host}"
 cd "$server_root"
-exec xvfb-run -a wine "$server_root/SunnyBPT_v4220.exe"
+# -ac disables X authority so Wine can create the (headless) server window.
+rm -f /tmp/.X99-lock
+Xvfb :99 -ac -screen 0 1024x768x16 -nolisten tcp >/artifacts/xvfb.log 2>&1 &
+export DISPLAY=:99
+sleep 1
+exec wine "$server_root/SunnyBPT_v4220.exe"
