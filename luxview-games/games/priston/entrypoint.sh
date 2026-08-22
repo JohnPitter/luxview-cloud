@@ -29,10 +29,7 @@ if [ ! -f "$hotuk" ]; then
   exit 1
 fi
 
-bind_ip="$(hostname -i 2>/dev/null | awk '{print $1}')"
-if [ -z "$bind_ip" ] || [ "$bind_ip" = "127.0.0.1" ]; then
-  bind_ip="0.0.0.0"
-fi
+bind_ip="0.0.0.0"
 
 # Native 4220: keep official GameServer NPC/mob/field data. Only rewrite
 # listen/advertise + server name. Rates stay commented unless already present.
@@ -66,7 +63,9 @@ if [ -n "$mssql_password" ]; then
   i=0
   while [ "$i" -lt 30 ]; do
     if /opt/mssql-tools18/bin/sqlcmd -S "$mssql_host" -U sa -P "$mssql_password" -C -Q "SELECT 1" >/dev/null 2>&1; then
-      /opt/mssql-tools18/bin/sqlcmd -S "$mssql_host" -U sa -P "$mssql_password" -C -i /opt/init-accountdb.sql || true
+      if ! /opt/mssql-tools18/bin/sqlcmd -S "$mssql_host" -U sa -P "$mssql_password" -C -d accountdb -h -1 -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.tables WHERE name LIKE '[A-Z]GameUser'" 2>/dev/null | grep -q 26; then
+        /opt/mssql-tools18/bin/sqlcmd -S "$mssql_host" -U sa -P "$mssql_password" -C -Q "IF DB_ID(N'accountdb') IS NULL CREATE DATABASE [accountdb];"
+      fi
       break
     fi
     i=$((i + 1))
@@ -83,4 +82,4 @@ rm -f /tmp/.X99-lock
 Xvfb :99 -ac -screen 0 1024x768x16 -nolisten tcp >/artifacts/xvfb.log 2>&1 &
 export DISPLAY=:99
 sleep 1
-exec wine "$server_root/SunnyBPT_v4220.exe"
+exec wine "$server_root/SunnyBPT_v4220.exe" >/artifacts/wine.log 2>&1
