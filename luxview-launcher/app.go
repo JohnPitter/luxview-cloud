@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.70"
+var appVersion = "v1.71"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -103,18 +103,26 @@ var launchSpecs = map[string]launchSpec{
 		gameExe:     "otclient.exe",
 		processName: "otclient.exe",
 	},
-	"priston": {
-		clientDir:   "",
-		gameExe:     "game.exe",
-		processName: "game.exe",
-	},
-}
+		"priston": {
+			clientDir:   "",
+			gameExe:     "game.exe",
+			processName: "game.exe",
+		},
+		"muemu": {
+			clientDir:   "",
+			gameExe:     "main.exe",
+			processName: "main.exe",
+		},
+	}
 
 func normalizeGameID(raw string) string {
 	id := strings.ToLower(strings.TrimSpace(raw))
 	id = strings.ReplaceAll(id, "_", "-")
 	if id == "tibia" || id == "tibia-canary" || id == "tibia (canary)" || strings.Contains(id, "tibia") {
 		return "tibia"
+	}
+	if id == "openmu" || id == "muemu" || strings.Contains(id, "mu online") {
+		return "muemu"
 	}
 	return id
 }
@@ -268,6 +276,9 @@ func (a *App) isInstalled(c GameCard) bool {
 func clientFilesReady(installRoot, game string, spec launchSpec) bool {
 	if normalizeGameID(game) == "priston" {
 		return pristonExecutable(filepath.Join(installRoot, spec.clientDir)) != ""
+	}
+	if normalizeGameID(game) == "muemu" {
+		return muExecutable(filepath.Join(installRoot, spec.clientDir)) != ""
 	}
 	for _, relativePath := range requiredClientFiles(game, spec) {
 		if _, err := os.Stat(filepath.Join(installRoot, spec.clientDir, relativePath)); err != nil {
@@ -490,6 +501,15 @@ func (a *App) Play(card GameCard, user, pass string) error {
 			return err
 		}
 		return launchExecutable(exePath, clientDir)
+	}
+	if game == "muemu" {
+		if resolved := muExecutable(clientDir); resolved != "" {
+			exePath = resolved
+		}
+		if err := patchMuClient(clientDir, card); err != nil {
+			return err
+		}
+		return launchMuClient(exePath, clientDir, card.ServerIP, muConnectPort(card))
 	}
 
 	if user == "" || pass == "" {

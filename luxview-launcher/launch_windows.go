@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -40,6 +41,18 @@ func launchTibiaExecutable(exePath, workingDir string) error {
 	}
 	if err := command.Start(); err != nil {
 		return fmt.Errorf("falha ao iniciar o Tibia: %w", err)
+	}
+	return nil
+}
+
+func launchMuClient(exePath, workingDir, ip string, port int) error {
+	if strings.TrimSpace(ip) == "" {
+		return fmt.Errorf("servidor MU sem IP")
+	}
+	command := exec.Command(exePath, "connect", "/u"+ip, "/p"+strconv.Itoa(port))
+	command.Dir = workingDir
+	if err := command.Start(); err != nil {
+		return fmt.Errorf("falha ao iniciar o MU: %w", err)
 	}
 	return nil
 }

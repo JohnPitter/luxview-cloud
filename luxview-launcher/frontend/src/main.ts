@@ -80,8 +80,8 @@ const cardGame = (card: Card): string => gameId(card.game || card.display_name |
 
 const THEMES: Record<string, Theme> = {
   rakion:   { grad: 'linear-gradient(135deg,#7f1d1d 0%,#2a0a0a 100%)', accent: '#e0392b', tag: 'Chaos Force', initials: 'R' },
-  openmu:   { grad: 'linear-gradient(135deg,#581c87 0%,#1b0a2e 100%)', accent: '#a855f7', tag: '97D + S2', initials: 'M' },
-  muemu:    { grad: 'linear-gradient(135deg,#581c87 0%,#1b0a2e 100%)', accent: '#a855f7', tag: '97D + S2', initials: 'M' },
+  openmu:   { grad: 'linear-gradient(135deg,#581c87 0%,#1b0a2e 100%)', accent: '#a855f7', tag: 'Season 9', initials: 'M' },
+  muemu:    { grad: 'linear-gradient(135deg,#581c87 0%,#1b0a2e 100%)', accent: '#a855f7', tag: 'Season 9', initials: 'M' },
   metin2:   { grad: 'linear-gradient(135deg,#7c2d12 0%,#2a1505 100%)', accent: '#fb923c', tag: 'MMORPG', initials: 'M2' },
   tibia:    { grad: 'linear-gradient(135deg,#14532d 0%,#052e16 100%)', accent: '#fbbf24', tag: 'MMORPG', initials: 'T' },
   priston:  { grad: 'linear-gradient(135deg,#0e7490 0%,#082530 100%)', accent: '#22d3ee', tag: 'Tale', initials: 'PT' },
@@ -92,8 +92,8 @@ const theme = (g: string): Theme => THEMES[gameId(g)] || FALLBACK;
 // Frases amigáveis (substituem a descrição técnica do servidor no hero).
 const BLURBS: Record<string, string> = {
   rakion:  'Ação 3D em arenas frenéticas. Escolha seu mercenário e domine a batalha.',
-  openmu:  '97D e Season 2+ no mesmo client — escolha o mundo 97D ou o servidor 99.',
-  muemu:   '97D e Season 2+ no mesmo client — escolha o mundo 97D ou o servidor 99.',
+  openmu:  'Season 9 no client IGCN — conecta no ConnectServer da LuxView.',
+  muemu:   'Season 9 no client IGCN — conecta no ConnectServer da LuxView.',
   metin2:  'MMORPG de ação oriental com três reinos em guerra constante.',
   tibia:   'Aventure-se em um mundo de fantasia medieval: escolha sua vocação (cavaleiro, paladino, druida ou mago) e enfrente monstros, explore masmorras, complete quests épicas e domine o combate por turnos com magias e feitiços.',
   priston: 'MMORPG isométrico clássico, com caçadas intensas e bosses lendários.',
