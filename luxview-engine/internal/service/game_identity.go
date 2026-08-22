@@ -114,6 +114,10 @@ func PristonLogin(username string) string {
 	return login
 }
 
+func MuLogin(username string) string {
+	return clipRunes(PristonLogin(username), 10)
+}
+
 func SHA1Hex(plain string) string {
 	sum := sha1.Sum([]byte(plain))
 	return hex.EncodeToString(sum[:])

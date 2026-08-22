@@ -33,7 +33,6 @@ func muemuTemplate() model.GameTemplate {
 		DefaultImage:  "luxview-cloud-muemu:latest",
 		DefaultCPU:    "1.0",
 		DefaultMemory: "2g",
-		DBService:     model.ServiceMySQL,
 		SupportsQuery: false,
 		DefaultVolumes: []model.GameVolume{
 			{MountPath: "/muemu-data"},

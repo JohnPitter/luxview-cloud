@@ -64,6 +64,19 @@ func TestGameAccountSQLPriston(t *testing.T) {
 	}
 }
 
+func TestGameAccountSQLMuEmu(t *testing.T) {
+	info, sql, err := gameAccountSQL("muemu", "testando", "Secret99", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Login != "testando" {
+		t.Fatalf("login %s", info.Login)
+	}
+	if sql != "" {
+		t.Fatalf("muemu relies on AutoRegister until schema is provisioned, got %q", sql)
+	}
+}
+
 func TestGameAccountSQLRakion(t *testing.T) {
 	info, sql, err := gameAccountSQL("rakion", "testando", "Secret99", "", "")
 	if err != nil {

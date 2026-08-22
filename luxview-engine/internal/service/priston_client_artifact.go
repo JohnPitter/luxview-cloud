@@ -9,33 +9,31 @@ import (
 )
 
 const (
-	pristonRegName     = "ptreg.rgx"
-	pristonLauncherINI = "openpriston.launcher.ini"
-	pristonDefaultName = "LuxView"
-	pristonDefaultPort = 10012
+	pristonRegName         = "ptreg.rgx"
+	pristonLauncherINI     = "openpriston.launcher.ini"
+	pristonGameINI         = "game.ini"
+	pristonGameExe         = "game.exe"
+	pristonDefaultName     = "LuxView"
+	pristonDefaultPort     = 10012
+	pristonDefaultClanPort = 10013
 )
 
 var (
 	pristonQuotedEntry = regexp.MustCompile(`(?i)("Server(?:1|2|3|Name)")\s+"[^"]*"`)
 	pristonIniLine     = regexp.MustCompile(`(?im)^(ServerAddress|ServerPort|ServerName)=.*$`)
+	pristonGameIniLine = regexp.MustCompile(`(?im)^(IP|Port|Clan)\s*=.*$`)
+	pristonBPTConnect  = []byte("189.46.228.170:30303")
 )
 
 type PristonClientOptions struct {
 	ServerName string
 	ServerIP   string
 	GamePort   int
+	ClanPort   int
 }
 
 func WritePristonClientZip(base io.ReaderAt, size int64, out io.Writer, opts PristonClientOptions) error {
-	if opts.ServerIP == "" {
-		opts.ServerIP = "127.0.0.1"
-	}
-	if opts.GamePort == 0 {
-		opts.GamePort = pristonDefaultPort
-	}
-	if strings.TrimSpace(opts.ServerName) == "" {
-		opts.ServerName = pristonDefaultName
-	}
+	normalizePristonClientOptions(&opts)
 
 	reader, err := zip.NewReader(base, size)
 	if err != nil {
@@ -57,6 +55,14 @@ func WritePristonClientZip(base io.ReaderAt, size int64, out io.Writer, opts Pri
 				return err
 			}
 			wroteINI = true
+		case isPristonGameINI(file.Name):
+			if err := writePatchedPristonGameINI(writer, file, opts); err != nil {
+				return err
+			}
+		case isPristonGameExe(file.Name):
+			if err := writePatchedPristonGameExe(writer, file, opts); err != nil {
+				return err
+			}
 		default:
 			if err := copyZipFile(writer, file); err != nil {
 				return err
@@ -74,17 +80,10 @@ func WritePristonClientZip(base io.ReaderAt, size int64, out io.Writer, opts Pri
 	return err
 }
 
-// WritePristonClientPatch writes only ptreg.rgx and openpriston.launcher.ini.
+// WritePristonClientPatch writes ptreg.rgx, launcher.ini, game.ini and Game.exe
+// (the Reloaded client reads ConnectServer from game.ini / a BPT IP inside the exe).
 func WritePristonClientPatch(base io.ReaderAt, size int64, out io.Writer, opts PristonClientOptions) error {
-	if opts.ServerIP == "" {
-		opts.ServerIP = "127.0.0.1"
-	}
-	if opts.GamePort == 0 {
-		opts.GamePort = pristonDefaultPort
-	}
-	if strings.TrimSpace(opts.ServerName) == "" {
-		opts.ServerName = pristonDefaultName
-	}
+	normalizePristonClientOptions(&opts)
 
 	reader, err := zip.NewReader(base, size)
 	if err != nil {
@@ -106,6 +105,14 @@ func WritePristonClientPatch(base io.ReaderAt, size int64, out io.Writer, opts P
 				return err
 			}
 			wroteINI = true
+		case isPristonGameINI(file.Name):
+			if err := writePatchedPristonGameINI(writer, file, opts); err != nil {
+				return err
+			}
+		case isPristonGameExe(file.Name):
+			if err := writePatchedPristonGameExe(writer, file, opts); err != nil {
+				return err
+			}
 		}
 	}
 	if wroteINI {
@@ -119,12 +126,35 @@ func WritePristonClientPatch(base io.ReaderAt, size int64, out io.Writer, opts P
 	return err
 }
 
+func normalizePristonClientOptions(opts *PristonClientOptions) {
+	if opts.ServerIP == "" {
+		opts.ServerIP = "127.0.0.1"
+	}
+	if opts.GamePort == 0 {
+		opts.GamePort = pristonDefaultPort
+	}
+	if opts.ClanPort == 0 {
+		opts.ClanPort = pristonDefaultClanPort
+	}
+	if strings.TrimSpace(opts.ServerName) == "" {
+		opts.ServerName = pristonDefaultName
+	}
+}
+
 func isPristonReg(name string) bool {
 	return strings.EqualFold(baseName(name), pristonRegName)
 }
 
 func isPristonLauncherINI(name string) bool {
 	return strings.EqualFold(baseName(name), pristonLauncherINI)
+}
+
+func isPristonGameINI(name string) bool {
+	return strings.EqualFold(baseName(name), pristonGameINI)
+}
+
+func isPristonGameExe(name string) bool {
+	return strings.EqualFold(baseName(name), pristonGameExe)
 }
 
 func writePatchedPristonReg(writer *zip.Writer, file *zip.File, opts PristonClientOptions) error {
@@ -143,6 +173,26 @@ func writePatchedPristonINI(writer *zip.Writer, file *zip.File, opts PristonClie
 	patched := patchPristonINI(content, opts)
 	if len(patched) == 0 {
 		patched = []byte(buildPristonLauncherINI(opts))
+	}
+	return writeReplacedZipFile(writer, file, patched)
+}
+
+func writePatchedPristonGameINI(writer *zip.Writer, file *zip.File, opts PristonClientOptions) error {
+	content, err := readZipFile(file)
+	if err != nil {
+		return err
+	}
+	return writeReplacedZipFile(writer, file, patchPristonGameINI(content, opts))
+}
+
+func writePatchedPristonGameExe(writer *zip.Writer, file *zip.File, opts PristonClientOptions) error {
+	content, err := readZipFile(file)
+	if err != nil {
+		return err
+	}
+	patched := patchPristonGameExe(content, opts)
+	if bytes.Equal(patched, content) {
+		return copyZipFile(writer, file)
 	}
 	return writeReplacedZipFile(writer, file, patched)
 }
@@ -198,10 +248,48 @@ func patchPristonINI(content []byte, opts PristonClientOptions) []byte {
 	})
 }
 
+func patchPristonGameINI(content []byte, opts PristonClientOptions) []byte {
+	if len(bytes.TrimSpace(content)) == 0 {
+		return []byte(buildPristonGameINI(opts))
+	}
+	values := map[string]string{
+		"IP":   opts.ServerIP,
+		"Port": itoa(opts.GamePort),
+		"Clan": opts.ServerIP + ":" + itoa(opts.ClanPort),
+	}
+	return pristonGameIniLine.ReplaceAllFunc(content, func(match []byte) []byte {
+		parts := bytes.SplitN(match, []byte("="), 2)
+		if len(parts) == 0 {
+			return match
+		}
+		key := string(bytes.TrimSpace(parts[0]))
+		value, ok := values[key]
+		if !ok {
+			return match
+		}
+		return []byte(key + "=" + value)
+	})
+}
+
+func patchPristonGameExe(content []byte, opts PristonClientOptions) []byte {
+	replacement := opts.ServerIP + ":" + itoa(opts.GamePort)
+	if len(replacement) > len(pristonBPTConnect) || !bytes.Contains(content, pristonBPTConnect) {
+		return content
+	}
+	padded := make([]byte, len(pristonBPTConnect))
+	copy(padded, replacement)
+	return bytes.ReplaceAll(content, pristonBPTConnect, padded)
+}
+
 func buildPristonLauncherINI(opts PristonClientOptions) string {
 	return "# Perfil do launcher LuxView.\n" +
 		"ServerAddress=" + opts.ServerIP + "\n" +
 		"ServerPort=" + itoa(opts.GamePort) + "\n" +
 		"ServerName=" + opts.ServerName + "\n" +
 		"GameExecutable=game.exe\n"
+}
+
+func buildPristonGameINI(opts PristonClientOptions) string {
+	return "[ConnectServer]\r\nIP=" + opts.ServerIP + "\r\nPort=" + itoa(opts.GamePort) +
+		"\r\nClan=" + opts.ServerIP + ":" + itoa(opts.ClanPort) + "\r\n"
 }

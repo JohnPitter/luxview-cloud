@@ -31,17 +31,24 @@ RUN cp -r Data /app/gameserver/Data
 # Stage 2: runtime
 FROM ubuntu:22.04
 
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+    DOTNET_ROLL_FORWARD=Major \
+    OPENSSL_CONF=/dev/null
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates curl supervisor \
         mysql-server mysql-client && \
-    # .NET 6 runtime
+    # MuEmu publishes as netcoreapp3.1. EF Core 3.1 crashes on .NET 6
+    # (QueryableMethods). .NET 3.1 needs OpenSSL 1.1; Ubuntu 22.04 ships 3.
+    curl -fsSL -A Mozilla/5.0 -o /tmp/libssl1.1.deb \
+      http://security.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb && \
+    dpkg -i /tmp/libssl1.1.deb && rm -f /tmp/libssl1.1.deb && \
     curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
     chmod +x /tmp/dotnet-install.sh && \
+    /tmp/dotnet-install.sh --channel 3.1 --runtime aspnetcore --install-dir /usr/share/dotnet && \
     /tmp/dotnet-install.sh --channel 6.0 --runtime aspnetcore --install-dir /usr/share/dotnet && \
-    ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet && \
+    ln -sf /usr/share/dotnet/dotnet /usr/bin/dotnet && \
     rm /tmp/dotnet-install.sh && \
     rm -rf /var/lib/apt/lists/*
 

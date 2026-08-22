@@ -10,6 +10,7 @@ API_KEY="2020110116"
 MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-muemu}"
 MUEMU_SERVER_NAME="${MUEMU_SERVER_NAME:-MU Online Server}"
 MUEMU_SEASON="${MUEMU_SEASON:-Classic99}"
+export MUEMU_SEASON
 MUEMU_LANGUAGE="${MUEMU_LANGUAGE:-en}"
 MUEMU_AUTO_REGISTER="${MUEMU_AUTO_REGISTER:-true}"
 MUEMU_EXP_RATE="${MUEMU_EXP_RATE:-9000}"
@@ -20,6 +21,9 @@ MUEMU_MAX_PARTY_LEVEL_DIFF="${MUEMU_MAX_PARTY_LEVEL_DIFF:-400}"
 MUEMU_CLIENT_VERSION="${MUEMU_CLIENT_VERSION:-10525}"
 MUEMU_CLIENT_SERIAL="${MUEMU_CLIENT_SERIAL:-fughy683dfu7teqg}"
 PUBLIC_IP="${LUXVIEW_PUBLIC_IP:-127.0.0.1}"
+export DOTNET_ROLL_FORWARD="${DOTNET_ROLL_FORWARD:-Major}"
+# .NET 3.1 + libssl1.1 cannot parse Ubuntu 22.04's OpenSSL 3 openssl.cnf
+export OPENSSL_CONF="${OPENSSL_CONF:-/dev/null}"
 
 mkdir -p "$DATA_DIR/mysql"
 
@@ -119,9 +123,14 @@ write_server_xml() {
     <MaxPartyLevelDifference>${MUEMU_MAX_PARTY_LEVEL_DIFF}</MaxPartyLevelDifference>
   </GamePlay>
   <Files>
-    <Monsters>./Data/Monsters/Monster</Monsters>
-    <MonsterSetBase>./Data/Monsters/MonsterSetBase</MonsterSetBase>
-    <MapServer>./Data/MapServer.xml</MapServer>
+    <DataRoot>./Data/</DataRoot>
+    <Monsters>Monsters/Monster</Monsters>
+    <MonsterSetBase>Monsters/MonsterSetBase</MonsterSetBase>
+    <SelupanPatterns>Monsters/PatternSelupan.xml</SelupanPatterns>
+    <MayaLeftHandPatterns>Monsters/PatternMayaLeftHand.xml</MayaLeftHandPatterns>
+    <MayaRightHandPatterns>Monsters/PatternMayaRightHand.xml</MayaRightHandPatterns>
+    <NightmarePatterns>Monsters/PatternNightmare.xml</NightmarePatterns>
+    <MapServer>MapServer.xml</MapServer>
   </Files>
 </Server>
 XMLEOF
@@ -147,6 +156,57 @@ if [ "$DUAL" = "1" ]; then
 else
     echo "[muemu] Server.xml generated (Season: ${GS0_SEASON}, EXP: ${MUEMU_EXP_RATE}x, client ${MUEMU_CLIENT_VERSION})"
 fi
+
+# MuEmu only ships en/es message files. Fall back so pt/other langs still boot.
+for dir in "$GS_DIR" "$GS99_DIR"; do
+    lang_file="$dir/Data/Lang/ServerMessages(${MUEMU_LANGUAGE}).xml"
+    if [ -d "$dir/Data/Lang" ] && [ ! -f "$lang_file" ] && [ -f "$dir/Data/Lang/ServerMessages(en).xml" ]; then
+        cp "$dir/Data/Lang/ServerMessages(en).xml" "$lang_file"
+        echo "[muemu] lang fallback: ${MUEMU_LANGUAGE} -> en ($lang_file)"
+    fi
+done
+
+# MuEmu Data XMLs use Windows backslashes in relative paths.
+python3 - <<'PY'
+import os, pathlib
+for root in ("/opt/muemu/gameserver/Data", "/opt/muemu/gameserver99/Data"):
+    if not os.path.isdir(root):
+        continue
+    for dirpath, _, files in os.walk(root):
+        for name in files:
+            if not name.lower().endswith((".xml", ".txt")):
+                continue
+            path = os.path.join(dirpath, name)
+            raw = pathlib.Path(path).read_bytes()
+            if b"\\" not in raw:
+                continue
+            pathlib.Path(path).write_bytes(raw.replace(b"\\", b"/"))
+PY
+
+# MuEmu looks up Data files with the exact Season enum casing (Season9Eng);
+# upstream ships Season9ENG.xml etc.
+python3 - <<'PY'
+import os, re, shutil
+season = os.environ.get("MUEMU_SEASON", "")
+if not season:
+    raise SystemExit(0)
+rx = re.compile(re.escape(season), re.I)
+for root in ("/opt/muemu/gameserver/Data", "/opt/muemu/gameserver99/Data"):
+    if not os.path.isdir(root):
+        continue
+    for dirpath, _, files in os.walk(root):
+        for name in files:
+            if season.lower() not in name.lower():
+                continue
+            alias = rx.sub(season, name)
+            if alias == name:
+                continue
+            src = os.path.join(dirpath, name)
+            dst = os.path.join(dirpath, alias)
+            if not os.path.exists(dst):
+                shutil.copy2(src, dst)
+                print("[muemu] season alias", dst)
+PY
 
 cat > "$CS_DIR/configuration.xml" <<XMLEOF
 <?xml version="1.0"?>
@@ -226,4 +286,30 @@ stderr_logfile_maxbytes=0
 CONF
 
 echo "[muemu] Starting services via supervisord..."
+ensure_schema() {
+    local tables
+    tables=$(mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -N -e "SHOW TABLES FROM MuOnline" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "${tables:-0}" -ge 3 ]; then
+        echo "[muemu] MySQL schema already present ($tables tables)"
+        return 0
+    fi
+    echo "[muemu] creating MySQL schema via GameServer db create..."
+    cd "$GS_DIR"
+    ( sleep 20; printf 'db create\n'; sleep 8 ) | timeout 75 dotnet /opt/muemu/gameserver/MuEmu.dll || true
+    tables=$(mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -N -e "SHOW TABLES FROM MuOnline" 2>/dev/null | wc -l | tr -d ' ')
+    echo "[muemu] schema tables=$tables"
+}
+
+mysqld --datadir="$DATA_DIR/mysql" --user=mysql --bind-address=127.0.0.1 >/tmp/mysqld-schema.log 2>&1 &
+MYSQL_SCHEMA_PID=$!
+for i in $(seq 1 30); do
+    if mysqladmin -u root -p"${MYSQL_ROOT_PASSWORD}" ping --silent 2>/dev/null; then
+        break
+    fi
+    sleep 1
+done
+ensure_schema
+kill "$MYSQL_SCHEMA_PID" 2>/dev/null || true
+wait "$MYSQL_SCHEMA_PID" 2>/dev/null || true
+
 exec /usr/bin/supervisord -c /tmp/muemu-supervisord.conf

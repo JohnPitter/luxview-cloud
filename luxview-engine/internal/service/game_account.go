@@ -143,13 +143,19 @@ func gameAccountSQL(templateID, username, password, characterName, vocation stri
 			mysqlQuote(id), mysqlQuote(pass), mysqlQuote(email), mysqlQuote(id), mysqlQuote(id), mysqlQuote(id),
 		)
 		return &GameAccountInfo{TemplateID: templateID, Login: id, Email: email}, sql, nil
-	case "priston":
-		login := PristonLogin(username)
-		if login == "" {
-			return nil, "", fmt.Errorf("usuário LuxView precisa de letras ou números para o Priston Tale")
-		}
-		return &GameAccountInfo{TemplateID: templateID, Login: login, Email: TibiaEmail(username)}, "", nil
-	default:
+		case "priston":
+			login := PristonLogin(username)
+			if login == "" {
+				return nil, "", fmt.Errorf("usuário LuxView precisa de letras ou números para o Priston Tale")
+			}
+			return &GameAccountInfo{TemplateID: templateID, Login: login, Email: TibiaEmail(username)}, "", nil
+		case "muemu", "openmu":
+			login := MuLogin(username)
+			if login == "" {
+				return nil, "", fmt.Errorf("usuário LuxView precisa de letras ou números para o MU")
+			}
+			return &GameAccountInfo{TemplateID: templateID, Login: login, Email: TibiaEmail(username)}, "", nil
+		default:
 		return nil, "", fmt.Errorf("este jogo ainda não cria conta pelo launcher")
 	}
 }
@@ -162,6 +168,9 @@ func mysqlRootPassword(templateID string, fields map[string]string) string {
 	}
 	if templateID == "rakion" {
 		return "123456"
+	}
+	if templateID == "muemu" {
+		return "muemu"
 	}
 	return "root"
 }

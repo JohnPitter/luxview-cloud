@@ -70,12 +70,12 @@ func (hc *HealthChecker) CheckAll(ctx context.Context) {
 			continue
 		}
 		if app.AppType == model.AppTypeGame {
-			outcome := hc.checkGame(ctx, &app)
+			outcome, containerID := hc.checkGame(ctx, &app)
 			if outcome.healthy {
 				hc.resetFailures(app.ID)
-				if app.Status == model.AppStatusError {
-					log.Info().Str("app", app.Subdomain).Msg("game recovered, marking as running")
-					_ = hc.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusRunning, app.ContainerID)
+				if app.Status == model.AppStatusError || (containerID != "" && containerID != app.ContainerID) {
+					log.Info().Str("app", app.Subdomain).Str("container", containerID).Msg("game recovered, marking as running")
+					_ = hc.appRepo.UpdateStatus(ctx, app.ID, model.AppStatusRunning, containerID)
 				}
 				continue
 			}
@@ -129,20 +129,17 @@ func (hc *HealthChecker) CheckApp(ctx context.Context, app *model.App) bool {
 	return hc.checkApp(ctx, app).healthy
 }
 
-func (hc *HealthChecker) checkGame(ctx context.Context, app *model.App) checkOutcome {
-	if app.ContainerID == "" {
-		return checkOutcome{reason: "missing_container_id"}
+func (hc *HealthChecker) checkGame(ctx context.Context, app *model.App) (checkOutcome, string) {
+	containerID := hc.resolveRunningContainer(ctx, app)
+	if containerID == "" {
+		return checkOutcome{reason: "missing_container_id"}, app.ContainerID
 	}
-	running, err := hc.container.IsRunning(ctx, app.ContainerID)
+	info, err := hc.container.docker.InspectContainer(ctx, containerID)
 	if err != nil {
-		return checkOutcome{reason: "docker_inspect_error", detail: err.Error()}
+		return checkOutcome{reason: "docker_inspect_error", detail: err.Error()}, containerID
 	}
-	if !running {
-		return checkOutcome{reason: "container_not_running"}
-	}
-	info, err := hc.container.docker.InspectContainer(ctx, app.ContainerID)
-	if err != nil {
-		return checkOutcome{healthy: true}
+	if info.State == nil || !info.State.Running {
+		return checkOutcome{reason: "container_not_running"}, containerID
 	}
 	tried := false
 	for port, bindings := range info.NetworkSettings.Ports {
@@ -157,7 +154,7 @@ func (hc *HealthChecker) checkGame(ctx context.Context, app *model.App) checkOut
 			conn, err := net.DialTimeout("tcp", net.JoinHostPort("host.docker.internal", b.HostPort), 2*time.Second)
 			if err == nil {
 				conn.Close()
-				return checkOutcome{healthy: true}
+				return checkOutcome{healthy: true}, containerID
 			}
 		}
 	}
@@ -174,15 +171,44 @@ func (hc *HealthChecker) checkGame(ctx context.Context, app *model.App) checkOut
 			conn, err := net.DialTimeout("tcp", net.JoinHostPort(nw.IPAddress, port), 2*time.Second)
 			if err == nil {
 				conn.Close()
-				return checkOutcome{healthy: true}
+				return checkOutcome{healthy: true}, containerID
 			}
 		}
 		break
 	}
 	if tried {
-		return checkOutcome{reason: "game_port_unreachable"}
+		return checkOutcome{reason: "game_port_unreachable"}, containerID
 	}
-	return checkOutcome{healthy: true}
+	return checkOutcome{healthy: true}, containerID
+}
+
+// resolveRunningContainer prefers the stored ID, then the stable game name
+// luxview-game-<subdomain>. Recreating a container (new ID, same name) used to
+// mark listed games as error and grey them out in the launcher.
+func (hc *HealthChecker) resolveRunningContainer(ctx context.Context, app *model.App) string {
+	if id := runningContainerID(hc, ctx, app.ContainerID); id != "" {
+		return id
+	}
+	if app.AppType == model.AppTypeGame {
+		if id := runningContainerID(hc, ctx, ContainerName(app.Subdomain)); id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+func runningContainerID(hc *HealthChecker, ctx context.Context, ref string) string {
+	if ref == "" {
+		return ""
+	}
+	info, err := hc.container.docker.InspectContainer(ctx, ref)
+	if err != nil || info.State == nil || !info.State.Running {
+		return ""
+	}
+	if info.ID != "" {
+		return info.ID
+	}
+	return ref
 }
 
 func (hc *HealthChecker) checkApp(ctx context.Context, app *model.App) checkOutcome {
