@@ -1,110 +1,146 @@
-#!/bin/sh
-# LuxView Priston Tale 4220 — Wine32 + SunnyBPT_v4220.exe
-set -eu
-
+#!/usr/bin/env bash
+# Runtime LuxView Priston 4220, portado do legacy-docker.
+set -euo pipefail
+log() { echo "[priston] $(date -u +%FT%TZ) $*"; }
 server_root="${PRISTON_SERVER_ROOT:-/server}"
-public_ip="${LUXVIEW_PUBLIC_IP:-${PRISTON_SERVER_IP:-127.0.0.1}}"
+public_ip="${LUXVIEW_PUBLIC_IP:-${PRISTON_PUBLIC_IP:-127.0.0.1}}"
 server_name="${PRISTON_SERVER_NAME:-LuxView}"
-mssql_host="${PRISTON_MSSQL_HOST:-luxview-mssql}"
-mssql_password="${PRISTON_MSSQL_PASSWORD:-}"
-export WINEARCH="${WINEARCH:-win32}"
-export WINEPREFIX="${WINEPREFIX:-/wine}"
-export WINEDEBUG="${WINEDEBUG:--all}"
-export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-mscoree,mshtml=;odbc32,odbccp32,odbcint=b;msvcr70,mfc70,d3dx9_43,d3dx9_35=n;d3d9=b}"
-export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
-export PRISTON_MSSQL_HOST="$mssql_host"
-export PRISTON_MSSQL_PASSWORD="$mssql_password"
-export PATH="/opt/mssql-tools18/bin:${PATH}"
+sql_host="${PRISTON_MSSQL_HOST:-luxview-mssql}"
+sql_port="${PRISTON_MSSQL_PORT:-1433}"
+sql_password="${PRISTON_MSSQL_PASSWORD:-}"
+export WINEARCH="${WINEARCH:-win32}" WINEPREFIX="${WINEPREFIX:-/wine}" WINEDEBUG="${WINEDEBUG:--all}"
+export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-mscoree,mshtml=;msvcr70,mfc70=n;msado15,oledb32,msdasql,msdaps,msdaenum,msdatl3=n;odbc32,odbccp32,odbcint=b;d3dx9_43,d3dx9_35=n;d3d9=b}"
+export DISPLAY="${DISPLAY:-:99}" LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
+export PRISTON_MSSQL_HOST="$sql_host" PRISTON_MSSQL_PORT="$sql_port" PRISTON_MSSQL_PASSWORD="$sql_password"
+export PATH="/opt/mssql-tools18/bin:$PATH"
+mkdir -p /data/state /artifacts "$server_root/LogFile" "$server_root/ptLog" "$WINEPREFIX/drive_c/windows/temp"
+source_exe="$server_root/SunnyBPT_v4220.exe"; patched_exe="$server_root/SunnyBPT_docker.exe"
+test -f "$source_exe" || { log "ERRO: $source_exe ausente" >&2; exit 1; }
 
-mkdir -p /data/state /artifacts "$server_root/LogFile" "$server_root/ptLog"
-
-if [ ! -x "$server_root/SunnyBPT_v4220.exe" ] && [ ! -f "$server_root/SunnyBPT_v4220.exe" ]; then
-  echo "[priston] SunnyBPT_v4220.exe ausente em $server_root" >&2
-  ls -la "$server_root" >&2 || true
-  exit 1
+# LAA deixa o processo usar o espaço necessário para os dados do servidor.
+if [ ! -f "$patched_exe" ] || [ "$source_exe" -nt "$patched_exe" ]; then
+  python3 - "$source_exe" "$patched_exe" <<'PY'
+import sys
+src, dst = sys.argv[1:]
+data = bytearray(open(src, 'rb').read())
+if data[:2] != b'MZ': raise SystemExit('PE inválido: assinatura MZ ausente')
+pe = int.from_bytes(data[0x3c:0x40], 'little')
+if data[pe:pe+4] != b'PE\0\0': raise SystemExit('PE inválido: assinatura PE ausente')
+off = pe + 0x16
+chars = int.from_bytes(data[off:off+2], 'little')
+data[off:off+2] = (chars | 0x20).to_bytes(2, 'little')
+open(dst, 'wb').write(data)
+PY
+  log 'SunnyBPT_docker.exe LARGEADDRESSAWARE gerado (original preservado)'
 fi
+chmod +x "$patched_exe" 2>/dev/null || true
 
 hotuk="$server_root/hotuk.ini"
-if [ ! -f "$hotuk" ]; then
-  echo "[priston] hotuk.ini ausente" >&2
-  exit 1
-fi
+test -f "$hotuk" || { log 'ERRO: hotuk.ini ausente' >&2; exit 1; }
+bind_ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1); bind_ip="${bind_ip:-0.0.0.0}"
+tmp_hotuk=$(mktemp); awk -v name="$server_name" -v bind="$bind_ip" -v pub="$public_ip" 'BEGIN{IGNORECASE=1} /^\*SERVER_NAME/{print "*SERVER_NAME\t\t"name;next} /^\*GAME_SERVER/{print "*GAME_SERVER\t\tSunnyBPT_docker.exe\t"bind"\t"pub"\t"pub;next} /^\*SYSTEM_IP/{print "*SYSTEM_IP  "pub" "pub;next} {print}' "$hotuk" > "$tmp_hotuk"; cp "$tmp_hotuk" "$hotuk"; rm -f "$tmp_hotuk"
 
-bind_ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
-if [ -z "$bind_ip" ]; then
-  bind_ip="0.0.0.0"
-fi
+# Relay obrigatório: sql.dll tem Data Source=127.0.0.1,1433 hardcoded.
+for i in $(seq 1 60); do (echo >/dev/tcp/"$sql_host"/"$sql_port") 2>/dev/null && break; [ "$i" -eq 60 ] && { log "ERRO: MSSQL inacessível em $sql_host:$sql_port"; exit 1; }; sleep 1; done
+socat "TCP-LISTEN:1433,bind=127.0.0.1,fork,reuseaddr" "TCP:$sql_host:$sql_port" & socat_pid=$!
+trap 'kill "$socat_pid" 2>/dev/null || true' EXIT
+log "relay 127.0.0.1:1433 -> $sql_host:$sql_port"
 
-# Native 4220: keep official GameServer NPC/mob/field data. Only rewrite
-# listen/advertise + server name. Rates stay commented unless already present.
-tmp_hotuk="$(mktemp)"
-awk -v name="$server_name" -v bind="$bind_ip" -v pub="$public_ip" '
-  BEGIN { IGNORECASE=1 }
-  /^\*SERVER_NAME/ { print "*SERVER_NAME\t\t" name; next }
-  /^\*GAME_SERVER/ { print "*GAME_SERVER\t\tSunnyBPT_v4220\t" bind "\t" pub "\t" pub; next }
-  /^\*SYSTEM_IP/ { print "*SYSTEM_IP  " pub " " pub; next }
-  { print }
-' "$hotuk" > "$tmp_hotuk"
-cp "$tmp_hotuk" "$hotuk"
-rm -f "$tmp_hotuk"
-
-if [ -f /opt/patch_sql_dll.py ]; then
-  src="$server_root/sql.dll.original"
-  if [ ! -f "$src" ]; then
-    src="$server_root/sql.dll"
-  fi
-  python3 /opt/patch_sql_dll.py --src "$src" --dst "$server_root/sql.dll" --server "${mssql_host},1433" || \
-    echo "[priston] aviso: não consegui retargetar sql.dll para ${mssql_host},1433" >&2
-fi
-
-for dll in msvcr70.dll mfc70.dll sql.dll PristonSQLDll.dll clan.dll clan-procedure.dll d3dx9_35.dll D3DX9_43.dll; do
-  if [ -f "$server_root/$dll" ]; then
-    cp -f "$server_root/$dll" "$WINEPREFIX/drive_c/windows/system32/$dll" 2>/dev/null || true
-  fi
-done
-
-log_win="Z:\\server\\LogFile"
-reg_key='HKLM\Software\PristonTale\GameServer'
-wine reg add "$reg_key" /f >/dev/null 2>&1 || true
-for pair in \
-  "ServerName=$server_name" \
-  "server1=${mssql_host},1433" \
-  "LogPath=$log_win" \
-  "AccountDbIP=${mssql_host},1433" \
-  "AccountDbID=sa" \
-  "AccountDbPwd=$mssql_password" \
-  "AccountDbName=accountdb" \
-  "BillingDbIP=${mssql_host},1433" \
-  "BillingDbID=sa" \
-  "BillingDbPwd=$mssql_password" \
-  "BillingDbName=accountdb" \
-  "PCCheck=0"
-do
-  name=${pair%%=*}
-  value=${pair#*=}
-  wine reg add "$reg_key" /v "$name" /t REG_SZ /d "$value" /f >/dev/null 2>&1 || true
-done
-
-if [ -n "$mssql_password" ]; then
-  i=0
-  while [ "$i" -lt 30 ]; do
-    if /opt/mssql-tools18/bin/sqlcmd -S "$mssql_host" -U sa -P "$mssql_password" -C -Q "SELECT 1" >/dev/null 2>&1; then
-      echo "[priston] mssql $mssql_host ok"
-      break
+# O patch é somente fallback; por padrão, o sql.dll original e o relay são usados.
+# Quando habilitado, preserva uma cópia .orig e não reaplica sobre um DLL já patchado.
+patch_sql_dll="${PRISTON_PATCH_SQL_DLL:-0}"
+case "${patch_sql_dll,,}" in
+  1|true|yes|on)
+    if [ -f /opt/patch_sql_dll.py ]; then
+      dll="$server_root/sql.dll"
+      marker="$server_root/sql.dll.patched"
+      src="$server_root/sql.dll.original"
+      [ -f "$src" ] || src="$server_root/sql.dll.orig"
+      if [ ! -f "$src" ]; then
+        src="$dll"
+        [ -f "$src" ] && cp -p "$src" "$server_root/sql.dll.orig"
+        src="$server_root/sql.dll.orig"
+      fi
+      if [ -f "$marker" ]; then
+        log 'sql.dll patch já aplicado; mantendo backup .orig'
+      elif [ -f "$src" ]; then
+        if python3 /opt/patch_sql_dll.py --src "$src" --dst "$dll" --server "127.0.0.1,1433"; then
+          printf 'patched-from=%s\\n' "$src" > "$marker"
+          log 'sql.dll patch opcional aplicado (backup .orig preservado)'
+        else
+          log 'aviso: patch opcional falhou'
+        fi
+      else
+        log 'aviso: sql.dll ausente; patch opcional ignorado'
+      fi
+    else
+      log 'aviso: /opt/patch_sql_dll.py ausente; patch opcional ignorado'
     fi
-    i=$((i + 1))
-    sleep 2
-  done
-fi
+    ;;
+  *) log 'sql.dll original mantido; relay socat ativo' ;;
+esac
+for dll in msvcr70.dll mfc70.dll sql.dll PristonSQLDll.dll clan.dll clan-procedure.dll d3dx9_35.dll D3DX9_43.dll; do [ -f "$server_root/$dll" ] && cp -f "$server_root/$dll" "$WINEPREFIX/drive_c/windows/system32/$dll" 2>/dev/null || true; done
 
+regfile="$WINEPREFIX/drive_c/windows/temp/pt-game.reg"
+cat > "$regfile" <<EOF
+REGEDIT4
+
+[HKEY_LOCAL_MACHINE\Software\PristonTale\GameServer]
+"ServerName"="$server_name"
+"server1"="127.0.0.1,1433"
+"LogPath"="Z:\\server\\LogFile"
+"AccountDbIP"="127.0.0.1,1433"
+"AccountDbID"="sa"
+"AccountDbPwd"="$sql_password"
+"AccountDbName"="accountdb"
+"BillingDbIP"="127.0.0.1,1433"
+"BillingDbID"="sa"
+"BillingDbPwd"="$sql_password"
+"BillingDbName"="BillingDb"
+"BillingLogDbIP"="127.0.0.1,1433"
+"BillingLogDbID"="sa"
+"BillingLogDbPwd"="$sql_password"
+"BillingLogDbName"="BillingLogDb"
+"LogDbIP"="127.0.0.1,1433"
+"LogDbID"="sa"
+"LogDbPwd"="$sql_password"
+"LogDbName"="GameLogDb"
+"PCDbIP"="127.0.0.1,1433"
+"PCDbID"="sa"
+"PCDbPwd"="$sql_password"
+"PCDbName"="PCRoom"
+"PCCheck"="0"
+"PCLogDbIP"="127.0.0.1,1433"
+"PCLogDbID"="sa"
+"PCLogDbPwd"="$sql_password"
+"PCLogDbName"="PCRoomLog"
+"ITEMLogDbIP"="127.0.0.1,1433"
+"ITEMLogDbID"="sa"
+"ITEMLogDbPwd"="$sql_password"
+"ITEMLogDbName"="ItemLogDb"
+"ClanDbIP"="127.0.0.1,1433"
+"ClanDbID"="sa"
+"ClanDbPwd"="$sql_password"
+"ClanDbName"="ClanDb"
+"SODDbIP"="127.0.0.1,1433"
+"SODDbID"="sa"
+"SODDbPwd"="$sql_password"
+"SODDbName"="Sod2Db"
+EOF
+wine regedit /S 'C:\windows\temp\pt-game.reg'
+for reg_value in AccountDbName BillingDbName BillingLogDbName LogDbName PCDbName PCLogDbName ITEMLogDbName ClanDbName SODDbName; do
+  wine reg query 'HKLM\Software\PristonTale\GameServer' /v "$reg_value" >/dev/null || { log "ERRO: registro crítico ausente: $reg_value"; exit 1; }
+done
+log 'registro GameServer completo configurado.'
+
+if [ -n "$sql_password" ]; then
+  for i in $(seq 1 30); do /opt/mssql-tools18/bin/sqlcmd -S "127.0.0.1,1433" -U sa -P "$sql_password" -C -b -Q 'SELECT 1' >/dev/null 2>&1 && break; [ "$i" -eq 30 ] && log 'aviso: MSSQL não respondeu'; sleep 2; done
+  if /opt/mssql-tools18/bin/sqlcmd -S "127.0.0.1,1433" -U sa -P "$sql_password" -C -b -i /opt/init-accountdb.sql >/artifacts/schema.log 2>&1; then log 'schema accountdb e bancos satélite aplicado.'; else log 'aviso: schema não aplicado; continuando boot (veja /artifacts/schema.log)'; fi
+else log 'aviso: PRISTON_MSSQL_PASSWORD ausente; schema não aplicado'; fi
 python3 /opt/priston-account.py serve &
-
-echo "[priston] LuxView $server_name native 4220 bind=${bind_ip} advertise=${public_ip}:10012 mssql=${mssql_host}"
-cd "$server_root"
-# -ac disables X authority so Wine can create the (headless) server window.
 rm -f /tmp/.X99-lock
-# 24-bit: native 4220 imports d3d9/d3dx9_43 even in *MODE SERVER.
 Xvfb :99 -ac -screen 0 1024x768x24 -nolisten tcp >/artifacts/xvfb.log 2>&1 &
-export DISPLAY=:99
 sleep 1
-exec wine "$server_root/SunnyBPT_v4220.exe" >/artifacts/wine.log 2>&1
+cd "$server_root"
+log "iniciando $patched_exe; advertise=${public_ip}:10012"
+exec wine "$patched_exe" >/artifacts/wine.log 2>&1

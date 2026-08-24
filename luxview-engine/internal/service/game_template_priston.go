@@ -7,8 +7,8 @@ const pristonTemplateID = "priston"
 func pristonTemplate() model.GameTemplate {
 	return model.GameTemplate{
 		ID:              pristonTemplateID,
-		DisplayName:     "Priston Tale (4220 / Brasil)",
-		Description:     "Servidor nativo Priston Tale Brasil 4220 (SunnyBPT): Ricarten, Pillai, G1–G3 e o conteúdo clássico da wiki. Wine + MSSQL, não OpenPriston/Reloaded.",
+		DisplayName:     "LuxView Priston",
+		Description:     "Servidor nativo Priston Tale Brasil 4220: Ricarten, Pillai, G1–G3 e o conteúdo clássico da wiki. Wine + MSSQL, não OpenPriston/Reloaded.",
 		Protocol:        "tcp",
 		DefaultGamePort: 10012,
 		DefaultExtraPorts: []model.ExtraPort{
@@ -18,6 +18,7 @@ func pristonTemplate() model.GameTemplate {
 		DefaultImage:  "luxview-cloud-priston:latest",
 		DefaultCPU:    "2.0",
 		DefaultMemory: "4g",
+		PidsLimit:     4096,
 		SupportsQuery: false,
 		DefaultVolumes: []model.GameVolume{
 			{MountPath: "/data/state"},

@@ -155,3 +155,89 @@ func setHKLMElevated(key, clientDir string) error {
 }
 
 func escapeReg(s string) string { return strings.ReplaceAll(s, `\`, `\\`) }
+
+const pristonRegistryKey = `SOFTWARE\WOW6432Node\Triglow Pictures\PristonTale`
+
+// writePristonRegistry configures the v4220 client registration. The client
+// reads these values from HKLM, so a failed write must be reported rather than
+// launching a client that cannot connect.
+func writePristonRegistry(serverIP, serverName string) error {
+	serverIP = strings.TrimSpace(serverIP)
+	serverName = strings.TrimSpace(serverName)
+	if serverIP == "" {
+		return fmt.Errorf("servidor Priston sem IP configurado")
+	}
+	if serverName == "" {
+		serverName = "LuxView Priston"
+	}
+	if pristonRegistryOK(serverIP, serverName) {
+		return nil
+	}
+
+	key, _, err := registry.CreateKey(registry.LOCAL_MACHINE, pristonRegistryKey, registry.SET_VALUE)
+	if err == nil {
+		writeErr := key.SetStringValue("ServerName", serverName)
+		if writeErr == nil {
+			writeErr = key.SetStringValue("Server1", serverIP)
+		}
+		if writeErr == nil {
+			writeErr = key.SetStringValue("Server2", serverIP)
+		}
+		if writeErr == nil {
+			writeErr = key.SetStringValue("Server3", serverIP)
+		}
+		if writeErr == nil {
+			writeErr = key.SetStringValue("Version", "4220")
+		}
+		_ = key.Close()
+		if writeErr == nil {
+			return nil
+		}
+		err = writeErr
+	}
+
+	if elevatedErr := setPristonRegistryElevated(serverIP, serverName); elevatedErr != nil {
+		return fmt.Errorf("permissão de administrador necessária para configurar o Priston: %w (escrita direta: %v)", elevatedErr, err)
+	}
+	return nil
+}
+
+func pristonRegistryOK(serverIP, serverName string) bool {
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, pristonRegistryKey, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer key.Close()
+	gotIP, _, ipErr := key.GetStringValue("Server1")
+	gotName, _, nameErr := key.GetStringValue("ServerName")
+	version, _, versionErr := key.GetStringValue("Version")
+	return ipErr == nil && nameErr == nil && versionErr == nil && gotIP == serverIP && gotName == serverName && version == "4220"
+}
+
+func setPristonRegistryElevated(serverIP, serverName string) error {
+	content := "Windows Registry Editor Version 5.00\r\n\r\n" +
+		"[HKEY_LOCAL_MACHINE\\" + pristonRegistryKey + "]\r\n" +
+		`"ServerName"="` + escapeReg(serverName) + `"` + "\r\n" +
+		`"Server1"="` + escapeReg(serverIP) + `"` + "\r\n" +
+		`"Server2"="` + escapeReg(serverIP) + `"` + "\r\n" +
+		`"Server3"="` + escapeReg(serverIP) + `"` + "\r\n" +
+		`"Version"="4220"` + "\r\n"
+	f, err := os.CreateTemp("", "luxview-priston-*.reg")
+	if err != nil {
+		return err
+	}
+	path := f.Name()
+	if _, err = f.WriteString(content); err != nil {
+		_ = f.Close()
+		_ = os.Remove(path)
+		return err
+	}
+	if err = f.Close(); err != nil {
+		_ = os.Remove(path)
+		return err
+	}
+	if err := shellExec("runas", "reg.exe", `import "`+path+`"`, "", windows.SW_HIDE); err != nil {
+		return err
+	}
+	return nil
+}

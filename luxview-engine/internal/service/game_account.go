@@ -143,19 +143,19 @@ func gameAccountSQL(templateID, username, password, characterName, vocation stri
 			mysqlQuote(id), mysqlQuote(pass), mysqlQuote(email), mysqlQuote(id), mysqlQuote(id), mysqlQuote(id),
 		)
 		return &GameAccountInfo{TemplateID: templateID, Login: id, Email: email}, sql, nil
-		case "priston":
-			login := PristonLogin(username)
-			if login == "" {
-				return nil, "", fmt.Errorf("usuário LuxView precisa de letras ou números para o Priston Tale")
-			}
-			return &GameAccountInfo{TemplateID: templateID, Login: login, Email: TibiaEmail(username)}, pristonAccountSQL(login, password), nil
-		case "muemu", "openmu":
-			login := MuLogin(username)
-			if login == "" {
-				return nil, "", fmt.Errorf("usuário LuxView precisa de letras ou números para o MU")
-			}
-			return &GameAccountInfo{TemplateID: templateID, Login: login, Email: TibiaEmail(username)}, "", nil
-		default:
+	case "priston":
+		login := PristonLogin(username)
+		if login == "" {
+			return nil, "", fmt.Errorf("usuário LuxView precisa de letras ou números para o Priston Tale")
+		}
+		return &GameAccountInfo{TemplateID: templateID, Login: login, Email: TibiaEmail(username)}, pristonAccountSQL(login, password), nil
+	case "muemu", "openmu":
+		login := MuLogin(username)
+		if login == "" {
+			return nil, "", fmt.Errorf("usuário LuxView precisa de letras ou números para o MU")
+		}
+		return &GameAccountInfo{TemplateID: templateID, Login: login, Email: TibiaEmail(username)}, "", nil
+	default:
 		return nil, "", fmt.Errorf("este jogo ainda não cria conta pelo launcher")
 	}
 }
@@ -169,7 +169,7 @@ func pristonAccountSQL(login, password string) string {
 	user := mssqlQuote(login)
 	pass := mssqlQuote(password)
 	return fmt.Sprintf(
-		`USE [accountdb]; IF EXISTS (SELECT 1 FROM [dbo].[%s] WHERE [userid] = %s) BEGIN UPDATE [dbo].[%s] SET [Passwd] = %s, [inuse] = 0, [BlockChk] = 0, [ServerName] = N'LuxView', [EditDay] = GETDATE() WHERE [userid] = %s; END ELSE BEGIN INSERT INTO [dbo].[%s] ([userid], [Passwd], [GameCode], [GPCode], [RegistDay], [DisuseDay], [UsePeriod], [Credit], [SelectChk], [EventChk], [BlockChk], [inuse], [DelChk], [ServerName], [EditDay], [RNo], [SNo], [Channel], [BNum]) VALUES (%s, %s, N'0', N'0', GETDATE(), DATEADD(YEAR, 20, GETDATE()), 0, 0, 0, 0, 0, 0, 0, N'LuxView', GETDATE(), NULL, NULL, N'0', 0); END;`,
+		`USE [accountdb]; IF EXISTS (SELECT 1 FROM [dbo].[%s] WHERE [userid] = %s) BEGIN UPDATE [dbo].[%s] SET [Passwd] = %s, [inuse] = 0, [BlockChk] = 0, [ServerName] = N'LuxView Priston', [EditDay] = GETDATE() WHERE [userid] = %s; END ELSE BEGIN INSERT INTO [dbo].[%s] ([userid], [Passwd], [GameCode], [GPCode], [RegistDay], [DisuseDay], [UsePeriod], [Credit], [SelectChk], [EventChk], [BlockChk], [inuse], [DelChk], [ServerName], [EditDay], [RNo], [SNo], [Channel], [BNum]) VALUES (%s, %s, N'0', N'0', GETDATE(), DATEADD(YEAR, 20, GETDATE()), 0, 0, 0, 0, 0, 0, 0, N'LuxView Priston', GETDATE(), NULL, NULL, N'0', 0); END;`,
 		table, user, table, pass, user, table, user, pass,
 	)
 }

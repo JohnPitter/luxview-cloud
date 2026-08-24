@@ -25,7 +25,7 @@ import (
 // appVersion is shown in the UI. It is a var (not const) so the release CI can
 // stamp the real tag via -ldflags "-X main.appVersion=vX.Y"; this is the dev
 // fallback when building locally.
-var appVersion = "v1.76"
+var appVersion = "v1.77"
 
 // Version exposes the build tag to the frontend.
 func (a *App) Version() string { return appVersion }
@@ -103,17 +103,17 @@ var launchSpecs = map[string]launchSpec{
 		gameExe:     "otclient.exe",
 		processName: "otclient.exe",
 	},
-		"priston": {
-			clientDir:   "",
-			gameExe:     "SunnyBPT.exe",
-			processName: "SunnyBPT.exe",
-		},
-		"muemu": {
-			clientDir:   "",
-			gameExe:     "main.exe",
-			processName: "main.exe",
-		},
-	}
+	"priston": {
+		clientDir:   "",
+		gameExe:     "SunnyBPT.exe",
+		processName: "SunnyBPT.exe",
+	},
+	"muemu": {
+		clientDir:   "",
+		gameExe:     "main.exe",
+		processName: "main.exe",
+	},
+}
 
 func normalizeGameID(raw string) string {
 	id := strings.ToLower(strings.TrimSpace(raw))
@@ -496,6 +496,13 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	if game == "priston" {
 		if resolved := pristonExecutable(clientDir); resolved != "" {
 			exePath = resolved
+		}
+		serverName := strings.TrimSpace(card.DisplayName)
+		if serverName == "" {
+			serverName = "LuxView"
+		}
+		if err := writePristonRegistry(card.ServerIP, serverName); err != nil {
+			return err
 		}
 		if err := patchPristonClient(clientDir, card); err != nil {
 			return err

@@ -38,7 +38,7 @@ func patchPristonClient(clientDir string, card GameCard) error {
 	}
 	name := strings.TrimSpace(card.DisplayName)
 	if name == "" {
-		name = "LuxView"
+		name = "LuxView Priston"
 	}
 	if err := patchPristonReg(filepath.Join(clientDir, "ptReg.rgx"), ip, name); err != nil && !os.IsNotExist(err) {
 		return err

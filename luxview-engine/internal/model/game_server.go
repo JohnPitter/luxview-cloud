@@ -93,6 +93,7 @@ type GameTemplate struct {
 	// DefaultCPU / DefaultMemory are applied on create. Empty falls back in Limits().
 	DefaultCPU    string      `json:"default_cpu,omitempty"`
 	DefaultMemory string      `json:"default_memory,omitempty"`
+	PidsLimit     int64       `json:"pids_limit,omitempty"`
 	DBService     ServiceType `json:"db_service,omitempty"`
 }
 

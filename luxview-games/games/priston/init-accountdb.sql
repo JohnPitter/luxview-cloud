@@ -1,6 +1,24 @@
 IF DB_ID(N'accountdb') IS NULL
     CREATE DATABASE [accountdb];
 GO
+-- O executável abre estes catálogos mesmo quando as tabelas de billing/log estão vazias.
+-- Criação condicional mantém o bootstrap seguro para reexecuções.
+IF DB_ID(N'BillingDb') IS NULL CREATE DATABASE [BillingDb];
+GO
+IF DB_ID(N'BillingLogDb') IS NULL CREATE DATABASE [BillingLogDb];
+GO
+IF DB_ID(N'GameLogDb') IS NULL CREATE DATABASE [GameLogDb];
+GO
+IF DB_ID(N'PCRoom') IS NULL CREATE DATABASE [PCRoom];
+GO
+IF DB_ID(N'PCRoomLog') IS NULL CREATE DATABASE [PCRoomLog];
+GO
+IF DB_ID(N'ItemLogDb') IS NULL CREATE DATABASE [ItemLogDb];
+GO
+IF DB_ID(N'ClanDb') IS NULL CREATE DATABASE [ClanDb];
+GO
+IF DB_ID(N'Sod2Db') IS NULL CREATE DATABASE [Sod2Db];
+GO
 USE [accountdb];
 GO
 -- Explicit A-Z: a WHILE CHAR(ASCII('Z')+1) becomes '[' and creates a bogus [GameUser table.

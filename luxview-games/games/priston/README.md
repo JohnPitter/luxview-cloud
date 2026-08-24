@@ -1,43 +1,30 @@
 # Priston Tale 4220 (SunnyBPT) — template LuxView Cloud
 
-Servidor **nativo** `SunnyBPT_v4220.exe` via Wine32 + xvfb, com MSSQL (`AGameUser`…`ZGameUser`). Não é OpenPriston .NET, Reloaded, WDPT nem Dragon.
+Runtime nativo `SunnyBPT_v4220.exe` via Wine32 + Xvfb, portado do runtime comprovado `legacy-docker`. O volume `/server` continua sendo o bind `priston-assets/server-4220`; a imagem contém apenas o ambiente de execução.
 
-## O que não vai para o git
-
-- Client Windows (`SunnyBPT.exe`, `Field/`, `char/`) — copyright.
-- Zip de download (`priston-4220-base.zip`) — storage global da VPS.
-- Runtime do server (`GameServer/`, `Field/`, `char/`) — volume `priston-assets/server-4220`.
-
-## Build da imagem
-
-O contexto é esta pasta (Wine + entrypoint), não o repo OpenPriston:
+## Build
 
 ```bash
 docker build -t luxview-cloud-priston:latest \
-  -f luxview-games/games/priston/Dockerfile \
-  luxview-games/games/priston
+  -f luxview-games/games/priston/Dockerfile luxview-games/games/priston
 ```
 
-Na VPS, o volume `/server` é um bind de `/data/luxview/storage/_global/priston-assets/server-4220`. O MSSQL sobe à parte como `luxview-mssql` na rede `game-net` (porta 1433 só interna). Use a `PristonSQLDll.dll` oficial (MSVC, ~40KB), nunca o stub MinGW `DSN=m2master`.
+O build não baixa componentes Windows: `vendor/` contém MDAC_TYP.EXE e os CABs oficiais D3DX9. `bake-prefix.sh` extrai o MDAC 2.8 SP1 manualmente, instala SQLOLEDB/ADO/ODBC, registra componentes e typelibs e cria o DSN `m2master` com o driver SQL Server.
 
-O binário importa `d3d9`/`d3dx9_43` mesmo em `*MODE SERVER`. A imagem traz Mesa i386 + Xvfb 24-bit. Em 2026-08-22 o PE ainda cai em `TopExceptionFilter` ~12s após o start e **não abre 10012** sob Wine 32 no Debian; o client zip 4220 e o launcher v1.75 já apontam para `187.77.227.65:10012`.
+## Fluxo de boot
 
-## Portas
+1. Aguarda `PRISTON_MSSQL_HOST` (padrão `luxview-mssql`) e inicia `socat` em `127.0.0.1:1433`. O relay é o caminho principal porque o `sql.dll` oficial usa esse Data Source hardcoded; `PRISTON_MSSQL_PORT` permite MSSQL em outra porta.
+2. Aplica `init-accountdb.sql` com `sqlcmd` de forma idempotente. Cria `accountdb` e os catálogos vazios BillingDb, BillingLogDb, GameLogDb, PCRoom, PCRoomLog, ItemLogDb, ClanDb e Sod2Db. Falha de schema é registrada em `/artifacts/schema.log` sem impedir o boot.
+3. Gera `SunnyBPT_docker.exe` como cópia LARGEADDRESSAWARE (bit PE `0x20`), preservando o original, e executa a cópia.
+4. Importa um único `.reg` com todas as conexões dos bancos e valida a chave GameServer. A conta HTTP permanece em `:5080` (`/health`, `/register`, `/players`).
+5. Inicia Xvfb `:99` em 24-bit e o servidor nas portas 10012/10013.
 
-| Porta     | Serviço                                      |
-|-----------|----------------------------------------------|
-| 10012/tcp | Game server nativo (hardcoded 0x271C)        |
-| 10013/tcp | Clan (anúncio; opcional no primeiro login)   |
-| 5080/tcp  | Health HTTP `/health` + register `/register` |
+`patch_sql_dll.py` continua disponível como fallback opcional: defina `PRISTON_PATCH_SQL_DLL=1`; normalmente não é necessário e não deve ser usado no lugar do relay.
 
-## Cliente
+## Contrato LuxView
 
-Zip base em `/data/luxview/storage/_global/priston-assets/priston-4220-base.zip`.
+A engine injeta `PRISTON_SERVER_NAME`, `PRISTON_PUBLIC_IP`, `PRISTON_MSSQL_HOST`, `PRISTON_MSSQL_PORT` e `PRISTON_MSSQL_PASSWORD`. A imagem é `luxview-cloud-priston:latest`, o volume é montado em `/server`, e as portas são 10012 (jogo), 10013 (clan) e 5080 (contas/health).
 
-O launcher LuxView e a engine reescrevem `luncher.ini` (`gameServerIP` / `gameServerPORT`) e `ptReg.rgx`. O exe é **SunnyBPT.exe**, não Game.exe.
+## Arquivos fora do git
 
-A conta é um INSERT MSSQL em `{primeira letra}GameUser` (provisionamento do launcher).
-
-## Rates
-
-EXP/gold/drop oficiais do 4220. Campos `PRISTON_RATE_*` existem no dashboard, mas o entrypoint **não** liga `*EVENT_EXPUP` no escuro.
+Client Windows, zip de download e conteúdo do servidor (`GameServer/`, `Field/`, `char/`) permanecem no storage global/volume. Use a `PristonSQLDll.dll` oficial e os DLLs nativos do servidor; rates não são alteradas pelo entrypoint.

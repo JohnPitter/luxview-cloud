@@ -86,6 +86,9 @@ func (s *GameServerService) Start(ctx context.Context, app *model.App, cfg *mode
 	mounts := buildMounts(app.Subdomain, cfg)
 	nanoCPUs, memory := parseResourceLimits(app.ResourceLimits)
 	pids := int64(512)
+	if tmpl := Template(cfg.TemplateID); tmpl != nil && tmpl.PidsLimit > 0 {
+		pids = tmpl.PidsLimit
+	}
 
 	containerCfg := &container.Config{
 		Image:        cfg.Image,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pack native Brazil Priston Tale 4220 client (SunnyBPT) for LuxView catalog."""
+"""Pack native Brazil Priston Tale 4220 client for LuxView catalog."""
 from __future__ import annotations
 
 import os
@@ -8,6 +8,9 @@ from pathlib import Path
 
 SRC = Path(
     r"C:\Users\joaop\Desenvolvimento\openpriston\client-runtime\PristonTale_Brazil_Client-v4220"
+)
+EXTRA_SRC = Path(
+    r"C:\Users\joaop\Desenvolvimento\openpriston\dedicated server\client"
 )
 OUT = Path(
     r"C:\Users\joaop\Desenvolvimento\Projects\luxview-cloud\output\priston-4220-base.zip"
@@ -50,7 +53,7 @@ PTREG = '''"Version" "4220"
 "Server1" "187.77.227.65"
 "Server2" "187.77.227.65"
 "Server3" "187.77.227.65"
-"ServerName" "LuxView"
+"ServerName" "LuxView Priston"
 "Account" ""
 "" ""
 '''
@@ -74,40 +77,72 @@ def zip_name(rel: Path) -> str:
     return rel.as_posix()
 
 
+def collect_files(root: Path) -> list[Path]:
+    files: list[Path] = []
+    for current, dirs, names in os.walk(root):
+        dirs[:] = [d for d in dirs if d.lower() not in SKIP_DIR_NAMES]
+        for name in names:
+            path = Path(current) / name
+            rel = path.relative_to(root)
+            if skip_file(rel):
+                continue
+            files.append(rel)
+    return files
+
+
+def patch_reg(path: Path) -> bytes:
+    lines = path.read_text(encoding="ascii").splitlines()
+    patched = []
+    for line in lines:
+        if line.startswith('"Server1"='):
+            line = '"Server1"="187.77.227.65"'
+        elif line.startswith('"Server2"='):
+            line = '"Server2"="187.77.227.65"'
+        elif line.startswith('"Server3"='):
+            line = '"Server3"="187.77.227.65"'
+        elif line.startswith('"Version"='):
+            line = '"Version"="4220"'
+        patched.append(line)
+    return ("\n".join(patched) + "\n").encode("ascii")
+
+
 def main() -> None:
     if not SRC.is_dir():
         raise SystemExit(f"client 4220 ausente: {SRC}")
+    if not EXTRA_SRC.is_dir():
+        raise SystemExit(f"client dedicado ausente: {EXTRA_SRC}")
     OUT.parent.mkdir(parents=True, exist_ok=True)
     if OUT.exists():
         OUT.unlink()
 
-    files: list[Path] = []
-    for root, dirs, names in os.walk(SRC):
-        dirs[:] = [d for d in dirs if d.lower() not in SKIP_DIR_NAMES]
-        for name in names:
-            path = Path(root) / name
-            rel = path.relative_to(SRC)
-            if skip_file(rel):
-                continue
-            files.append(rel)
-
-    files.sort(key=lambda p: p.as_posix().lower())
-    print(f"packing {len(files)} files from {SRC} -> {OUT}", flush=True)
+    files = collect_files(SRC)
+    base_names = {rel.as_posix().lower() for rel in files}
+    extra_files = [
+        rel for rel in collect_files(EXTRA_SRC)
+        if rel.as_posix().lower() not in base_names
+    ]
+    entries = [(SRC, rel) for rel in files] + [(EXTRA_SRC, rel) for rel in extra_files]
+    entries.sort(key=lambda item: item[1].as_posix().lower())
+    print(f"packing {len(entries)} files from {SRC} -> {OUT}", flush=True)
+    if extra_files:
+        print("dedicated-only extras: " + ", ".join(rel.as_posix() for rel in extra_files), flush=True)
 
     written = 0
     with zipfile.ZipFile(OUT, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=1) as zf:
-        for rel in files:
+        for source, rel in entries:
             arc = zip_name(rel)
             lower = rel.name.lower()
             if lower == "luncher.ini":
                 zf.writestr(arc, LUNCHER_INI.encode("ascii"))
             elif lower == "ptreg.rgx":
                 zf.writestr(arc, PTREG.encode("ascii"))
+            elif lower == "jogar-servidor-local.reg":
+                zf.writestr(arc, patch_reg(source / rel))
             else:
-                zf.write(SRC / rel, arcname=arc)
+                zf.write(source / rel, arcname=arc)
             written += 1
             if written % 1000 == 0:
-                print(f"  {written}/{len(files)}", flush=True)
+                print(f"  {written}/{len(entries)}", flush=True)
 
     size = OUT.stat().st_size
     print(f"done files={written} zip_bytes={size} zip_gb={size / 1024**3:.2f} path={OUT}", flush=True)
