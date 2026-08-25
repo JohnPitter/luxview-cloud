@@ -1,6 +1,14 @@
 # Priston Tale 4220 (SunnyBPT) — template LuxView Cloud
 
-Runtime nativo `SunnyBPT_v4220.exe` via Wine32 + Xvfb, portado do runtime comprovado `legacy-docker`. O volume `/server` continua sendo o bind `priston-assets/server-4220`; a imagem contém apenas o ambiente de execução.
+Runtime nativo `SunnyBPT_v4220.exe` via **Ubuntu 24.04 + Wine 9.0 (Wine32) + Xvfb**, reproduzindo exatamente o ambiente funcional de `legacy-docker`. O volume `/server` continua sendo o bind `priston-assets/server-4220`; a imagem contém apenas o ambiente de execução. Requisitos de build: Docker BuildKit, `vendor/MDAC_TYP.EXE` e os CABs D3DX9; o host de execução precisa fornecer as redes/volumes da stack LuxView.
+
+## Requisitos descobertos (produção)
+
+- O banco precisa ser um **SQL Server 2017 dedicado** (`priston-sql`, preferencialmente em container). O SQL Server 2019 rejeita o handshake TLS 1.0 usado pelo DBNETLIB (`SECDoClientHandshake`).
+- Distribua a `PristonSQLDll.dll` **adaptada** presente na pasta-fonte, junto do DSN `m2master` e do registro `OpenPriston\\SqlAdapter`. A DLL oficial falha silenciosamente em `SQLLoginProcess`/`SQLLogoutProcess`.
+- `*GAME_SERVER` em `hotuk.ini` deve anunciar o **IP público nos três campos**. O cliente reconecta aos endpoints anunciados; anunciar o IP interno do Docker trava após a seleção.
+- Ambiente validado: Ubuntu 24.04 + Wine 9.0 (Wine32).
+- Configure `pids-limit: 4096` no container do jogo.
 
 ## Build
 
@@ -9,7 +17,7 @@ docker build -t luxview-cloud-priston:latest \
   -f luxview-games/games/priston/Dockerfile luxview-games/games/priston
 ```
 
-O build não baixa componentes Windows: `vendor/` contém MDAC_TYP.EXE e os CABs oficiais D3DX9. `bake-prefix.sh` extrai o MDAC 2.8 SP1 manualmente, instala SQLOLEDB/ADO/ODBC, registra componentes e typelibs e cria o DSN `m2master` com o driver SQL Server.
+O build não baixa componentes Windows: `vendor/` contém MDAC_TYP.EXE e os CABs oficiais D3DX9. `bake-prefix.sh` extrai o MDAC 2.8 SP1 manualmente, instala SQLOLEDB/ADO/ODBC, registra componentes e typelibs (inclusive ADO 2.7) e cria o DSN `m2master` com o driver SQL Server. O `Dockerfile` instala `mssql-tools18` pelo repositório Microsoft Noble; se a Microsoft ainda não publicar o pacote para 24.04, o mesmo passo faz fallback documentado para o repositório Ubuntu 22.04.
 
 ## Fluxo de boot
 

@@ -37,8 +37,7 @@ chmod +x "$patched_exe" 2>/dev/null || true
 
 hotuk="$server_root/hotuk.ini"
 test -f "$hotuk" || { log 'ERRO: hotuk.ini ausente' >&2; exit 1; }
-bind_ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1); bind_ip="${bind_ip:-0.0.0.0}"
-tmp_hotuk=$(mktemp); awk -v name="$server_name" -v bind="$bind_ip" -v pub="$public_ip" 'BEGIN{IGNORECASE=1} /^\*SERVER_NAME/{print "*SERVER_NAME\t\t"name;next} /^\*GAME_SERVER/{print "*GAME_SERVER\t\tSunnyBPT_docker.exe\t"bind"\t"pub"\t"pub;next} /^\*SYSTEM_IP/{print "*SYSTEM_IP  "pub" "pub;next} {print}' "$hotuk" > "$tmp_hotuk"; cp "$tmp_hotuk" "$hotuk"; rm -f "$tmp_hotuk"
+tmp_hotuk=$(mktemp); awk -v name="$server_name" -v pub="$public_ip" 'BEGIN{IGNORECASE=1} /^\*SERVER_NAME/{print "*SERVER_NAME\t\t"name;next} /^\*GAME_SERVER/{print "*GAME_SERVER\t\tSunnyBPT_docker.exe\t"pub"\t"pub"\t"pub;next} /^\*SYSTEM_IP/{print "*SYSTEM_IP  "pub" "pub;next} {print}' "$hotuk" > "$tmp_hotuk"; cp "$tmp_hotuk" "$hotuk"; rm -f "$tmp_hotuk"
 
 # Relay obrigatório: sql.dll tem Data Source=127.0.0.1,1433 hardcoded.
 for i in $(seq 1 60); do (echo >/dev/tcp/"$sql_host"/"$sql_port") 2>/dev/null && break; [ "$i" -eq 60 ] && { log "ERRO: MSSQL inacessível em $sql_host:$sql_port"; exit 1; }; sleep 1; done
@@ -85,6 +84,28 @@ regfile="$WINEPREFIX/drive_c/windows/temp/pt-game.reg"
 cat > "$regfile" <<EOF
 REGEDIT4
 
+[HKEY_LOCAL_MACHINE\Software\ODBC\ODBCINST.INI\SQL Server]
+"Driver"="C:\\\\windows\\\\system32\\\\sqlsrv32.dll"
+"Setup"="C:\\\\windows\\\\system32\\\\sqlsrv32.dll"
+"APILevel"="2"
+"ConnectFunctions"="YYN"
+"DriverODBCVer"="03.52"
+
+[HKEY_LOCAL_MACHINE\Software\ODBC\ODBCINST.INI\ODBC Drivers]
+"SQL Server"="Installed"
+
+[HKEY_LOCAL_MACHINE\Software\ODBC\ODBC.INI\m2master]
+"Driver"="C:\\\\windows\\\\system32\\\\sqlsrv32.dll"
+"Server"="127.0.0.1"
+"Database"="accountdb"
+
+[HKEY_LOCAL_MACHINE\Software\ODBC\ODBC.INI\ODBC Data Sources]
+"m2master"="SQL Server"
+
+[HKEY_LOCAL_MACHINE\Software\OpenPriston\SqlAdapter]
+"SqlUser"="sa"
+"SqlPassword"="$sql_password"
+
 [HKEY_LOCAL_MACHINE\Software\PristonTale\GameServer]
 "ServerName"="$server_name"
 "server1"="127.0.0.1,1433"
@@ -128,6 +149,16 @@ REGEDIT4
 "SODDbName"="Sod2Db"
 EOF
 wine regedit /S 'C:\windows\temp\pt-game.reg'
+# regedit can skip ODBC sections on some Wine builds; enforce adapter/DSN keys.
+wine reg add 'HKLM\Software\OpenPriston\SqlAdapter' /v SqlUser /d sa /f >/dev/null
+wine reg add 'HKLM\Software\OpenPriston\SqlAdapter' /v SqlPassword /d "$sql_password" /f >/dev/null
+wine reg add 'HKLM\Software\ODBC\ODBCINST.INI\SQL Server' /v Driver /d 'C:\windows\system32\sqlsrv32.dll' /f >/dev/null
+wine reg add 'HKLM\Software\ODBC\ODBCINST.INI\SQL Server' /v Setup /d 'C:\windows\system32\sqlsrv32.dll' /f >/dev/null
+wine reg add 'HKLM\Software\ODBC\ODBCINST.INI\ODBC Drivers' /v 'SQL Server' /d Installed /f >/dev/null
+wine reg add 'HKLM\Software\ODBC\ODBC.INI\m2master' /v Driver /d 'C:\windows\system32\sqlsrv32.dll' /f >/dev/null
+wine reg add 'HKLM\Software\ODBC\ODBC.INI\m2master' /v Server /d 127.0.0.1 /f >/dev/null
+wine reg add 'HKLM\Software\ODBC\ODBC.INI\m2master' /v Database /d accountdb /f >/dev/null
+wine reg add 'HKLM\Software\ODBC\ODBC Data Sources' /v m2master /d 'SQL Server' /f >/dev/null
 for reg_value in AccountDbName BillingDbName BillingLogDbName LogDbName PCDbName PCLogDbName ITEMLogDbName ClanDbName SODDbName; do
   wine reg query 'HKLM\Software\PristonTale\GameServer' /v "$reg_value" >/dev/null || { log "ERRO: registro crítico ausente: $reg_value"; exit 1; }
 done

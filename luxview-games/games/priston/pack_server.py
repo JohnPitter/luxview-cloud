@@ -27,9 +27,8 @@ SKIP_FILE_NAMES = {
     "legacy-server2.log",
     "sunny-smoke.log",
 }
-# The working tree currently has a MinGW ODBC stub as PristonSQLDll.dll.
-# Native 4220 must ship the official MSVC DLL (before-local-adapter).
-OFFICIAL_SQL_DLL = SRC / "PristonSQLDll.dll.before-local-adapter"
+# The source tree's adapted PristonSQLDll.dll is required. The official DLL
+# fails silently in SQLLoginProcess/SQLLogoutProcess, so never substitute it.
 SKIP_CONTAINS = ("crash", ".before-", "corrupted")
 
 
@@ -68,9 +67,6 @@ def main() -> None:
     with tarfile.open(OUT, "w") as tar:
         for i, rel in enumerate(files, 1):
             src_path = SRC / rel
-            if rel.name.lower() == "pristonsqldll.dll" and OFFICIAL_SQL_DLL.is_file():
-                src_path = OFFICIAL_SQL_DLL
-                print("using official PristonSQLDll.dll (not MinGW ODBC adapter)", flush=True)
             tar.add(src_path, arcname=rel.as_posix())
             if i % 1000 == 0:
                 print(f"  {i}/{len(files)}", flush=True)

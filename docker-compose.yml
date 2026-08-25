@@ -233,6 +233,28 @@ services:
       retries: 10
 
   # ---------------------------------------------------------------------------
+  # Priston SQL — dedicated SQL Server 2017 (DBNETLIB/TLS 1.0 compatibility)
+  # ---------------------------------------------------------------------------
+  priston-sql:
+    image: mcr.microsoft.com/mssql/server:2017-latest
+    container_name: priston-sql
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Express
+      MSSQL_SA_PASSWORD: ${PRISTON_SQL_SA_PASSWORD}
+    volumes:
+      - priston-sql-data:/var/opt/mssql
+    mem_limit: 2g
+    networks:
+      - game-net
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\" -b -o /dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
   # Redis — Shared (User Apps)
   # ---------------------------------------------------------------------------
   redis-shared:
@@ -388,4 +410,5 @@ volumes:
   mail-config:
   roundcube-data:
   vrising-server:
+  priston-sql-data:
   vrising-data:
