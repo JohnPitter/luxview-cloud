@@ -5,6 +5,9 @@ log() { echo "[priston] $(date -u +%FT%TZ) $*"; }
 server_root="${PRISTON_SERVER_ROOT:-/server}"
 public_ip="${LUXVIEW_PUBLIC_IP:-${PRISTON_PUBLIC_IP:-127.0.0.1}}"
 server_name="${PRISTON_SERVER_NAME:-LuxView}"
+# The legacy hotuk parser treats GAME_SERVER fields as TAB-delimited tokens;
+# keep the advertised executable/name token space-free to avoid shifting IP fields.
+game_server_name="${PRISTON_GAME_SERVER_NAME:-LuxView-Priston}"
 sql_host="${PRISTON_MSSQL_HOST:-luxview-mssql}"
 sql_port="${PRISTON_MSSQL_PORT:-1433}"
 sql_password="${PRISTON_MSSQL_PASSWORD:-}"
@@ -37,7 +40,7 @@ chmod +x "$patched_exe" 2>/dev/null || true
 
 hotuk="$server_root/hotuk.ini"
 test -f "$hotuk" || { log 'ERRO: hotuk.ini ausente' >&2; exit 1; }
-tmp_hotuk=$(mktemp); awk -v name="$server_name" -v pub="$public_ip" 'BEGIN{IGNORECASE=1} /^\*SERVER_NAME/{print "*SERVER_NAME\t\t"name;next} /^\*GAME_SERVER/{print "*GAME_SERVER\t\tSunnyBPT_docker.exe\t"pub"\t"pub"\t"pub;next} /^\*SYSTEM_IP/{print "*SYSTEM_IP  "pub" "pub;next} {print}' "$hotuk" > "$tmp_hotuk"; cp "$tmp_hotuk" "$hotuk"; rm -f "$tmp_hotuk"
+tmp_hotuk=$(mktemp); awk -v name="$server_name" -v game="$game_server_name" -v pub="$public_ip" 'BEGIN{IGNORECASE=1} /^\*SERVER_NAME/{print "*SERVER_NAME\t\t"name;next} /^\*GAME_SERVER/{print "*GAME_SERVER\t\t"game"\t"pub"\t"pub"\t"pub;next} /^\*SYSTEM_IP/{print "*SYSTEM_IP  "pub" "pub;next} {print}' "$hotuk" > "$tmp_hotuk"; cp "$tmp_hotuk" "$hotuk"; rm -f "$tmp_hotuk"
 
 # Relay obrigatório: sql.dll tem Data Source=127.0.0.1,1433 hardcoded.
 for i in $(seq 1 60); do (echo >/dev/tcp/"$sql_host"/"$sql_port") 2>/dev/null && break; [ "$i" -eq 60 ] && { log "ERRO: MSSQL inacessível em $sql_host:$sql_port"; exit 1; }; sleep 1; done

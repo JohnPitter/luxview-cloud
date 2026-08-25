@@ -7,16 +7,16 @@ import zipfile
 from pathlib import Path
 
 SRC = Path(
-    r"C:\Users\joaop\Desenvolvimento\openpriston\client-runtime\PristonTale_Brazil_Client-v4220"
+    r"C:\Users\joaop\Desenvolvimento\openpriston\dedicated server\client"
 )
 EXTRA_SRC = Path(
-    r"C:\Users\joaop\Desenvolvimento\openpriston\dedicated server\client"
+    r"C:\Users\joaop\Desenvolvimento\openpriston\client-runtime\PristonTale_Brazil_Client-v4220"
 )
 OUT = Path(
     r"C:\Users\joaop\Desenvolvimento\Projects\luxview-cloud\output\priston-4220-base.zip"
 )
 
-SKIP_DIR_NAMES = {"savedata"}
+SKIP_DIR_NAMES = {"savedata", "logs", "log"}
 SKIP_SUFFIXES = {".original", ".bak", ".dmp", ".tmp", ".log"}
 SKIP_FILE_NAMES = {
     "client-current.png",
@@ -64,7 +64,7 @@ def skip_file(rel: Path) -> bool:
     lower = name.lower()
     if lower in SKIP_FILE_NAMES:
         return True
-    if rel.suffix.lower() in SKIP_SUFFIXES:
+    if rel.suffix.lower() in SKIP_SUFFIXES or ".bak" in lower:
         return True
     if any(token in lower for token in SKIP_CONTAINS):
         return True
