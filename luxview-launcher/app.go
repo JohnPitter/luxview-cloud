@@ -488,7 +488,9 @@ func (a *App) Play(card GameCard, user, pass string) error {
 	}
 
 	if game == "tibia" {
-		return launchTibiaExecutable(exePath, clientDir)
+		// Conta Canary = user@luxviewot.com + senha LuxView (mesmo ensureGameAccount).
+		// O client deriva o email; jogador só usa user/senha do launcher.
+		return launchTibiaExecutable(exePath, clientDir, secret.Username, secret.Password, charName)
 	}
 	if game == "metin2" {
 		return launchExecutable(exePath, clientDir)

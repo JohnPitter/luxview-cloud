@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -25,8 +26,18 @@ func launchExecutable(exePath, workingDir string) error {
 	return nil
 }
 
-func launchTibiaExecutable(exePath, workingDir string) error {
-	return launchExecutable(exePath, workingDir)
+func launchTibiaExecutable(exePath, workingDir, username, password, character string) error {
+	command := exec.Command(exePath, "--luxview-autologin")
+	command.Dir = workingDir
+	command.Env = append(os.Environ(),
+		"LUXVIEW_USER="+strings.TrimSpace(username),
+		"LUXVIEW_PASSWORD="+password,
+		"LUXVIEW_CHARACTER="+strings.TrimSpace(character),
+	)
+	if err := command.Start(); err != nil {
+		return fmt.Errorf("falha ao iniciar o Tibia: %w", err)
+	}
+	return nil
 }
 
 func launchMuClient(exePath, workingDir, ip string, port int) error {

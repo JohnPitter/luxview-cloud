@@ -33,9 +33,17 @@ func launchExecutable(exePath, workingDir string) error {
 // launchTibiaExecutable starts the GUI client without inheriting a console.
 // OTClient is shipped as a console-subsystem binary and otherwise opens a
 // visible cmd window next to the game.
-func launchTibiaExecutable(exePath, workingDir string) error {
-	command := exec.Command(exePath)
+//
+// Credenciais vão por env (não na linha de comando): o client deriva
+// user@luxviewot.com e faz auto-login + entrada no personagem.
+func launchTibiaExecutable(exePath, workingDir, username, password, character string) error {
+	command := exec.Command(exePath, "--luxview-autologin")
 	command.Dir = workingDir
+	command.Env = append(os.Environ(),
+		"LUXVIEW_USER="+strings.TrimSpace(username),
+		"LUXVIEW_PASSWORD="+password,
+		"LUXVIEW_CHARACTER="+strings.TrimSpace(character),
+	)
 	command.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
 		CreationFlags: windows.CREATE_NO_WINDOW,
