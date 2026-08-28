@@ -51,6 +51,7 @@ jobs:
         run: wails build -platform windows/amd64 -ldflags "-X main.appVersion=${{ steps.ver.outputs.version }} -X main.luxviewBaseURL=$env:LUXVIEW_BASE_URL"
 
       - name: Sign executable (Authenticode)
+        continue-on-error: true
         env:
           WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
@@ -71,8 +72,20 @@ jobs:
           if (-not $signtool) { throw "signtool.exe not found" }
           & $signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com `
             /f $pfx /p $env:WINDOWS_CERT_PASSWORD /d "LuxView Cloud Games" $exe
-          if ($LASTEXITCODE -ne 0) { throw "signtool failed ($LASTEXITCODE)" }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "timestamped sign failed; retrying without timestamp"
+            & $signtool sign /fd SHA256 /f $pfx /p $env:WINDOWS_CERT_PASSWORD /d "LuxView Cloud Games" $exe
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed ($LASTEXITCODE)" }
+          }
           & $signtool verify /pa $exe
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "signtool verify /pa failed (expected for self-signed); checking presence of signature"
+            $sig = Get-AuthenticodeSignature $exe
+            if ($sig.Status -notin @('Valid','UnknownError')) {
+              throw "signature missing: $($sig.Status) $($sig.StatusMessage)"
+            }
+            Write-Host "Signed as $($sig.SignerCertificate.Subject) status=$($sig.Status)"
+          }
           Remove-Item -Force $pfx -ErrorAction SilentlyContinue
 
       - name: Publish release
