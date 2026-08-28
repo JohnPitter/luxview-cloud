@@ -51,12 +51,15 @@ jobs:
         run: wails build -platform windows/amd64 -ldflags "-X main.appVersion=${{ steps.ver.outputs.version }} -X main.luxviewBaseURL=$env:LUXVIEW_BASE_URL"
 
       - name: Sign executable (Authenticode)
-        if: ${{ secrets.WINDOWS_CERT_BASE64 != '' }}
         env:
           WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         shell: pwsh
         run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_BASE64)) {
+            Write-Host "WINDOWS_CERT_BASE64 not set — skipping Authenticode sign"
+            exit 0
+          }
           $exe = "build/bin/luxview-launcher.exe"
           if (-not (Test-Path $exe)) { throw "missing $exe" }
           $pfx = Join-Path $env:RUNNER_TEMP "luxview-codesign.pfx"
