@@ -51,7 +51,7 @@ jobs:
         run: wails build -platform windows/amd64 -ldflags "-X main.appVersion=${{ steps.ver.outputs.version }} -X main.luxviewBaseURL=$env:LUXVIEW_BASE_URL"
 
       - name: Sign executable (Authenticode)
-        if: ${{ env.WINDOWS_CERT_BASE64 != '' }}
+        if: ${{ secrets.WINDOWS_CERT_BASE64 != '' }}
         env:
           WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
