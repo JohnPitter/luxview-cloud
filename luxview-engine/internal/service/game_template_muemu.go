@@ -21,8 +21,8 @@ func muemuTemplate() model.GameTemplate {
 
 	return model.GameTemplate{
 		ID:               muemuTemplateID,
-		DisplayName:      "MU Online (97D / Season 2+ / S6–17 - MuEmu)",
-		Description:      "Servidor MU Online via MuEmu. A edição 97D + Season 2+ sobe o ConnectServer 99 com dois mundos no mesmo client: GS 0 (97D) e GS 99 (Season 2+).",
+		DisplayName:      "MU Online legado (97D / Season 2+ / S6–17 - MuEmu)",
+		Description:      "Template legado via MuEmu. Preferir OpenMU (Season 6) para o stack LuxView atual. A edição 97D + Season 2+ sobe o ConnectServer 99 com dois mundos no mesmo client: GS 0 (97D) e GS 99 (Season 2+).",
 		Protocol:         "tcp",
 		DefaultGamePort:  44405,
 		DefaultQueryPort: 55901,

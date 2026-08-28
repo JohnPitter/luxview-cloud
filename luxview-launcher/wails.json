@@ -7,7 +7,14 @@
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
   "author": {
-    "name": "Joao Pedro Tavares",
-    "email": "joaopedro.ts16@gmail.com"
+    "name": "LuxView Cloud",
+    "email": "contato@luxview.cloud"
+  },
+  "info": {
+    "companyName": "LuxView Cloud",
+    "productName": "LuxView Cloud Games",
+    "productVersion": "1.80.0",
+    "copyright": "Copyright © LuxView Cloud",
+    "comments": "Launcher oficial LuxView Cloud Games"
   }
 }

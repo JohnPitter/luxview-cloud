@@ -2,3 +2,6 @@ build/bin
 node_modules
 frontend/dist
 .env
+certs/
+*.pfx
+*.pfx.b64

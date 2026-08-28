@@ -5,8 +5,8 @@ import "github.com/luxview/engine/internal/model"
 func openmuTemplate() model.GameTemplate {
 	return model.GameTemplate{
 		ID:               "openmu",
-		DisplayName:      "MU Online (Season 6 - OpenMU)",
-		Description:      "Servidor de MU Online Season 6 Episode 3 via OpenMU (open source). Para 97D + Season 2+ no mesmo client, use o template MuEmu.",
+		DisplayName:      "MU Online (LuxView)",
+		Description:      "Season 99d, 2 e 6 pt 3 — Marketplace, Auto Battle e client LuxView. Template principal do MU na plataforma.",
 		Protocol:         "tcp",
 		DefaultGamePort:  44405,
 		DefaultQueryPort: 55901,

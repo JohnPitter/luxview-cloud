@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type PlayerSession struct {
@@ -222,13 +223,23 @@ func stringsTrimError(raw []byte) string {
 		Error string `json:"error"`
 	}
 	if json.Unmarshal(raw, &wrapped) == nil && wrapped.Error != "" {
-		return wrapped.Error
+		return friendlyAPIError(wrapped.Error)
 	}
 	s := string(bytes.TrimSpace(raw))
 	if s == "" {
 		return "falha na conta LuxView"
 	}
-	return s
+	return friendlyAPIError(s)
+}
+
+// friendlyAPIError maps raw API errors (e.g. "unauthorized") to player-facing PT-BR copy.
+func friendlyAPIError(msg string) string {
+	switch strings.ToLower(strings.TrimSpace(msg)) {
+	case "unauthorized", "não autorizado", "nao autorizado":
+		return "entre na conta LuxView"
+	default:
+		return msg
+	}
 }
 
 func playerSessionPath() (string, error) {
