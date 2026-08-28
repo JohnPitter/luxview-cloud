@@ -85,6 +85,15 @@ func sanitizeCacheKey(raw string) string {
 
 func (a *App) installSplitClient(card GameCard, dir string, updating bool) error {
 	needBase := shouldDownloadClientBase(updating, installedBaseHash(card.AppID), card.BaseHash)
+	// O patch do Tibia contém só o init.lua (IP do servidor). Se o client_hash
+	// mudou, o conteúdo real do client mudou (módulos/overlay) e instalações
+	// legadas sem stamp de base precisam reextrair o zip base inteiro.
+	if !needBase && updating && normalizeGameID(card.Game) == "tibia" {
+		localClient := installedClientHash(card.AppID)
+		if card.ClientHash != "" && localClient != card.ClientHash {
+			needBase = true
+		}
+	}
 	if needBase {
 		cachePath, err := a.ensureClientBaseCache(card)
 		if err != nil {
