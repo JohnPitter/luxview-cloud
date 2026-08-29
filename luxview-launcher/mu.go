@@ -2,11 +2,16 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
+	"fmt"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -26,6 +31,63 @@ func muExecutable(clientDir string) string {
 
 func muConnectPort(_ GameCard) int {
 	return muDefaultConnectPort
+}
+
+// MuServerInfo is one game server (channel) reported by the MU ConnectServer.
+type MuServerInfo struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	Load int    `json:"load"`
+}
+
+// queryMuServers asks the MU ConnectServer for its live server list using the
+// same F4.06 handshake the game client uses, so the launcher can offer channel
+// selection before starting main.exe.
+func queryMuServers(host string, port int) ([]MuServerInfo, error) {
+	address := net.JoinHostPort(strings.TrimSpace(host), strconv.Itoa(port))
+	conn, err := net.DialTimeout("tcp", address, 8*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("não consegui contatar o ConnectServer: %w", err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(8 * time.Second))
+
+	// Server hello (C1 04 00 01) — read and ignore it.
+	if _, err := io.ReadFull(conn, make([]byte, 4)); err != nil {
+		return nil, fmt.Errorf("ConnectServer não respondeu: %w", err)
+	}
+	if _, err := conn.Write([]byte{0xC1, 0x04, 0xF4, 0x06}); err != nil {
+		return nil, fmt.Errorf("falha ao pedir a lista de canais: %w", err)
+	}
+
+	header := make([]byte, 7)
+	if _, err := io.ReadFull(conn, header); err != nil {
+		return nil, fmt.Errorf("resposta inválida do ConnectServer: %w", err)
+	}
+	if header[0] != 0xC2 || header[3] != 0xF4 || header[4] != 0x06 {
+		return nil, fmt.Errorf("resposta inesperada do ConnectServer")
+	}
+	length := int(binary.BigEndian.Uint16(header[1:3]))
+	count := int(binary.BigEndian.Uint16(header[5:7]))
+	if length < 7+count*4 || count > 256 {
+		return nil, fmt.Errorf("lista de canais inválida")
+	}
+	body := make([]byte, length-7)
+	if _, err := io.ReadFull(conn, body); err != nil {
+		return nil, fmt.Errorf("lista de canais incompleta: %w", err)
+	}
+
+	servers := make([]MuServerInfo, 0, count)
+	for i := 0; i < count; i++ {
+		id := int(binary.LittleEndian.Uint16(body[i*4 : i*4+2]))
+		load := int(body[i*4+2])
+		servers = append(servers, MuServerInfo{
+			ID:   id,
+			Name: fmt.Sprintf("Canal %d", id/20+1),
+			Load: load,
+		})
+	}
+	return servers, nil
 }
 
 func muLauncherConfigPath(clientDir string) string {

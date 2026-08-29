@@ -518,7 +518,7 @@ func (a *App) Play(card GameCard, user, pass string) error {
 		if err := patchMuClient(clientDir, card); err != nil {
 			return err
 		}
-		return launchMuClient(exePath, clientDir, card.ServerIP, muConnectPort(card))
+		return launchMuClient(exePath, clientDir, card.ServerIP, muConnectPort(card), -1, "", "")
 	}
 
 	if user == "" || pass == "" {
@@ -572,6 +572,65 @@ func (a *App) Play(card GameCard, user, pass string) error {
 		return err
 	}
 	return nil
+}
+
+// GetMuServers returns the live channel list from the MU ConnectServer so the
+// player picks the channel in the launcher before main.exe even starts.
+func (a *App) GetMuServers(card GameCard) ([]MuServerInfo, error) {
+	if resolveGameID(card) != "muemu" {
+		return nil, fmt.Errorf("este jogo não tem seleção de canal")
+	}
+	servers, err := queryMuServers(card.ServerIP, muConnectPort(card))
+	if err != nil {
+		return nil, err
+	}
+	if len(servers) == 0 {
+		return nil, fmt.Errorf("nenhum canal online no momento")
+	}
+	return servers, nil
+}
+
+// PlayMu launches MU straight into the channel picked in the launcher and
+// passes the LuxView account via environment: the client skips the server
+// picker and login window and lands on character selection.
+func (a *App) PlayMu(card GameCard, serverID int) error {
+	if runtime.GOOS != "windows" {
+		return fmt.Errorf("o jogo só roda no Windows")
+	}
+	game := resolveGameID(card)
+	spec, ok := launchSpecForGame(game)
+	if !ok || game != "muemu" {
+		return fmt.Errorf("jogo não suportado: %s", game)
+	}
+	dir, err := installDir(card.AppID)
+	if err != nil {
+		return err
+	}
+	clientDir := filepath.Join(dir, spec.clientDir)
+	exePath := filepath.Join(clientDir, spec.gameExe)
+	if !clientFilesReady(dir, game, spec) {
+		return fmt.Errorf("jogo não encontrado — instale primeiro")
+	}
+
+	secret, err := loadPlayerSecret()
+	if err != nil || secret.Username == "" || secret.Password == "" {
+		return fmt.Errorf("entre na conta LuxView")
+	}
+	if err := a.ensureGameAccount(card.AppID, secret.Password, "", ""); err != nil {
+		return err
+	}
+	account := muLogin(secret.Username)
+	if account == "" {
+		return fmt.Errorf("usuário LuxView precisa de letras ou números para o MU")
+	}
+
+	if resolved := muExecutable(clientDir); resolved != "" {
+		exePath = resolved
+	}
+	if err := patchMuClient(clientDir, card); err != nil {
+		return err
+	}
+	return launchMuClient(exePath, clientDir, card.ServerIP, muConnectPort(card), serverID, account, secret.Password)
 }
 
 // ensureRegistry points the SoftNyx registry keys at the install dir. HKCU never

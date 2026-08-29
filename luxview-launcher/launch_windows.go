@@ -54,13 +54,24 @@ func launchTibiaExecutable(exePath, workingDir, username, password, character st
 	return nil
 }
 
-func launchMuClient(exePath, workingDir, ip string, port int) error {
+func launchMuClient(exePath, workingDir, ip string, port, serverID int, account, password string) error {
 	if strings.TrimSpace(ip) == "" {
 		return fmt.Errorf("servidor MU sem IP")
 	}
 	writeMuConnectionRegistry(ip, port)
 	command := exec.Command(exePath, "connect", "/u"+ip, "/p"+strconv.Itoa(port))
 	command.Dir = workingDir
+	// Credenciais e canal vão por env (não na linha de comando): o client lê em
+	// LauncherBoot::Initialize e limpa as variáveis do próprio ambiente.
+	if account != "" && password != "" {
+		command.Env = append(os.Environ(),
+			"LUXVIEW_MU_ACCOUNT="+account,
+			"LUXVIEW_MU_PASSWORD="+password,
+		)
+		if serverID >= 0 {
+			command.Env = append(command.Env, "LUXVIEW_MU_SERVER="+strconv.Itoa(serverID))
+		}
+	}
 	if err := command.Start(); err != nil {
 		return fmt.Errorf("falha ao iniciar o MU: %w", err)
 	}

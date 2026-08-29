@@ -16,6 +16,8 @@ export function GetGames():Promise<Array<main.GameCard>>;
 
 export function GetMetin2Settings(arg1:main.GameCard):Promise<main.Metin2Settings>;
 
+export function GetMuServers(arg1:main.GameCard):Promise<Array<main.MuServerInfo>>;
+
 export function GetSettings(arg1:main.GameCard):Promise<main.GameSettings>;
 
 export function InstallGame(arg1:main.GameCard):Promise<void>;
@@ -29,6 +31,8 @@ export function Login(arg1:main.GameCard,arg2:string,arg3:string):Promise<string
 export function OpenInstallFolder(arg1:string):Promise<void>;
 
 export function Play(arg1:main.GameCard,arg2:string,arg3:string):Promise<void>;
+
+export function PlayMu(arg1:main.GameCard,arg2:number):Promise<void>;
 
 export function PlayerLink(arg1:string,arg2:string,arg3:string):Promise<void>;
 

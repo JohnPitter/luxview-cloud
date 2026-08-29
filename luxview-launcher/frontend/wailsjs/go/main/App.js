@@ -30,6 +30,10 @@ export function GetMetin2Settings(arg1) {
   return window['go']['main']['App']['GetMetin2Settings'](arg1);
 }
 
+export function GetMuServers(arg1) {
+  return window['go']['main']['App']['GetMuServers'](arg1);
+}
+
 export function GetSettings(arg1) {
   return window['go']['main']['App']['GetSettings'](arg1);
 }
@@ -56,6 +60,10 @@ export function OpenInstallFolder(arg1) {
 
 export function Play(arg1, arg2, arg3) {
   return window['go']['main']['App']['Play'](arg1, arg2, arg3);
+}
+
+export function PlayMu(arg1, arg2) {
+  return window['go']['main']['App']['PlayMu'](arg1, arg2);
 }
 
 export function PlayerLink(arg1, arg2, arg3) {

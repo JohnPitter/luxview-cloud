@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 	"github.com/luxview/engine/internal/model"
 	"github.com/luxview/engine/internal/repository"
 	dockerclient "github.com/luxview/engine/pkg/docker"
@@ -154,7 +155,20 @@ func gameAccountSQL(templateID, username, password, characterName, vocation stri
 		if login == "" {
 			return nil, "", fmt.Errorf("usuário LuxView precisa de letras ou números para o MU")
 		}
-		return &GameAccountInfo{TemplateID: templateID, Login: login, Email: TibiaEmail(username)}, "", nil
+		// OpenMU valida o login com bcrypt ($2b$) em data."Account"; a storage é
+		// criada junto para o client poder abrir o baú da loja de cash.
+		hash, hashErr := muPasswordHash(password)
+		if hashErr != nil {
+			return nil, "", fmt.Errorf("não consegui preparar a senha: %w", hashErr)
+		}
+		accountID := uuid.NewString()
+		vaultID := uuid.NewString()
+		email := TibiaEmail(username)
+		sql := fmt.Sprintf(
+			`INSERT INTO data."ItemStorage" ("Id","Money") VALUES ('%s',0) ON CONFLICT ("Id") DO NOTHING; INSERT INTO data."Account" ("Id","VaultId","LoginName","PasswordHash","SecurityCode","EMail","RegistrationDate","State","TimeZone","VaultPassword","IsVaultExtended") VALUES ('%s','%s','%s','%s','','%s',NOW(),0,0,'',false) ON CONFLICT ("LoginName") DO UPDATE SET "PasswordHash"=EXCLUDED."PasswordHash", "EMail"=EXCLUDED."EMail";`,
+			vaultID, accountID, vaultID, login, hash, email,
+		)
+		return &GameAccountInfo{TemplateID: templateID, Login: login, Email: email}, sql, nil
 	default:
 		return nil, "", fmt.Errorf("este jogo ainda não cria conta pelo launcher")
 	}
@@ -189,12 +203,38 @@ func mysqlRootPassword(templateID string, fields map[string]string) string {
 	return "root"
 }
 
+func muPasswordHash(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), 10)
+	if err != nil {
+		return "", err
+	}
+	// OpenMU/muraiz API normaliza o prefixo do bcrypt para $2b$.
+	return strings.Replace(string(hash), "$2a$", "$2b$", 1), nil
+}
+
 func (g *GameAccount) execSQL(ctx context.Context, container, templateID string, fields map[string]string, sql string) error {
 	if g.docker == nil {
 		return fmt.Errorf("docker indisponível")
 	}
 	if templateID == "priston" {
 		_, err := g.docker.ContainerExec(ctx, container, []string{"python3", "/opt/priston-account.py", "sql"}, "PRISTON_SQL="+sql)
+		return err
+	}
+	if templateID == "openmu" || templateID == "muemu" {
+		pass := "openmu"
+		host := "127.0.0.1"
+		if fields != nil {
+			if v := strings.TrimSpace(fields["POSTGRES_PASSWORD"]); v != "" {
+				pass = v
+			}
+			if v := strings.TrimSpace(fields["PGHOST"]); v != "" {
+				host = v
+			}
+		}
+		env := []string{"PGPASSWORD=" + pass}
+		_, err := g.docker.ContainerExec(ctx, container, []string{
+			"psql", "-h", host, "-U", "postgres", "-d", "openmu", "-c", sql,
+		}, env...)
 		return err
 	}
 	env := []string{"MYSQL_PWD=" + mysqlRootPassword(templateID, fields)}

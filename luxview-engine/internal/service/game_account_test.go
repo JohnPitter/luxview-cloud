@@ -74,8 +74,10 @@ func TestGameAccountSQLMuEmu(t *testing.T) {
 	if info.Login != "testando" {
 		t.Fatalf("login %s", info.Login)
 	}
-	if sql != "" {
-		t.Fatalf("muemu relies on AutoRegister until schema is provisioned, got %q", sql)
+	for _, part := range []string{"data.\"Account\"", "data.\"ItemStorage\"", "testando", "$2b$", "ON CONFLICT"} {
+		if !strings.Contains(sql, part) {
+			t.Fatalf("missing %q in %s", part, sql)
+		}
 	}
 }
 

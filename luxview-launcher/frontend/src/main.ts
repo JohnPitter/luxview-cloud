@@ -1,6 +1,6 @@
 import './style.css';
 import './app.css';
-import { GetGames, InstallGame, Play, GetSettings, SaveSettings, GetMetin2Settings, SaveMetin2Settings, OpenInstallFolder, Version, IsGameRunning, IsInstalled, CheckForUpdate, ApplyUpdate, PlayerRegister, PlayerLogin, PlayerMe, PlayerLogout, CommunitySnapshot, CommunitySend, CommunityHere, ShopCatalog, ShopBuy } from '../wailsjs/go/main/App';
+import { GetGames, InstallGame, Play, PlayMu, GetMuServers, GetSettings, SaveSettings, GetMetin2Settings, SaveMetin2Settings, OpenInstallFolder, Version, IsGameRunning, IsInstalled, CheckForUpdate, ApplyUpdate, PlayerRegister, PlayerLogin, PlayerMe, PlayerLogout, CommunitySnapshot, CommunitySend, CommunityHere, ShopCatalog, ShopBuy } from '../wailsjs/go/main/App';
 import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
 import rakionImg from './assets/games/rakion.jpg';
 import muImg from './assets/games/mu.jpg';
@@ -892,12 +892,92 @@ async function launchInstalled(g: Card) {
       await launchTibia(g);
       return;
     }
+    if (cardGame(g) === 'muemu') {
+      await openMuServerPicker(g);
+      return;
+    }
     await Play(g as any, '', '');
     toast('Iniciando o jogo…');
     monitorGame(g);
   } catch (e) {
     await handleLaunchError(g, e);
   }
+}
+
+type MuServer = { id: number; name: string; load: number };
+
+function muServerKey(appId: string) {
+  return 'luxview:mu-server:' + appId;
+}
+
+function muLoadLabel(load: number): string {
+  if (load >= 100) return 'lotado';
+  if (load >= 70) return 'cheio';
+  if (load >= 30) return 'médio';
+  return 'vazio';
+}
+
+// Seleção de canal do MU logo após o JOGAR: consulta o ConnectServer e abre o
+// jogo já logado na seleção de personagem do canal escolhido.
+async function openMuServerPicker(g: Card) {
+  const ov = showModal(`
+    <h3>Escolha o canal</h3>
+    <div class="modal-err" id="muSrvErr"></div>
+    <div id="muSrvList" style="display:flex;flex-direction:column;gap:8px;margin:12px 0;">
+      <p class="modal-hint">Carregando canais…</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="muSrvCancel">Cancelar</button>
+      <button class="btn primary" id="muSrvGo" disabled>▶ Jogar</button>
+    </div>
+    <p class="modal-hint">O jogo abre direto na seleção de personagem.</p>
+  `);
+  document.getElementById('muSrvCancel')!.onclick = closeModal;
+
+  let servers: MuServer[] = [];
+  try {
+    servers = (await GetMuServers(g as any)) as unknown as MuServer[];
+  } catch (e) {
+    document.getElementById('muSrvErr')!.textContent = String(e).replace(/^Error:\s*/, '');
+    document.getElementById('muSrvList')!.innerHTML = '';
+    return;
+  }
+
+  const last = Number(localStorage.getItem(muServerKey(g.app_id)) || '');
+  const list = document.getElementById('muSrvList')!;
+  list.innerHTML = servers.map((s) => {
+    const full = s.load >= 100;
+    const checked = s.id === last || (!servers.some((x) => x.id === last) && s === servers[0]);
+    return '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid rgba(255,255,255,.12);border-radius:8px;' + (full ? 'opacity:.45;' : 'cursor:pointer;') + '">' +
+      '<input type="radio" name="muSrv" value="' + s.id + '" ' + (checked && !full ? 'checked' : '') + ' ' + (full ? 'disabled' : '') + '>' +
+      '<strong style="flex:1;">' + esc(s.name) + '</strong>' +
+      '<span>' + muLoadLabel(s.load) + '</span>' +
+    '</label>';
+  }).join('');
+
+  const go = document.getElementById('muSrvGo') as HTMLButtonElement;
+  go.disabled = false;
+  go.onclick = async () => {
+    const sel = document.querySelector<HTMLInputElement>('input[name="muSrv"]:checked');
+    if (!sel) return;
+    go.disabled = true;
+    try {
+      await PlayMu(g as any, Number(sel.value));
+      localStorage.setItem(muServerKey(g.app_id), sel.value);
+      closeModal();
+      toast('Iniciando o jogo…');
+      monitorGame(g);
+    } catch (e) {
+      go.disabled = false;
+      const message = String(e).replace(/^Error:\s*/, '');
+      if (needsLuxViewLogin(message)) {
+        ov.remove();
+        openPlayerAccount();
+        return;
+      }
+      document.getElementById('muSrvErr')!.textContent = message;
+    }
+  };
 }
 
 async function handleLaunchError(g: Card, e: unknown) {

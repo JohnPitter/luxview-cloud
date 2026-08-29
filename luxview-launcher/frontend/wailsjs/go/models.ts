@@ -292,6 +292,22 @@ export namespace main {
 	        this.shadow_level = source["shadow_level"];
 	    }
 	}
+	export class MuServerInfo {
+	    id: number;
+	    name: string;
+	    load: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new MuServerInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.load = source["load"];
+	    }
+	}
 	export class PlayerSession {
 	    token: string;
 	    username: string;
