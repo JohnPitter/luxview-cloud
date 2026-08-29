@@ -34,12 +34,24 @@ func muConnectPort(_ GameCard) int {
 	return muDefaultConnectPort
 }
 
+// muServerNames maps the ConnectServer group index (ServerId/20) to the
+// friendly name of that physical server, matching config."GameServerDefinition"
+// on the OpenMU database (Description column: "LuxMu (S6)"/"LuxMu (99d)"/
+// "LuxMu (S2)"). A future new server without an entry here falls back to
+// "Servidor N" instead of failing.
+var muServerNames = map[int]string{
+	0: "Season 6 Pt 3",
+	1: "Season 99d",
+	2: "Season 2",
+}
+
 // MuServerInfo is one game server entry reported by the MU ConnectServer.
 // ConnectServer packs two dimensions into a single ServerId: Server (id/20)
 // identifies which physical game server, and Channel (id%20) identifies a
 // channel within that server. Today every server exposes exactly one channel,
 // but the picker groups by Server so a future multi-channel server renders as
-// "Servidor N" with several "Canal M" rows instead of looking like N servers.
+// the server name with several "Canal M" rows instead of looking like N
+// separate servers.
 type MuServerInfo struct {
 	ID      int    `json:"id"`
 	Server  int    `json:"server"`
@@ -89,13 +101,18 @@ func queryMuServers(host string, port int) ([]MuServerInfo, error) {
 	for i := 0; i < count; i++ {
 		id := int(binary.LittleEndian.Uint16(body[i*4 : i*4+2]))
 		load := int(body[i*4+2])
-		server := id/20 + 1
+		group := id / 20
+		server := group + 1
 		channel := id%20 + 1
+		name, known := muServerNames[group]
+		if !known {
+			name = fmt.Sprintf("Servidor %d", server)
+		}
 		servers = append(servers, MuServerInfo{
 			ID:      id,
 			Server:  server,
 			Channel: channel,
-			Name:    fmt.Sprintf("Servidor %d", server),
+			Name:    name,
 			Load:    load,
 		})
 	}
