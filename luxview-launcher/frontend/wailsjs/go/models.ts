@@ -294,6 +294,8 @@ export namespace main {
 	}
 	export class MuServerInfo {
 	    id: number;
+	    server: number;
+	    channel: number;
 	    name: string;
 	    load: number;
 	
@@ -304,6 +306,8 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.server = source["server"];
+	        this.channel = source["channel"];
 	        this.name = source["name"];
 	        this.load = source["load"];
 	    }

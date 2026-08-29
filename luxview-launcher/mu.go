@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -33,11 +34,18 @@ func muConnectPort(_ GameCard) int {
 	return muDefaultConnectPort
 }
 
-// MuServerInfo is one game server (channel) reported by the MU ConnectServer.
+// MuServerInfo is one game server entry reported by the MU ConnectServer.
+// ConnectServer packs two dimensions into a single ServerId: Server (id/20)
+// identifies which physical game server, and Channel (id%20) identifies a
+// channel within that server. Today every server exposes exactly one channel,
+// but the picker groups by Server so a future multi-channel server renders as
+// "Servidor N" with several "Canal M" rows instead of looking like N servers.
 type MuServerInfo struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
-	Load int    `json:"load"`
+	ID      int    `json:"id"`
+	Server  int    `json:"server"`
+	Channel int    `json:"channel"`
+	Name    string `json:"name"`
+	Load    int    `json:"load"`
 }
 
 // queryMuServers asks the MU ConnectServer for its live server list using the
@@ -81,12 +89,17 @@ func queryMuServers(host string, port int) ([]MuServerInfo, error) {
 	for i := 0; i < count; i++ {
 		id := int(binary.LittleEndian.Uint16(body[i*4 : i*4+2]))
 		load := int(body[i*4+2])
+		server := id/20 + 1
+		channel := id%20 + 1
 		servers = append(servers, MuServerInfo{
-			ID:   id,
-			Name: fmt.Sprintf("Canal %d", id/20+1),
-			Load: load,
+			ID:      id,
+			Server:  server,
+			Channel: channel,
+			Name:    fmt.Sprintf("Servidor %d", server),
+			Load:    load,
 		})
 	}
+	sort.Slice(servers, func(i, j int) bool { return servers[i].ID < servers[j].ID })
 	return servers, nil
 }
 

@@ -904,7 +904,7 @@ async function launchInstalled(g: Card) {
   }
 }
 
-type MuServer = { id: number; name: string; load: number };
+type MuServer = { id: number; server: number; channel: number; name: string; load: number };
 
 function muServerKey(appId: string) {
   return 'luxview:mu-server:' + appId;
@@ -917,14 +917,37 @@ function muLoadLabel(load: number): string {
   return 'vazio';
 }
 
-// Seleção de canal do MU logo após o JOGAR: consulta o ConnectServer e abre o
-// jogo já logado na seleção de personagem do canal escolhido.
+// Renders one server group: a single row when it has exactly one channel
+// (today's case for every server), or a "Servidor N" header with one radio
+// row per "Canal M" once a server exposes more than one channel.
+function renderMuServerGroup(entries: MuServer[], last: number, isFirstGroup: boolean): string {
+  if (entries.length === 1) {
+    const s = entries[0];
+    return renderMuServerRow(s, s.name, last, isFirstGroup);
+  }
+  const header = '<div style="font-weight:600;opacity:.85;margin-top:4px;">' + esc(entries[0].name) + '</div>';
+  const rows = entries.map((s, i) => renderMuServerRow(s, 'Canal ' + s.channel, last, isFirstGroup && i === 0)).join('');
+  return header + rows;
+}
+
+function renderMuServerRow(s: MuServer, label: string, last: number, preferChecked: boolean): string {
+  const full = s.load >= 100;
+  const checked = s.id === last || (last === 0 && preferChecked);
+  return '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid rgba(255,255,255,.12);border-radius:8px;' + (full ? 'opacity:.45;' : 'cursor:pointer;') + '">' +
+    '<input type="radio" name="muSrv" value="' + s.id + '" ' + (checked && !full ? 'checked' : '') + ' ' + (full ? 'disabled' : '') + '>' +
+    '<strong style="flex:1;">' + esc(label) + '</strong>' +
+    '<span>' + muLoadLabel(s.load) + '</span>' +
+  '</label>';
+}
+
+// Seleção de servidor/canal do MU logo após o JOGAR: consulta o ConnectServer
+// e abre o jogo já logado na seleção de personagem do canal escolhido.
 async function openMuServerPicker(g: Card) {
   const ov = showModal(`
-    <h3>Escolha o canal</h3>
+    <h3>Escolha o servidor</h3>
     <div class="modal-err" id="muSrvErr"></div>
     <div id="muSrvList" style="display:flex;flex-direction:column;gap:8px;margin:12px 0;">
-      <p class="modal-hint">Carregando canais…</p>
+      <p class="modal-hint">Carregando servidores…</p>
     </div>
     <div class="modal-actions">
       <button class="btn" id="muSrvCancel">Cancelar</button>
@@ -945,15 +968,13 @@ async function openMuServerPicker(g: Card) {
 
   const last = Number(localStorage.getItem(muServerKey(g.app_id)) || '');
   const list = document.getElementById('muSrvList')!;
-  list.innerHTML = servers.map((s) => {
-    const full = s.load >= 100;
-    const checked = s.id === last || (!servers.some((x) => x.id === last) && s === servers[0]);
-    return '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid rgba(255,255,255,.12);border-radius:8px;' + (full ? 'opacity:.45;' : 'cursor:pointer;') + '">' +
-      '<input type="radio" name="muSrv" value="' + s.id + '" ' + (checked && !full ? 'checked' : '') + ' ' + (full ? 'disabled' : '') + '>' +
-      '<strong style="flex:1;">' + esc(s.name) + '</strong>' +
-      '<span>' + muLoadLabel(s.load) + '</span>' +
-    '</label>';
-  }).join('');
+  const groupOrder: number[] = [];
+  const groups = new Map<number, MuServer[]>();
+  for (const s of servers) {
+    if (!groups.has(s.server)) { groups.set(s.server, []); groupOrder.push(s.server); }
+    groups.get(s.server)!.push(s);
+  }
+  list.innerHTML = groupOrder.map((server, i) => renderMuServerGroup(groups.get(server)!, last, i === 0)).join('');
 
   const go = document.getElementById('muSrvGo') as HTMLButtonElement;
   go.disabled = false;
