@@ -45,6 +45,16 @@ var muServerNames = map[int]string{
 	2: "Season 2",
 }
 
+// muServerDisplayOrder ranks the same group indices for the picker: 99d
+// first, Season 2 second, Season 6 Pt 3 third. This is purely a display
+// order — it does not change the ServerId used to connect. A group missing
+// here sorts after every ranked group, ordered by its raw id.
+var muServerDisplayOrder = map[int]int{
+	1: 0, // 99d
+	2: 1, // Season 2
+	0: 2, // Season 6 Pt 3
+}
+
 // MuServerInfo is one game server entry reported by the MU ConnectServer.
 // ConnectServer packs two dimensions into a single ServerId: Server (id/20)
 // identifies which physical game server, and Channel (id%20) identifies a
@@ -116,7 +126,18 @@ func queryMuServers(host string, port int) ([]MuServerInfo, error) {
 			Load:    load,
 		})
 	}
-	sort.Slice(servers, func(i, j int) bool { return servers[i].ID < servers[j].ID })
+	sort.Slice(servers, func(i, j int) bool {
+		gi, gj := servers[i].Server-1, servers[j].Server-1
+		ri, iKnown := muServerDisplayOrder[gi]
+		rj, jKnown := muServerDisplayOrder[gj]
+		if iKnown != jKnown {
+			return iKnown // ranked groups sort before unranked ones
+		}
+		if iKnown && jKnown && ri != rj {
+			return ri < rj
+		}
+		return servers[i].ID < servers[j].ID
+	})
 	return servers, nil
 }
 
