@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="MUnique.OpenMU.GameServer"><HintPath>/openmu/MUnique.OpenMU.GameServer.dll</HintPath></Reference>
+    <Reference Include="MUnique.OpenMU.GameLogic"><HintPath>/openmu/MUnique.OpenMU.GameLogic.dll</HintPath></Reference>
+    <Reference Include="MUnique.OpenMU.Network"><HintPath>/openmu/MUnique.OpenMU.Network.dll</HintPath></Reference>
+    <Reference Include="MUnique.OpenMU.PlugIns"><HintPath>/openmu/MUnique.OpenMU.PlugIns.dll</HintPath></Reference>
+    <Reference Include="MUnique.OpenMU.Pathfinding"><HintPath>/openmu/MUnique.OpenMU.Pathfinding.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>
