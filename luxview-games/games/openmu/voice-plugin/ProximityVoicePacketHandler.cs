@@ -29,12 +29,18 @@ public sealed class ProximityVoicePacketHandler : IPacketHandlerPlugIn
     /// <inheritdoc />
     public async ValueTask HandlePacketAsync(Player player, Memory<byte> packet)
     {
-        if (player is not RemotePlayer speaker || !VoicePacket.IsValidClientFrame(packet.Span))
+        if (player is not RemotePlayer speaker)
         {
             return;
         }
 
-        if (!VoiceRateLimiter.TryAcquire(player))
+        if (VoicePacket.IsStatePacket(packet.Span) || VoicePacket.IsReceiptPacket(packet.Span))
+        {
+            Console.WriteLine($"[voice] {(packet.Span[3] == VoicePacket.StateSubCode ? "microphone" : "receipt")} player={speaker.Id} state={packet.Span[4]}");
+            return;
+        }
+
+        if (!VoicePacket.IsValidClientFrame(packet.Span) || !VoiceRateLimiter.TryAcquire(player, out var firstFrameInWindow))
         {
             return;
         }
@@ -43,7 +49,11 @@ public sealed class ProximityVoicePacketHandler : IPacketHandlerPlugIn
         try
         {
             packet.Span.Slice(VoicePacket.ClientHeaderBytes, VoicePacket.EncodedFrameBytes).CopyTo(frame);
-            await VoicePacket.RelayAsync(speaker, frame).ConfigureAwait(false);
+            var recipients = await VoicePacket.RelayAsync(speaker, frame).ConfigureAwait(false);
+            if (firstFrameInWindow)
+            {
+                Console.WriteLine($"[voice] accepted sender={speaker.Id} recipients={recipients}");
+            }
         }
         finally
         {
@@ -56,6 +66,8 @@ internal static class VoicePacket
 {
     internal const byte Code = 0xF4;
     internal const byte FrameSubCode = 0x20;
+    internal const byte StateSubCode = 0x21;
+    internal const byte ReceiptSubCode = 0x22;
     internal const int ClientHeaderBytes = 4;
     internal const int EncodedFrameBytes = 83;
     internal const int ClientPacketBytes = ClientHeaderBytes + EncodedFrameBytes;
@@ -63,6 +75,16 @@ internal static class VoicePacket
     private const int ProximityRadius = 10;
     private const int ProximityRadiusSquared = ProximityRadius * ProximityRadius;
     private static readonly PropertyInfo? ConnectionProperty = typeof(RemotePlayer).GetProperty("Connection", BindingFlags.Instance | BindingFlags.NonPublic);
+
+    internal static bool IsStatePacket(ReadOnlySpan<byte> packet)
+    {
+        return IsStatusPacket(packet, StateSubCode);
+    }
+
+    internal static bool IsReceiptPacket(ReadOnlySpan<byte> packet)
+    {
+        return IsStatusPacket(packet, ReceiptSubCode);
+    }
 
     internal static bool IsValidClientFrame(ReadOnlySpan<byte> packet)
     {
@@ -73,14 +95,24 @@ internal static class VoicePacket
             && packet[3] == FrameSubCode;
     }
 
-    internal static async ValueTask RelayAsync(RemotePlayer speaker, byte[] frame)
+    private static bool IsStatusPacket(ReadOnlySpan<byte> packet, byte subCode)
+    {
+        return packet.Length == ClientHeaderBytes + 1
+            && packet[0] == 0xC1
+            && packet[1] == ClientHeaderBytes + 1
+            && packet[2] == Code
+            && packet[3] == subCode;
+    }
+
+    internal static async ValueTask<int> RelayAsync(RemotePlayer speaker, byte[] frame)
     {
         var map = speaker.CurrentMap;
         if (map is null)
         {
-            return;
+            return 0;
         }
 
+        var recipients = 0;
         foreach (var recipient in map.GetAttackablesInRange(speaker.Position, ProximityRadius).OfType<RemotePlayer>())
         {
             if (recipient.Id == speaker.Id || !IsWithinProximity(speaker, recipient))
@@ -95,7 +127,10 @@ internal static class VoicePacket
             }
 
             await SendFrameAsync(connection, speaker.Id, frame).ConfigureAwait(false);
+            recipients++;
         }
+
+        return recipients;
     }
 
     private static IConnection? GetConnection(RemotePlayer player)
@@ -131,9 +166,9 @@ internal static class VoiceRateLimiter
     private const int MaxFramesPerSecond = 60;
     private static readonly ConditionalWeakTable<Player, VoiceRateWindow> Windows = new();
 
-    internal static bool TryAcquire(Player player)
+    internal static bool TryAcquire(Player player, out bool firstFrameInWindow)
     {
-        return Windows.GetValue(player, _ => new VoiceRateWindow()).TryAcquire();
+        return Windows.GetValue(player, _ => new VoiceRateWindow()).TryAcquire(out firstFrameInWindow);
     }
 
     private sealed class VoiceRateWindow
@@ -142,7 +177,7 @@ internal static class VoiceRateLimiter
         private long _windowStart = Stopwatch.GetTimestamp();
         private int _frames;
 
-        internal bool TryAcquire()
+        internal bool TryAcquire(out bool firstFrameInWindow)
         {
             lock (this._lock)
             {
@@ -152,6 +187,7 @@ internal static class VoiceRateLimiter
                     this._frames = 0;
                 }
 
+                firstFrameInWindow = this._frames == 0;
                 if (this._frames >= MaxFramesPerSecond)
                 {
                     return false;
