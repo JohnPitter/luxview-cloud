@@ -103,28 +103,41 @@ func mapMuPlayer(cols []string) model.PlayerInfo {
 	}
 }
 
-func (s *GameServerService) queryOpenMUPlayers(ctx context.Context, container string, cfg *model.GameServerConfig) ([]model.PlayerInfo, error) {
-	sql := `SELECT c."Name", COALESCE(c."ExperienceLevel", 0), COALESCE(cc."Name", ''), COALESCE(m."Name", '')
-FROM "Character" c
-LEFT JOIN "CharacterClass" cc ON cc."Id" = c."CharacterClassId"
-LEFT JOIN "GameMapDefinition" m ON m."Id" = c."CurrentMapId"
-JOIN "Account" a ON a."Id" = c."AccountId"
-WHERE a."LastLogin" > NOW() - INTERVAL '15 minutes'`
-	out, err := s.execPostgres(ctx, container, cfg, sql)
-	if err != nil {
-		out, err = s.execPostgres(ctx, container, cfg,
-			`SELECT c."Name", 0, '', COALESCE(m."Name", '') FROM "Character" c LEFT JOIN "GameMapDefinition" m ON m."Id" = c."CurrentMapId" LIMIT 50`)
+// OpenMU tables live in data/config (quoted identifiers). search_path is public,
+// so FROM "Character" fails. There is no ExperienceLevel or LastLogin column;
+// level is data.StatAttribute where config.AttributeDefinition.Designation = 'Level'.
+const openMUPlayersSQL = `SELECT c."Name",
+       COALESCE((
+         SELECT ROUND(sa."Value")::integer
+         FROM data."StatAttribute" sa
+         JOIN config."AttributeDefinition" ad ON ad."Id" = sa."DefinitionId"
+         WHERE sa."CharacterId" = c."Id" AND ad."Designation" = 'Level'
+         LIMIT 1
+       ), 1),
+       COALESCE(cc."Name", ''),
+       COALESCE(m."Name", '')
+FROM data."Character" c
+LEFT JOIN config."CharacterClass" cc ON cc."Id" = c."CharacterClassId"
+LEFT JOIN config."GameMapDefinition" m ON m."Id" = c."CurrentMapId"
+JOIN data."Account" a ON a."Id" = c."AccountId"
+WHERE COALESCE(a."IsBot", false) = false
+  AND COALESCE(a."IsTemplate", false) = false
+LIMIT 50`
+
+func mapOpenMUPlayer(cols []string) model.PlayerInfo {
+	level, _ := strconv.Atoi(cols[1])
+	return model.PlayerInfo{
+		Name: cols[0], Character: cols[0], Class: cols[2],
+		Location: cols[3], Level: level,
 	}
+}
+
+func (s *GameServerService) queryOpenMUPlayers(ctx context.Context, container string, cfg *model.GameServerConfig) ([]model.PlayerInfo, error) {
+	out, err := s.execPostgres(ctx, container, cfg, openMUPlayersSQL)
 	if err != nil {
 		return nil, err
 	}
-	return parseRoster(out, func(cols []string) model.PlayerInfo {
-		level, _ := strconv.Atoi(cols[1])
-		return model.PlayerInfo{
-			Name: cols[0], Character: cols[0], Class: cols[2],
-			Location: cols[3], Level: level,
-		}
-	}), nil
+	return parseRoster(out, mapOpenMUPlayer), nil
 }
 
 func (s *GameServerService) queryRakionPlayers(ctx context.Context, container string, cfg *model.GameServerConfig) ([]model.PlayerInfo, error) {

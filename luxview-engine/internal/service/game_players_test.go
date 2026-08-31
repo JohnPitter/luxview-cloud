@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/luxview/engine/internal/model"
@@ -43,5 +44,26 @@ func TestParseRoster(t *testing.T) {
 	})
 	if len(got) != 1 || got[0].Name != "KnightOne" {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestOpenMUPlayersSQLUsesRealSchema(t *testing.T) {
+	for _, part := range []string{
+		`data."Character"`,
+		`data."Account"`,
+		`data."StatAttribute"`,
+		`config."CharacterClass"`,
+		`config."GameMapDefinition"`,
+		`config."AttributeDefinition"`,
+		`ad."Designation" = 'Level'`,
+	} {
+		if !strings.Contains(openMUPlayersSQL, part) {
+			t.Fatalf("missing %q", part)
+		}
+	}
+	for _, bad := range []string{`FROM "Character"`, "ExperienceLevel", "LastLogin"} {
+		if strings.Contains(openMUPlayersSQL, bad) {
+			t.Fatalf("stale OpenMU SQL still has %q", bad)
+		}
 	}
 }
