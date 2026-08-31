@@ -93,4 +93,13 @@ export const gameServersApi = {
     const sep = downloadUrl.includes('?') ? '&' : '?';
     return `${downloadUrl}${sep}ticket=${encodeURIComponent(ticket)}`;
   },
+
+  adminPanelPath(appId: string): string {
+    return `/api/apps/${appId}/game-admin/`;
+  },
+
+  async adminPanelHref(appId: string): Promise<string> {
+    const ticket = await appsApi.accessTicket(appId, 'admin-panel');
+    return `${this.adminPanelPath(appId)}?ticket=${encodeURIComponent(ticket)}`;
+  },
 };

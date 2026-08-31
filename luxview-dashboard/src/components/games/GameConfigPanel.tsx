@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Save, Loader2, Wifi, WifiOff, RefreshCw, RotateCw, Download, Copy, Check } from 'lucide-react';
+import { Save, Loader2, Wifi, WifiOff, RefreshCw, RotateCw, Download, Copy, Check, ExternalLink } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { PillButton } from '../common/PillButton';
 import { useThemeStore } from '../../stores/theme.store';
 import { useNotificationsStore } from '../../stores/notifications.store';
 import { gameServersApi, type GameConfigResponse, type GameServerStatus } from '../../api/gameServers';
+import type { ExtraPort } from '../../api/apps';
 
 interface GameConfigPanelProps {
   appId: string;
@@ -13,6 +14,12 @@ interface GameConfigPanelProps {
 const POLL_INTERVAL_IDLE = 30_000;
 const POLL_INTERVAL_RESTART = 5_000;
 const RESTART_TIMEOUT_MS = 5 * 60_000; // give up the "Reiniciando" label after 5 min
+const OTHER_CONFIGS_SECTION = 'Outras configs';
+
+function isAdminExtraPort(ep: ExtraPort): boolean {
+  const label = (ep.label ?? '').toLowerCase();
+  return ep.port === 18080 || label.includes('admin') || label.includes('painel');
+}
 
 export function GameConfigPanel({ appId }: GameConfigPanelProps) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -145,10 +152,16 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
 
   const templateFields = config.template?.configFields ?? [];
   const sections = Array.from(new Set(templateFields.map((f) => f.section ?? 'Geral')));
+  const hasAdminPanel = (config.extraPorts ?? []).some(isAdminExtraPort)
+    || config.templateId === 'openmu' || config.template?.id === 'openmu';
+  const displaySections = hasAdminPanel ? [...sections, OTHER_CONFIGS_SECTION] : sections;
   const fieldsBySection = Object.fromEntries(
     sections.map((sec) => [sec, templateFields.filter((f) => (f.section ?? 'Geral') === sec)]),
   );
-  const currentSection = activeSection && sections.includes(activeSection) ? activeSection : sections[0];
+  const currentSection = activeSection && displaySections.includes(activeSection)
+    ? activeSection
+    : displaySections[0];
+  const isOtherConfigs = currentSection === OTHER_CONFIGS_SECTION;
 
   const statusBadge = () => {
     if (restarting) {
@@ -199,17 +212,23 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
               </div>
             )}
 
-            {config.extraPorts?.map((ep) => (
-              <div key={ep.port} className="flex items-center gap-2">
-                <span className="text-xs text-zinc-500">{ep.label ?? `Porta ${ep.port}`}:</span>
-                <code className={`text-xs font-mono px-2 py-0.5 rounded-md ${isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'}`}>
-                  {ep.label?.toLowerCase().includes('admin') || ep.label?.toLowerCase().includes('painel')
-                    ? `http://${config.serverIp ?? '...'}:${ep.port}`
-                    : `:${ep.port}`
-                  }
-                </code>
-              </div>
-            ))}
+            {config.extraPorts?.map((ep) => {
+              const admin = isAdminExtraPort(ep);
+              return (
+                <div key={ep.port} className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-500">{admin ? 'Painel Admin' : (ep.label ?? `Porta ${ep.port}`)}:</span>
+                  {admin ? (
+                    <span className={`text-xs ${isDark ? 'text-amber-300/80' : 'text-amber-700'}`}>
+                      aba Outras configs
+                    </span>
+                  ) : (
+                    <code className={`text-xs font-mono px-2 py-0.5 rounded-md ${isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-100 text-zinc-600'}`}>
+                      :{ep.port}
+                    </code>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <PillButton
@@ -264,7 +283,7 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
 
       {/* Section tabs */}
       <div className="flex flex-wrap gap-2">
-        {sections.map((section) => {
+        {displaySections.map((section) => {
           const isActive = section === currentSection;
           return (
             <button
@@ -286,52 +305,126 @@ export function GameConfigPanel({ appId }: GameConfigPanelProps) {
       </div>
 
       {/* Active section fields */}
-      <GlassCard>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {fieldsBySection[currentSection]?.map((fieldDef) => (
-            <div key={fieldDef.key}>
-              <label className="block text-xs text-zinc-500 mb-1.5">{fieldDef.label}</label>
-              {(fieldDef.type === 'select' || fieldDef.type === 'global_file') && fieldDef.options?.length ? (
-                <select
-                  value={fields[fieldDef.key] ?? ''}
-                  onChange={(e) => setFields({ ...fields, [fieldDef.key]: e.target.value })}
-                  className={inputClass}
-                >
-                  {fieldDef.options.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type={fieldDef.type === 'password' ? 'password' : fieldDef.type === 'number' ? 'number' : 'text'}
-                  value={fields[fieldDef.key] ?? ''}
-                  onChange={(e) => setFields({ ...fields, [fieldDef.key]: e.target.value })}
-                  placeholder={fieldDef.placeholder ?? ''}
-                  className={inputClass}
-                />
-              )}
-              {fieldDef.hint && (
-                <p className={`mt-1 text-[11px] leading-snug ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                  {fieldDef.hint}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      </GlassCard>
+      {isOtherConfigs ? (
+        <GameAdminPanelEmbed appId={appId} isDark={isDark} />
+      ) : (
+        <GlassCard>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {fieldsBySection[currentSection]?.map((fieldDef) => (
+              <div key={fieldDef.key}>
+                <label className="block text-xs text-zinc-500 mb-1.5">{fieldDef.label}</label>
+                {(fieldDef.type === 'select' || fieldDef.type === 'global_file') && fieldDef.options?.length ? (
+                  <select
+                    value={fields[fieldDef.key] ?? ''}
+                    onChange={(e) => setFields({ ...fields, [fieldDef.key]: e.target.value })}
+                    className={inputClass}
+                  >
+                    {fieldDef.options.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type={fieldDef.type === 'password' ? 'password' : fieldDef.type === 'number' ? 'number' : 'text'}
+                    value={fields[fieldDef.key] ?? ''}
+                    onChange={(e) => setFields({ ...fields, [fieldDef.key]: e.target.value })}
+                    placeholder={fieldDef.placeholder ?? ''}
+                    className={inputClass}
+                  />
+                )}
+                {fieldDef.hint && (
+                  <p className={`mt-1 text-[11px] leading-snug ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                    {fieldDef.hint}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
 
-      {/* Save button */}
-      <div className="flex justify-end">
-        <PillButton
-          variant="primary"
-          size="sm"
-          onClick={handleSave}
-          disabled={saving || restarting}
-          icon={saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-        >
-          {saving ? 'Salvando...' : restarting ? 'Reiniciando…' : 'Salvar e Reiniciar'}
-        </PillButton>
+      {/* Save button — never on Outras configs (that tab is the live OpenMU panel) */}
+      {!isOtherConfigs && (
+        <div className="flex justify-end">
+          <PillButton
+            variant="primary"
+            size="sm"
+            onClick={handleSave}
+            disabled={saving || restarting}
+            icon={saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+          >
+            {saving ? 'Salvando...' : restarting ? 'Reiniciando…' : 'Salvar e Reiniciar'}
+          </PillButton>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GameAdminPanelEmbed({ appId, isDark }: { appId: string; isDark: boolean }) {
+  const addNotification = useNotificationsStore((s) => s.add);
+  const [src, setSrc] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setSrc(await gameServersApi.adminPanelHref(appId));
+    } catch {
+      setSrc(null);
+      addNotification({ type: 'error', title: 'Não foi possível abrir o painel admin' });
+    } finally {
+      setLoading(false);
+    }
+  }, [appId, addNotification]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const muted = isDark ? 'text-zinc-500' : 'text-zinc-400';
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className={`text-xs ${muted}`}>
+          Painel OpenMU (contas, VIP, Game Servers, drops). Login: usuário e senha da aba Servidor.
+        </p>
+        <div className="flex items-center gap-2">
+          {src && (
+            <a
+              href={src}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`inline-flex items-center gap-1 text-xs ${isDark ? 'text-amber-300 hover:text-amber-200' : 'text-amber-700 hover:text-amber-800'}`}
+            >
+              <ExternalLink size={12} />
+              Nova aba
+            </a>
+          )}
+          <PillButton
+            variant="ghost"
+            size="sm"
+            onClick={() => { void load(); }}
+            icon={<RefreshCw size={13} className={loading ? 'animate-spin' : ''} />}
+          >
+            Recarregar
+          </PillButton>
+        </div>
       </div>
+      <GlassCard padding="none">
+        {loading && !src ? (
+          <div className="flex justify-center py-24">
+            <Loader2 className="animate-spin text-amber-400" size={24} />
+          </div>
+        ) : (
+          <iframe
+            title="Painel Admin OpenMU"
+            src={src ?? undefined}
+            className={`w-full min-h-[75vh] rounded-xl border-0 ${isDark ? 'bg-zinc-950' : 'bg-white'}`}
+          />
+        )}
+      </GlassCard>
     </div>
   );
 }

@@ -13,7 +13,15 @@ import (
 	"github.com/luxview/engine/internal/repository"
 )
 
-const ticketTTL = 2 * time.Minute
+const (
+	TicketKindLogs       = "logs"
+	TicketKindDownload   = "download"
+	TicketKindAdminPanel = "admin-panel"
+
+	ticketTTL           = 2 * time.Minute
+	adminPanelTicketTTL = 8 * time.Hour
+	AdminPanelCookie    = "lv_game_admin"
+)
 
 type accessTicket struct {
 	userID uuid.UUID
@@ -39,7 +47,7 @@ func (s *AccessTickets) Issue(userID, appID uuid.UUID, kind string) (string, tim
 		return "", time.Time{}, err
 	}
 	id := hex.EncodeToString(raw[:])
-	exp := time.Now().Add(ticketTTL)
+	exp := time.Now().Add(ttlForKind(kind))
 	s.mu.Lock()
 	s.gcLocked(time.Now())
 	s.tickets[id] = accessTicket{userID: userID, appID: appID, kind: kind, exp: exp}
@@ -67,14 +75,34 @@ func (s *AccessTickets) gcLocked(now time.Time) {
 	}
 }
 
-// AuthOrTicket accepts a Bearer/cookie JWT, or a one-off ?ticket= for SSE/download.
+func ttlForKind(kind string) time.Duration {
+	if kind == TicketKindAdminPanel {
+		return adminPanelTicketTTL
+	}
+	return ticketTTL
+}
+
+func ticketID(r *http.Request, kind string) string {
+	if t := r.URL.Query().Get("ticket"); t != "" {
+		return t
+	}
+	if kind == TicketKindAdminPanel {
+		if c, err := r.Cookie(AdminPanelCookie); err == nil {
+			return c.Value
+		}
+	}
+	return ""
+}
+
+// AuthOrTicket accepts a Bearer/cookie JWT, or a one-off ?ticket= for SSE/download
+// (and, for the admin panel, the lv_game_admin cookie after the first iframe load).
 func AuthOrTicket(jwtSecret string, users *repository.UserRepo, tickets *AccessTickets, kind string) func(http.Handler) http.Handler {
 	auth := Auth(jwtSecret, users)
 	return func(next http.Handler) http.Handler {
 		ticketHandler := ticketOnly(users, tickets, kind, next)
 		authHandler := auth(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Query().Get("ticket") != "" {
+			if ticketID(r, kind) != "" {
 				ticketHandler.ServeHTTP(w, r)
 				return
 			}
@@ -90,7 +118,7 @@ func ticketOnly(users *repository.UserRepo, tickets *AccessTickets, kind string,
 			writeJSONError(w, http.StatusBadRequest, "invalid app ID")
 			return
 		}
-		userID, ok := tickets.Lookup(r.URL.Query().Get("ticket"), kind, appID)
+		userID, ok := tickets.Lookup(ticketID(r, kind), kind, appID)
 		if !ok {
 			writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 			return

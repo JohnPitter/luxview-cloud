@@ -1066,8 +1066,8 @@ func (h *AppHandler) IssueAccessTicket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.Kind != "logs" && req.Kind != "download" {
-		writeError(w, http.StatusBadRequest, "kind must be logs or download")
+	if req.Kind != middleware.TicketKindLogs && req.Kind != middleware.TicketKindDownload && req.Kind != middleware.TicketKindAdminPanel {
+		writeError(w, http.StatusBadRequest, "kind must be logs, download or admin-panel")
 		return
 	}
 	id, exp, err := h.tickets.Issue(userID, appID, req.Kind)

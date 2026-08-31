@@ -150,7 +150,7 @@ export const appsApi = {
     return data.logs ?? '';
   },
 
-  async accessTicket(id: string, kind: 'logs' | 'download'): Promise<string> {
+  async accessTicket(id: string, kind: 'logs' | 'download' | 'admin-panel'): Promise<string> {
     const { data } = await api.post<{ ticket: string }>(`/apps/${id}/access-ticket`, { kind });
     return data.ticket;
   },

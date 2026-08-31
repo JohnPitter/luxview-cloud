@@ -136,6 +136,15 @@ func NewRouter(deps Deps) *chi.Mux {
 	playerAuthMiddleware := middleware.PlayerAuth(deps.Config.JWTSecret, deps.PlayerRepo)
 	logsTicketAuth := middleware.AuthOrTicket(deps.Config.JWTSecret, deps.UserRepo, accessTickets, "logs")
 	downloadTicketAuth := middleware.AuthOrTicket(deps.Config.JWTSecret, deps.UserRepo, accessTickets, "download")
+	adminPanelTicketAuth := middleware.AuthOrTicket(deps.Config.JWTSecret, deps.UserRepo, accessTickets, middleware.TicketKindAdminPanel)
+
+	// OpenMU Blazor admin — outside the 1 MB JSON limit; iframe + SignalR need room.
+	r.Route("/api/apps/{id}/game-admin", func(r chi.Router) {
+		r.Use(adminPanelTicketAuth)
+		r.Use(middleware.BodySizeLimit(32 << 20))
+		r.Handle("/", http.HandlerFunc(gameServerHandler.ProxyAdminPanel))
+		r.Handle("/*", http.HandlerFunc(gameServerHandler.ProxyAdminPanel))
+	})
 
 	// Global client assets can be large, so they use a dedicated route with a
 	// larger body limit instead of the 1 MB JSON API limit below.
