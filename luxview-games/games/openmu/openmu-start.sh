@@ -40,13 +40,14 @@ try_sql() {
 }
 
 apply_rates() {
-    try_sql "UPDATE \"GameConfiguration\" SET \"ExperienceRate\" = ${OPENMU_EXP_RATE}" || return 1
-    try_sql "UPDATE \"GameConfiguration\" SET \"MasterExperienceRate\" = ${OPENMU_MASTER_EXP_RATE}" || true
-    try_sql "UPDATE \"GameConfiguration\" SET \"MaximumLevel\" = ${OPENMU_MAX_LEVEL}" || true
-    try_sql "UPDATE \"GameConfiguration\" SET \"MaximumMasterLevel\" = ${OPENMU_MAX_MASTER_LEVEL}" || true
-    try_sql "UPDATE \"GameConfiguration\" SET \"MaximumPartySize\" = ${OPENMU_MAX_PARTY}" || true
-    try_sql "UPDATE \"GameConfiguration\" SET \"ExcellentItemDropLevelDelta\" = ${OPENMU_EXCELLENT_DELTA}" || true
-    try_sql "UPDATE \"ConstValueAttribute\" AS c SET \"Value\" = ${OPENMU_ZEN_RATE} FROM \"AttributeDefinition\" AS a WHERE c.\"AttributeDefinitionId\" = a.\"Id\" AND (a.\"Designation\" ILIKE '%MoneyAmount%' OR a.\"Designation\" ILIKE '%Money%Rate%')" || true
+    # Seed only. Admin (or a previous seed) wins — never reset on every restart.
+    try_sql "UPDATE \"GameConfiguration\" SET \"ExperienceRate\" = ${OPENMU_EXP_RATE} WHERE \"ExperienceRate\" IS NULL OR \"ExperienceRate\" <= 1" || return 1
+    try_sql "UPDATE \"GameConfiguration\" SET \"MasterExperienceRate\" = ${OPENMU_MASTER_EXP_RATE} WHERE \"MasterExperienceRate\" IS NULL OR \"MasterExperienceRate\" <= 1" || true
+    try_sql "UPDATE \"GameConfiguration\" SET \"MaximumLevel\" = ${OPENMU_MAX_LEVEL} WHERE \"MaximumLevel\" IS NULL OR \"MaximumLevel\" <= 0" || true
+    try_sql "UPDATE \"GameConfiguration\" SET \"MaximumMasterLevel\" = ${OPENMU_MAX_MASTER_LEVEL} WHERE \"MaximumMasterLevel\" IS NULL OR \"MaximumMasterLevel\" <= 0" || true
+    try_sql "UPDATE \"GameConfiguration\" SET \"MaximumPartySize\" = ${OPENMU_MAX_PARTY} WHERE \"MaximumPartySize\" IS NULL OR \"MaximumPartySize\" <= 0" || true
+    try_sql "UPDATE \"GameConfiguration\" SET \"ExcellentItemDropLevelDelta\" = ${OPENMU_EXCELLENT_DELTA} WHERE \"ExcellentItemDropLevelDelta\" IS NULL" || true
+    try_sql "UPDATE \"ConstValueAttribute\" AS c SET \"Value\" = ${OPENMU_ZEN_RATE} FROM \"AttributeDefinition\" AS a WHERE c.\"AttributeDefinitionId\" = a.\"Id\" AND (a.\"Designation\" ILIKE '%MoneyAmount%' OR a.\"Designation\" ILIKE '%Money%Rate%') AND c.\"Value\" <= 1" || true
     return 0
 }
 
