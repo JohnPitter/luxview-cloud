@@ -31,8 +31,8 @@ func openmuTemplate() model.GameTemplate {
 	}
 
 	fields = append(fields, openmuPerServerRateFields(0, "Season 6 Pt 3", openmuServerRateDefaults{"35", "50", "20", "100", "100", "50", "25", "50", "60", "20", "80", "50", "45"})...)
-	fields = append(fields, openmuPerServerRateFields(1, "99d", openmuServerRateDefaults{"15", "25", "5", "100", "100", "50", "25", "50", "60", "20", "80", "50", "45"})...)
-	fields = append(fields, openmuPerServerRateFields(2, "Season 2", openmuServerRateDefaults{"60", "75", "35", "100", "100", "50", "25", "50", "60", "20", "80", "50", "45"})...)
+	fields = append(fields, openmuPerServerRateFields(20, "99d", openmuServerRateDefaults{"15", "25", "5", "100", "100", "50", "25", "50", "60", "20", "80", "50", "45"})...)
+	fields = append(fields, openmuPerServerRateFields(40, "Season 2", openmuServerRateDefaults{"60", "75", "35", "100", "100", "50", "25", "50", "60", "20", "80", "50", "45"})...)
 
 	return model.GameTemplate{
 		ID:               "openmu",

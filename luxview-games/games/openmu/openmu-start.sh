@@ -58,7 +58,7 @@ apply_server_column() {
 
 apply_server_rates() {
     local sid prefix
-    for sid in 0 1 2; do
+    for sid in 0 20 40; do
         prefix="OPENMU_S${sid}_"
         apply_server_column "$sid" "ItemDropRate" "${prefix}ITEM_DROP"
         apply_server_column "$sid" "ZenDropRate" "${prefix}ZEN_DROP"
