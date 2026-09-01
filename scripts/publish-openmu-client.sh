@@ -170,5 +170,36 @@ if mu["base_hash"] != base_hash:
 print("catalog OK — players with older client_hash should see ATUALIZAR within ~60s")
 PY
 
+# Legacy channel: LuxViewLauncher.exe (shipped inside the zip) reads
+# https://mu.luxview.cloud/patch/manifest.json and re-downloads every file whose
+# SHA-256 differs. If it is left behind it silently DOWNGRADES main.exe right
+# after ATUALIZAR — keep it in sync with what was just published.
+LEGACY_DIR=/data/luxview/mu-web/patch
+if [[ -d "$LEGACY_DIR" ]]; then
+  echo "=== sync legacy launcher channel ($LEGACY_DIR) ==="
+  cp -f "$LEGACY_DIR/main.exe" "$LEGACY_DIR/main.exe.bak-$STAMP" 2>/dev/null || true
+  cp -f "$LEGACY_DIR/manifest.json" "$LEGACY_DIR/manifest.json.bak-$STAMP" 2>/dev/null || true
+  cp -f "$WORK/main.exe" "$LEGACY_DIR/main.exe"
+  for dep in "${CLIENT_LIB_FILES[@]}"; do
+    cp -f "$WORK/$dep" "$LEGACY_DIR/$dep"
+  done
+  python3 - "$LEGACY_DIR" "$STAMP" main.exe "${CLIENT_LIB_FILES[@]}" <<'PY'
+import hashlib, json, os, sys
+patch_dir, stamp, *names = sys.argv[1:]
+files = []
+for name in names:
+    with open(os.path.join(patch_dir, name), "rb") as fh:
+        digest = hashlib.sha256(fh.read()).hexdigest().upper()
+    files.append({"path": name, "sha256": digest, "url": f"https://mu.luxview.cloud/patch/{name}"})
+manifest = {"version": f"{stamp[:4]}.{stamp[4:6]}.{stamp[6:8]}.{stamp[8:]}", "files": files}
+with open(os.path.join(patch_dir, "manifest.json"), "w") as fh:
+    json.dump(manifest, fh, indent=2)
+print("legacy manifest:", manifest["version"], [f["path"] for f in files])
+PY
+  chmod 644 "$LEGACY_DIR/main.exe" "$LEGACY_DIR/manifest.json"
+  for dep in "${CLIENT_LIB_FILES[@]}"; do chmod 644 "$LEGACY_DIR/$dep"; done
+fi
+
+rm -rf "$WORK"
 echo "backup=$BACKUP"
 echo "PUBLISH_OK"

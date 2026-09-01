@@ -61,6 +61,17 @@ ssh -i ~/.ssh/vps_key root@187.77.227.65 \
 > **Não** publique em `/data/luxview/storage/app-<id>/` — esse path legado não
 > altera o `client_hash` do catálogo público.
 
+### Segundo canal: `mu.luxview.cloud/patch/manifest.json`
+
+O `LuxViewLauncher.exe` que vai dentro do zip lê `luxview-launcher.json` →
+`https://mu.luxview.cloud/patch/manifest.json` (nginx `luxview-mu-news`, volume
+`/data/luxview/mu-web`) e **baixa de novo qualquer arquivo cujo SHA-256 seja
+diferente**. Se esse manifesto ficar com um `main.exe` antigo, ele desfaz o
+ATUALIZAR na hora (foi assim que o client sem o parse do 0x1C voltou a circular
+em 2026-09-01). O `publish-openmu-client.sh` agora regrava
+`/data/luxview/mu-web/patch/{main.exe,MUnique.Client.Library.dll,manifest.json}`
+no mesmo passo — não edite o manifesto na mão.
+
 Sem esse arquivo o endpoint responde `404 — client is not available in global storage`
 e o botão de download mostra erro (degrada de forma controlada).
 
