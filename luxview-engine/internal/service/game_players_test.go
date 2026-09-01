@@ -80,6 +80,17 @@ func TestFormatOpenMUServer(t *testing.T) {
 	}
 }
 
+func TestParseOpenMUStatusNames(t *testing.T) {
+	got := parseOpenMUStatusNames([]byte(`{"state":"Online","players":1,"playersList":["CapSparrow"]}`))
+	if len(got) != 1 || got[0] != "CapSparrow" {
+		t.Fatalf("got %+v", got)
+	}
+	legacy := parseOpenMUStatusNames([]byte(`"{\"state\":\"Online\",\"players\":1,\"playersList\":[\"CapSparrow\"]}"`))
+	if len(legacy) != 1 || legacy[0] != "CapSparrow" {
+		t.Fatalf("legacy got %+v", legacy)
+	}
+}
+
 func TestMapOpenMUHTTPPlayer(t *testing.T) {
 	got := mapOpenMUHTTPPlayer(struct {
 		Character         string `json:"character"`
