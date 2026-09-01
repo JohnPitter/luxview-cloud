@@ -4,6 +4,11 @@
 # /game-client/{id}/patch. O Main.exe faz LoadLibrary da DLL na mesma pasta —
 # ATUALIZAR precisa entregar os dois ou o client não conecta no GS.
 #
+# A DLL TEM que ser Native AOT win-x64 (~3.1MB, PE machine 0x8664). x86 faz
+# LoadLibrary falhar e o client mostra "MUnique.Client.Library.dll missing".
+# NÃO use zip -u: ele recusa substituir um entry mais novo (ex.: x86 recente)
+# por um x64 mais antigo.
+#
 # Caminho correto (NÃO use storage/app-<id>/ — isso não altera o catálogo):
 #   /data/luxview/storage/_global/openmu-assets/openmu-s6-base.zip
 #
@@ -17,6 +22,34 @@ ZIP="/data/luxview/storage/_global/openmu-assets/openmu-s6-base.zip"
 SRC_MAIN="${1:-}"
 shift || true
 EXTRA_PATHS=("$@")
+DLL_NAME="MUnique.Client.Library.dll"
+
+assert_pe_x64() {
+  local f="$1"
+  python3 - "$f" <<'PY'
+import os, struct, sys
+path = sys.argv[1]
+with open(path, "rb") as fh:
+    header = fh.read(4096)
+if len(header) < 0x40 or header[:2] != b"MZ":
+    raise SystemExit(f"{path}: not a PE (missing MZ)")
+pe = struct.unpack_from("<I", header, 0x3C)[0]
+need = pe + 6
+if need > len(header):
+    with open(path, "rb") as fh:
+        header = fh.read(need)
+    if len(header) < need:
+        raise SystemExit(f"{path}: truncated PE header")
+machine = struct.unpack_from("<H", header, pe + 4)[0]
+if machine != 0x8664:
+    arch = {0x14C: "x86", 0x8664: "x64"}.get(machine, hex(machine))
+    raise SystemExit(
+        f"{path}: PE machine is {arch} (0x{machine:x}), need x64 (0x8664) — "
+        "x86 MUnique.Client.Library.dll makes LoadLibrary fail as 'missing'"
+    )
+print(f"{path}: PE x64 OK ({os.path.getsize(path)} bytes)")
+PY
+}
 
 if [[ -z "$SRC_MAIN" ]]; then
   for c in /data/luxview/mu-web/patch/main.exe /tmp/main.exe.new /tmp/publish-main.exe; do
@@ -39,11 +72,23 @@ cp -f "$ZIP" "$BACKUP"
 WORK=/tmp/mu-client-publish-$$
 mkdir -p "$WORK"
 cp -f "$SRC_MAIN" "$WORK/main.exe"
+assert_pe_x64 "$WORK/main.exe"
 
 MAIN_DIR=$(dirname "$SRC_MAIN")
-CLIENT_LIB_FILES=()
+if [[ ! -f "$MAIN_DIR/$DLL_NAME" ]]; then
+  echo "missing $DLL_NAME next to $SRC_MAIN — Main.exe cannot connect without it" >&2
+  exit 1
+fi
+cp -f "$MAIN_DIR/$DLL_NAME" "$WORK/$DLL_NAME"
+assert_pe_x64 "$WORK/$DLL_NAME"
+DLL_SIZE=$(stat -c%s "$WORK/$DLL_NAME")
+if (( DLL_SIZE < 3000000 )); then
+  echo "$DLL_NAME is ${DLL_SIZE} bytes — expected Native AOT win-x64 (~3.1MB), not x86 (~2.6MB)" >&2
+  exit 1
+fi
+
+CLIENT_LIB_FILES=("$DLL_NAME")
 for dep in \
-  "MUnique.Client.Library.dll" \
   "MUnique.Client.Library.runtimeconfig.json" \
   "hostfxr.dll"
 do
@@ -55,17 +100,13 @@ done
 shopt -s nullglob
 for extra_dll in "$MAIN_DIR"/MUnique.Client.*.dll; do
   base=$(basename "$extra_dll")
-  if [[ "$base" == "MUnique.Client.Library.dll" ]]; then
+  if [[ "$base" == "$DLL_NAME" ]]; then
     continue
   fi
   cp -f "$extra_dll" "$WORK/$base"
   CLIENT_LIB_FILES+=("$base")
 done
 shopt -u nullglob
-if [[ ${#CLIENT_LIB_FILES[@]} -eq 0 ]]; then
-  echo "missing MUnique.Client.Library.dll next to $SRC_MAIN — Main.exe cannot connect without it" >&2
-  exit 1
-fi
 echo "client library: ${CLIENT_LIB_FILES[*]}"
 
 for rel in "${EXTRA_PATHS[@]}"; do
@@ -77,21 +118,38 @@ for rel in "${EXTRA_PATHS[@]}"; do
   cp -f "$rel" "$WORK/$rel"
 done
 
-echo "=== update zip (zip -u) ==="
+# Force-replace. zip -u skips older sources and previously left an x86 DLL in the zip.
+echo "=== update zip (force replace, not zip -u) ==="
 (
   cd "$WORK"
-  zip -q -u "$ZIP" main.exe
+  zip -q "$ZIP" main.exe
   for dep in "${CLIENT_LIB_FILES[@]}"; do
-    zip -q -u "$ZIP" "$dep"
+    zip -q "$ZIP" "$dep"
   done
   for rel in "${EXTRA_PATHS[@]}"; do
-    zip -q -u "$ZIP" "$rel"
+    zip -q "$ZIP" "$rel"
   done
 )
 chmod 644 "$ZIP"
-# FileHash da engine usa size+mtime do arquivo — garante bump mesmo se zip -u preservar mtime.
+# FileHash da engine usa size+mtime do arquivo — garante bump mesmo se zip preservar mtime.
 touch "$ZIP"
 sleep 1
+
+VERIFY=/tmp/mu-client-verify-$$
+mkdir -p "$VERIFY"
+if ! unzip -p "$ZIP" "$DLL_NAME" > "$VERIFY/$DLL_NAME"; then
+  echo "LIVE zip $ZIP is missing $DLL_NAME after publish" >&2
+  exit 1
+fi
+assert_pe_x64 "$VERIFY/$DLL_NAME"
+VERIFY_SIZE=$(stat -c%s "$VERIFY/$DLL_NAME")
+if (( VERIFY_SIZE < 3000000 )); then
+  echo "LIVE zip $DLL_NAME is ${VERIFY_SIZE} bytes after publish — not x64 AOT" >&2
+  exit 1
+fi
+echo "LIVE zip $DLL_NAME: ${VERIFY_SIZE} bytes x64 AOT OK"
+unzip -l "$ZIP" | grep -iE "MUnique.Client.Library.dll|main.exe" || true
+rm -rf "$VERIFY"
 
 python3 - <<'PY'
 import hashlib, json, os, time, urllib.request
