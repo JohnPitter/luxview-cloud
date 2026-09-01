@@ -98,6 +98,7 @@ func TestWriteOpenMUClientPatchOverlaysMainExeOnly(t *testing.T) {
 	var base bytes.Buffer
 	baseZip := zip.NewWriter(&base)
 	addZipEntry(t, baseZip, "main.exe", "new-main")
+	addZipEntry(t, baseZip, "MUnique.Client.Library.dll", "native-aot-dll")
 	addZipEntry(t, baseZip, "Data/Local/ServerInfo.bmd", "IP=\"192.168.0.168\"\nPort=1\nChatPort=2\n")
 	addZipEntry(t, baseZip, "Data/World1/player.bmd", "keep-me")
 	addZipEntry(t, baseZip, "Data/World1/EncTerrain1.att", "plaza-att")
@@ -119,6 +120,9 @@ func TestWriteOpenMUClientPatchOverlaysMainExeOnly(t *testing.T) {
 	got := readZipEntries(t, out.Bytes())
 	if got["main.exe"] != "new-main" {
 		t.Fatalf("patch must overlay main.exe, got %q", got["main.exe"])
+	}
+	if got["MUnique.Client.Library.dll"] != "native-aot-dll" {
+		t.Fatalf("patch must overlay MUnique.Client.Library.dll, got %q", got["MUnique.Client.Library.dll"])
 	}
 	if got["Data/Object31/flag.OZJ"] != "lux-flag" {
 		t.Fatalf("patch must overlay flag.OZJ, got %q", got["Data/Object31/flag.OZJ"])

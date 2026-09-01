@@ -94,8 +94,9 @@ func WriteOpenMUClientZip(base io.ReaderAt, size int64, out io.Writer, opts Open
 	return writeMuEncTerrainStubs(writer, reader.File)
 }
 
-// WriteOpenMUClientPatch writes launcher.config plus EncTerrain.obj stubs for
-// Season 9 worlds that shipped without object files.
+// WriteOpenMUClientPatch writes launcher.config, Main.exe, the Native AOT
+// client library, flags, EncTerrain*.att, and EncTerrain.obj stubs for Season 9
+// worlds that shipped without object files.
 func WriteOpenMUClientPatch(base io.ReaderAt, size int64, out io.Writer, opts OpenMUClientOptions) error {
 	writer := zip.NewWriter(out)
 	defer writer.Close()
@@ -123,7 +124,7 @@ func WriteOpenMUClientPatch(base io.ReaderAt, size int64, out io.Writer, opts Op
 			if err := writePatchedMuPackedIP(writer, file, opts); err != nil {
 				return err
 			}
-		case isMuFlagTexturePath(file.Name), isMuWorldTerrainPatchPath(file.Name):
+		case isMuFlagTexturePath(file.Name), isMuWorldTerrainPatchPath(file.Name), isMuClientLibraryPath(file.Name):
 			if err := copyZipFile(writer, file); err != nil {
 				return err
 			}
@@ -146,6 +147,27 @@ func isMuServerInfoPath(name string) bool {
 func isMuPackedIPPath(name string) bool {
 	base := path.Base(strings.ReplaceAll(name, "\\", "/"))
 	return strings.EqualFold(base, "main.exe") || strings.EqualFold(base, "IGC.dll")
+}
+
+// isMuClientLibraryPath inclui a biblioteca Native AOT que o Main.exe carrega
+// via LoadLibrary na pasta do client (MUnique.Client.Library.dll). Sem ela no
+// patch incremental, o ATUALIZAR entrega um Main.exe novo que não conecta.
+func isMuClientLibraryPath(name string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(name, "\\", "/"))
+	if strings.Contains(normalized, "/") {
+		return false
+	}
+	base := path.Base(normalized)
+	switch {
+	case base == "munique.client.library.dll",
+		base == "munique.client.library.runtimeconfig.json",
+		base == "hostfxr.dll":
+		return true
+	case strings.HasPrefix(base, "munique.client.") && strings.HasSuffix(base, ".dll"):
+		return true
+	default:
+		return false
+	}
 }
 
 func isMuFlagTexturePath(name string) bool {
