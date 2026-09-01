@@ -235,10 +235,20 @@ func (s *GameServerService) queryOpenMUPlayersFromStatus(ctx context.Context, co
 		return []model.PlayerInfo{}, nil
 	}
 	out, err := s.execPostgres(ctx, container, cfg, fmt.Sprintf(openMUPlayersByNamesSQL, strings.Join(quoted, ",")))
-	if err != nil {
-		return nil, err
+	if err == nil {
+		if players := parseRoster(out, mapOpenMUPlayer); len(players) > 0 {
+			return players, nil
+		}
 	}
-	return parseRoster(out, mapOpenMUPlayer), nil
+	players := make([]model.PlayerInfo, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		players = append(players, model.PlayerInfo{Name: name, Character: name})
+	}
+	return players, nil
 }
 
 type openMUStatusResponse struct {
