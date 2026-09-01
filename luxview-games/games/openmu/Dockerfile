@@ -35,8 +35,9 @@ COPY --from=i18n /i18n/out/pt-BR /opt/openmu/pt-BR
 
 COPY entrypoint.sh /opt/entrypoint.sh
 COPY openmu-start.sh /opt/openmu-start.sh
+COPY admin-proxy.sh /opt/admin-proxy.sh
 COPY supervisord.conf /etc/supervisor/conf.d/openmu.conf
-RUN chmod +x /opt/entrypoint.sh /opt/openmu-start.sh
+RUN chmod +x /opt/entrypoint.sh /opt/openmu-start.sh /opt/admin-proxy.sh
 
 # ConnectServer (players first connect here)
 EXPOSE 44405/tcp

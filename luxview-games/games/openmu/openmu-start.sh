@@ -56,6 +56,10 @@ apply_server_column() {
     fi
 }
 
+cleanup_dummy_plugins() {
+    try_sql "DELETE FROM config.\"PlugInConfiguration\" WHERE \"TypeId\" IN ('a1b2c3d4-e5f6-4789-a012-3456789abcde', '434fa305-edc2-38bf-8dcb-65657e279e26', 'b17e8c4a-2d91-4f06-9a33-6c0e1b7d4a21');" || true
+}
+
 apply_server_rates() {
     local sid prefix
     for sid in 0 20 40; do
@@ -95,8 +99,8 @@ if ! wait_pg; then
     :
 elif ! schema_ready; then
     echo "[openmu] schema ainda não existe — OpenMU sobe com defaults e as taxas valem no próximo restart"
-elif apply_rates; then
-    echo "[openmu] config.GameConfiguration + GameServerDefinition atualizados"
+elif cleanup_dummy_plugins && apply_rates; then
+    echo "[openmu] config.GameConfiguration + GameServerDefinition atualizados (plugins dummy removidos)"
 else
     echo "[openmu] schema existe mas o seed falhou — OpenMU sobe; conferir logs do postgres" >&2
 fi
