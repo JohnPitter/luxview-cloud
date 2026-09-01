@@ -47,8 +47,37 @@ schema_ready() {
     [[ "$r" == *GameConfiguration* ]]
 }
 
+apply_server_column() {
+    local sid="$1" column="$2" varname="$3"
+    local value
+    value="$(eval "printf '%s' \"\${$varname:-}\"")"
+    if [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+        try_sql "UPDATE config.\"GameServerDefinition\" SET \"$column\" = ${value} WHERE \"ServerID\" = ${sid};" || true
+    fi
+}
+
+apply_server_rates() {
+    local sid prefix
+    for sid in 0 1 2; do
+        prefix="OPENMU_S${sid}_"
+        apply_server_column "$sid" "ItemDropRate" "${prefix}ITEM_DROP"
+        apply_server_column "$sid" "ZenDropRate" "${prefix}ZEN_DROP"
+        apply_server_column "$sid" "JewelDropRate" "${prefix}JEWEL_DROP"
+        apply_server_column "$sid" "MixSuccessRateMultiplier" "${prefix}MIX_MULT"
+        apply_server_column "$sid" "BlessUpgradeSuccessRate" "${prefix}BLESS_RATE"
+        apply_server_column "$sid" "SoulUpgradeSuccessRate" "${prefix}SOUL_RATE"
+        apply_server_column "$sid" "SoulUpgradeLuckBonusRate" "${prefix}SOUL_LUCK"
+        apply_server_column "$sid" "LifeUpgradeSuccessRate" "${prefix}LIFE_RATE"
+        apply_server_column "$sid" "HarmonyUpgradeSuccessRate" "${prefix}HARMONY_RATE"
+        apply_server_column "$sid" "LowerRefineSuccessRate" "${prefix}REFINE_LOW"
+        apply_server_column "$sid" "HigherRefineSuccessRate" "${prefix}REFINE_HIGH"
+        apply_server_column "$sid" "MixPlus10SuccessRate" "${prefix}MIX_PLUS10"
+        apply_server_column "$sid" "MixPlus11SuccessRate" "${prefix}MIX_PLUS11"
+    done
+}
+
 apply_rates() {
-    # Seed only. Admin (or a previous seed) wins — never reset on every restart.
+    # Seed only for global GameConfiguration. Admin (or a previous seed) wins — never reset on every restart.
     try_sql "UPDATE config.\"GameConfiguration\" SET \"ExperienceRate\" = ${OPENMU_EXP_RATE} WHERE \"ExperienceRate\" IS NULL OR \"ExperienceRate\" <= 1" || return 1
     try_sql "UPDATE config.\"GameConfiguration\" SET \"MasterExperienceRate\" = ${OPENMU_MASTER_EXP_RATE} WHERE \"MasterExperienceRate\" IS NULL OR \"MasterExperienceRate\" <= 1" || true
     try_sql "UPDATE config.\"GameConfiguration\" SET \"MaximumLevel\" = ${OPENMU_MAX_LEVEL} WHERE \"MaximumLevel\" IS NULL OR \"MaximumLevel\" <= 0" || true
@@ -57,6 +86,7 @@ apply_rates() {
     try_sql "UPDATE config.\"GameConfiguration\" SET \"ExcellentItemDropLevelDelta\" = ${OPENMU_EXCELLENT_DELTA} WHERE \"ExcellentItemDropLevelDelta\" IS NULL" || true
     # MoneyAmountRate is config.ConstValueAttribute.DefinitionId (GUID Stats.MoneyAmountRate), not data.
     try_sql "UPDATE config.\"ConstValueAttribute\" SET \"Value\" = ${OPENMU_ZEN_RATE} WHERE \"DefinitionId\" = 'd84d1a5c-3a56-4cb9-8dd4-158afd4d1edb' AND \"Value\" <= 1 AND \"GameConfigurationId\" IS NOT NULL" || true
+    apply_server_rates
     return 0
 }
 
@@ -66,7 +96,7 @@ if ! wait_pg; then
 elif ! schema_ready; then
     echo "[openmu] schema ainda não existe — OpenMU sobe com defaults e as taxas valem no próximo restart"
 elif apply_rates; then
-    echo "[openmu] config.GameConfiguration atualizado"
+    echo "[openmu] config.GameConfiguration + GameServerDefinition atualizados"
 else
     echo "[openmu] schema existe mas o seed falhou — OpenMU sobe; conferir logs do postgres" >&2
 fi
