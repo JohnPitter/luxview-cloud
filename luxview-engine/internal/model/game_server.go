@@ -52,6 +52,7 @@ type PlayerInfo struct {
 	Class     string  `json:"class,omitempty"`
 	Location  string  `json:"location,omitempty"`
 	Account   string  `json:"account,omitempty"`
+	Server    string  `json:"server,omitempty"`
 	Level     int     `json:"level,omitempty"`
 	Score     int     `json:"score,omitempty"`
 	Duration  float64 `json:"duration,omitempty"`

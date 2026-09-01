@@ -54,8 +54,12 @@ func TestOpenMUPlayersSQLUsesRealSchema(t *testing.T) {
 		`data."StatAttribute"`,
 		`config."CharacterClass"`,
 		`config."GameMapDefinition"`,
+		`config."GameServerDefinition"`,
 		`config."AttributeDefinition"`,
 		`ad."Designation" = 'Level'`,
+		`g."ServerID"`,
+		`COALESCE(m."GameConfigurationId", cc."GameConfigurationId")`,
+		`LIMIT 200`,
 	} {
 		if !strings.Contains(openMUPlayersSQL, part) {
 			t.Fatalf("missing %q", part)
@@ -65,5 +69,35 @@ func TestOpenMUPlayersSQLUsesRealSchema(t *testing.T) {
 		if strings.Contains(openMUPlayersSQL, bad) {
 			t.Fatalf("stale OpenMU SQL still has %q", bad)
 		}
+	}
+}
+
+func TestFormatOpenMUServer(t *testing.T) {
+	cases := []struct {
+		id   int
+		desc string
+		want string
+	}{
+		{0, "LuxMu (S6)", "Season 6 - 1"},
+		{20, "LuxMu (99d)", "Season 99d - 1"},
+		{40, "LuxMu (S2)", "Season 2 - 1"},
+		{1, "LuxMu (S6)", "Season 6 - 2"},
+		{0, "", ""},
+	}
+	for _, c := range cases {
+		got := formatOpenMUServer(c.id, c.desc)
+		if got != c.want {
+			t.Fatalf("id=%d desc=%q got %q want %q", c.id, c.desc, got, c.want)
+		}
+	}
+}
+
+func TestMapOpenMUPlayerIncludesServer(t *testing.T) {
+	got := mapOpenMUPlayer([]string{"testgmDK", "400", "Blade Master", "Lorencia", "0", "LuxMu (S6)"})
+	if got.Server != "Season 6 - 1" {
+		t.Fatalf("server = %q", got.Server)
+	}
+	if got.Location != "Lorencia" || got.Class != "Blade Master" || got.Level != 400 {
+		t.Fatalf("broke existing columns: %+v", got)
 	}
 }

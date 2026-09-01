@@ -107,29 +107,43 @@ func mapMuPlayer(cols []string) model.PlayerInfo {
 // so FROM "Character" fails. There is no ExperienceLevel or LastLogin column;
 // level is data.StatAttribute where config.AttributeDefinition.Designation = 'Level'.
 const openMUPlayersSQL = `SELECT c."Name",
-       COALESCE((
-         SELECT ROUND(sa."Value")::integer
-         FROM data."StatAttribute" sa
-         JOIN config."AttributeDefinition" ad ON ad."Id" = sa."DefinitionId"
-         WHERE sa."CharacterId" = c."Id" AND ad."Designation" = 'Level'
-         LIMIT 1
-       ), 1),
-       COALESCE(cc."Name", ''),
-       COALESCE(m."Name", '')
-FROM data."Character" c
-LEFT JOIN config."CharacterClass" cc ON cc."Id" = c."CharacterClassId"
-LEFT JOIN config."GameMapDefinition" m ON m."Id" = c."CurrentMapId"
-JOIN data."Account" a ON a."Id" = c."AccountId"
-WHERE COALESCE(a."IsBot", false) = false
-  AND COALESCE(a."IsTemplate", false) = false
-LIMIT 50`
+	       COALESCE((
+	         SELECT ROUND(sa."Value")::integer
+	         FROM data."StatAttribute" sa
+	         JOIN config."AttributeDefinition" ad ON ad."Id" = sa."DefinitionId"
+	         WHERE sa."CharacterId" = c."Id" AND ad."Designation" = 'Level'
+	         LIMIT 1
+	       ), 1),
+	       COALESCE(cc."Name", ''),
+	       COALESCE(m."Name", ''),
+	       COALESCE(gs."ServerID", 0),
+	       COALESCE(gs."Description", '')
+	FROM data."Character" c
+	LEFT JOIN config."CharacterClass" cc ON cc."Id" = c."CharacterClassId"
+	LEFT JOIN config."GameMapDefinition" m ON m."Id" = c."CurrentMapId"
+	LEFT JOIN LATERAL (
+	  SELECT g."ServerID", g."Description"
+	  FROM config."GameServerDefinition" g
+	WHERE g."GameConfigurationId" = COALESCE(m."GameConfigurationId", cc."GameConfigurationId")
+	  ORDER BY g."ServerID"
+	  LIMIT 1
+	) gs ON true
+	JOIN data."Account" a ON a."Id" = c."AccountId"
+	WHERE COALESCE(a."IsBot", false) = false
+	  AND COALESCE(a."IsTemplate", false) = false
+	LIMIT 200`
 
 func mapOpenMUPlayer(cols []string) model.PlayerInfo {
 	level, _ := strconv.Atoi(cols[1])
-	return model.PlayerInfo{
+	info := model.PlayerInfo{
 		Name: cols[0], Character: cols[0], Class: cols[2],
 		Location: cols[3], Level: level,
 	}
+	if len(cols) >= 6 {
+		sid, _ := strconv.Atoi(cols[4])
+		info.Server = formatOpenMUServer(sid, cols[5])
+	}
+	return info
 }
 
 func (s *GameServerService) queryOpenMUPlayers(ctx context.Context, container string, cfg *model.GameServerConfig) ([]model.PlayerInfo, error) {

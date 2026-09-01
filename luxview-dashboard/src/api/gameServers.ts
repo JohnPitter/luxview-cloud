@@ -50,6 +50,7 @@ export interface PlayerInfo {
   class?: string;
   location?: string;
   account?: string;
+  server?: string;
   level?: number;
   score: number;
   duration: number;
@@ -85,7 +86,11 @@ export const gameServersApi = {
 
   async getPlayers(appId: string): Promise<PlayerInfo[]> {
     const { data } = await api.get<PlayerInfo[]>(`/apps/${appId}/game-players`);
-    return data;
+    return data ?? [];
+  },
+
+  playersStreamUrl(appId: string): string {
+    return `/api/apps/${appId}/game-players/stream`;
   },
 
   async clientDownloadHref(appId: string, downloadUrl: string): Promise<string> {

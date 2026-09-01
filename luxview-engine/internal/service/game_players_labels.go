@@ -1,6 +1,9 @@
 package service
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
 
 // Nomes oficiais (wiki / vocations.xml / client) — usados só para exibir o roster.
 
@@ -265,4 +268,39 @@ func muMapName(id int) string {
 	default:
 		return "Mapa " + strconv.Itoa(id)
 	}
+}
+
+// formatOpenMUServer is the same label the launcher uses: season name + channel
+// (ConnectServer packs channel as ServerID%20, displayed 1-based).
+func formatOpenMUServer(serverID int, description string) string {
+	desc := strings.TrimSpace(description)
+	if serverID == 0 && desc == "" {
+		return ""
+	}
+	channel := serverID%20 + 1
+	return openMUServerDisplayName(desc, serverID/20) + " - " + strconv.Itoa(channel)
+}
+
+func openMUServerDisplayName(description string, group int) string {
+	d := strings.ToLower(description)
+	switch {
+	case strings.Contains(d, "99d") || strings.Contains(d, "hard"):
+		return "Season 99d"
+	case strings.Contains(d, "s2") || strings.Contains(d, "season 2"):
+		return "Season 2"
+	case strings.Contains(d, "s6") || strings.Contains(d, "season 6"):
+		return "Season 6"
+	}
+	switch group {
+	case 0:
+		return "Season 6"
+	case 1:
+		return "Season 99d"
+	case 2:
+		return "Season 2"
+	}
+	if description != "" {
+		return description
+	}
+	return "Servidor " + strconv.Itoa(group+1)
 }

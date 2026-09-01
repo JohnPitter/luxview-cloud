@@ -333,6 +333,7 @@ func NewRouter(deps Deps) *chi.Mux {
 			r.Put("/apps/{id}/game-config", gameServerHandler.UpdateConfig)
 			r.Get("/apps/{id}/game-status", gameServerHandler.GetStatus)
 			r.Get("/apps/{id}/game-players", gameServerHandler.GetPlayers)
+			r.Get("/apps/{id}/game-players/stream", gameServerHandler.StreamPlayers)
 			r.Get("/apps/{id}/community/posts", communityHandler.ListPosts)
 			r.Post("/apps/{id}/community/posts", communityHandler.CreatePost)
 			r.Delete("/apps/{id}/community/posts/{postId}", communityHandler.DeletePost)

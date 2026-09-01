@@ -201,6 +201,67 @@ func (h *GameServerHandler) GetPlayers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, players)
 }
 
+const gamePlayersPollInterval = time.Second
+
+// StreamPlayers pushes the online roster over SSE. The engine watches the game
+// DB once per second and emits only when someone joins, leaves, or a field
+// (server, class, level, city) changes — the browser does not poll.
+func (h *GameServerHandler) StreamPlayers(w http.ResponseWriter, r *http.Request) {
+	app, cfg, ok := h.loadGame(w, r)
+	if !ok {
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming not supported")
+		return
+	}
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
+
+	ctx := r.Context()
+	container := service.ContainerName(app.Subdomain)
+	var lastHash string
+	push := func() {
+		players, err := h.gameServerSvc.QueryPlayers(ctx, cfg, container)
+		if err != nil || players == nil {
+			players = []model.PlayerInfo{}
+		}
+		raw, err := json.Marshal(players)
+		if err != nil {
+			return
+		}
+		sum := sha256.Sum256(raw)
+		hash := hex.EncodeToString(sum[:])
+		if hash == lastHash {
+			return
+		}
+		lastHash = hash
+		fmt.Fprintf(w, "data: %s\n\n", raw)
+		flusher.Flush()
+	}
+
+	push()
+	tick := time.NewTicker(gamePlayersPollInterval)
+	defer tick.Stop()
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-heartbeat.C:
+			fmt.Fprintf(w, ": ping\n\n")
+			flusher.Flush()
+		case <-tick.C:
+			push()
+		}
+	}
+}
+
 // DownloadClient serves the per-server game client to the authenticated owner.
 func (h *GameServerHandler) DownloadClient(w http.ResponseWriter, r *http.Request) {
 	app, _, ok := h.loadGame(w, r)
