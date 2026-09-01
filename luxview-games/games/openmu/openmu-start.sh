@@ -102,7 +102,7 @@ else
 fi
 
 cd /opt/openmu
-export ASPNETCORE_URLS="${ASPNETCORE_URLS:-http://+:18080}"
+export ASPNETCORE_URLS="${ASPNETCORE_URLS:-http://127.0.0.1:5000}"
 ARGS=(-autostart)
 if [ -n "${OPENMU_RESOLVE_IP:-}" ]; then
     ARGS+=("-resolveIP:${OPENMU_RESOLVE_IP}")

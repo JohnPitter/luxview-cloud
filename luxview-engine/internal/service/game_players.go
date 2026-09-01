@@ -264,15 +264,19 @@ func parseOpenMUStatusNames(body []byte) []string {
 }
 
 func (s *GameServerService) fetchOpenMUAdminPath(ctx context.Context, container, path string) ([]byte, error) {
-	url := fmt.Sprintf("http://%s:%d%s", container, OpenMUAdminPanelPort, path)
 	if s.docker != nil {
-		out, execErr := s.docker.ContainerExec(ctx, container, []string{
-			"curl", "-fsS", url,
-		})
-		if execErr == nil {
-			return []byte(strings.TrimSpace(out)), nil
+		for _, port := range []int{5000, OpenMUAdminPanelPort} {
+			localURL := fmt.Sprintf("http://127.0.0.1:%d%s", port, path)
+			out, execErr := s.docker.ContainerExec(ctx, container, []string{"curl", "-fsS", localURL})
+			if execErr == nil {
+				trimmed := strings.TrimSpace(out)
+				if trimmed != "" {
+					return []byte(trimmed), nil
+				}
+			}
 		}
 	}
+	url := fmt.Sprintf("http://%s:%d%s", container, OpenMUAdminPanelPort, path)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
