@@ -1,5 +1,6 @@
 #!/bin/bash
 # Aplica taxas do dashboard no Postgres do OpenMU e só então sobe o processo.
+# Tabelas OpenMU vivem em config/data (quoted); search_path é public.
 set -e
 
 num() {
@@ -39,24 +40,41 @@ try_sql() {
     psql -h "$PGHOST" -U postgres -d openmu -v ON_ERROR_STOP=1 -c "$1" >/dev/null 2>&1
 }
 
+# to_regclass does not raise "relation does not exist" — unlike SELECT FROM.
+schema_ready() {
+    local r
+    r="$(psql -h "$PGHOST" -U postgres -d openmu -tAc "SELECT to_regclass('config.\"GameConfiguration\"')" 2>/dev/null || true)"
+    [[ "$r" == *GameConfiguration* ]]
+}
+
 apply_rates() {
     # Seed only. Admin (or a previous seed) wins — never reset on every restart.
-    try_sql "UPDATE \"GameConfiguration\" SET \"ExperienceRate\" = ${OPENMU_EXP_RATE} WHERE \"ExperienceRate\" IS NULL OR \"ExperienceRate\" <= 1" || return 1
-    try_sql "UPDATE \"GameConfiguration\" SET \"MasterExperienceRate\" = ${OPENMU_MASTER_EXP_RATE} WHERE \"MasterExperienceRate\" IS NULL OR \"MasterExperienceRate\" <= 1" || true
-    try_sql "UPDATE \"GameConfiguration\" SET \"MaximumLevel\" = ${OPENMU_MAX_LEVEL} WHERE \"MaximumLevel\" IS NULL OR \"MaximumLevel\" <= 0" || true
-    try_sql "UPDATE \"GameConfiguration\" SET \"MaximumMasterLevel\" = ${OPENMU_MAX_MASTER_LEVEL} WHERE \"MaximumMasterLevel\" IS NULL OR \"MaximumMasterLevel\" <= 0" || true
-    try_sql "UPDATE \"GameConfiguration\" SET \"MaximumPartySize\" = ${OPENMU_MAX_PARTY} WHERE \"MaximumPartySize\" IS NULL OR \"MaximumPartySize\" <= 0" || true
-    try_sql "UPDATE \"GameConfiguration\" SET \"ExcellentItemDropLevelDelta\" = ${OPENMU_EXCELLENT_DELTA} WHERE \"ExcellentItemDropLevelDelta\" IS NULL" || true
-    try_sql "UPDATE \"ConstValueAttribute\" AS c SET \"Value\" = ${OPENMU_ZEN_RATE} FROM \"AttributeDefinition\" AS a WHERE c.\"AttributeDefinitionId\" = a.\"Id\" AND (a.\"Designation\" ILIKE '%MoneyAmount%' OR a.\"Designation\" ILIKE '%Money%Rate%') AND c.\"Value\" <= 1" || true
+    try_sql "UPDATE config.\"GameConfiguration\" SET \"ExperienceRate\" = ${OPENMU_EXP_RATE} WHERE \"ExperienceRate\" IS NULL OR \"ExperienceRate\" <= 1" || return 1
+    try_sql "UPDATE config.\"GameConfiguration\" SET \"MasterExperienceRate\" = ${OPENMU_MASTER_EXP_RATE} WHERE \"MasterExperienceRate\" IS NULL OR \"MasterExperienceRate\" <= 1" || true
+    try_sql "UPDATE config.\"GameConfiguration\" SET \"MaximumLevel\" = ${OPENMU_MAX_LEVEL} WHERE \"MaximumLevel\" IS NULL OR \"MaximumLevel\" <= 0" || true
+    try_sql "UPDATE config.\"GameConfiguration\" SET \"MaximumMasterLevel\" = ${OPENMU_MAX_MASTER_LEVEL} WHERE \"MaximumMasterLevel\" IS NULL OR \"MaximumMasterLevel\" <= 0" || true
+    try_sql "UPDATE config.\"GameConfiguration\" SET \"MaximumPartySize\" = ${OPENMU_MAX_PARTY} WHERE \"MaximumPartySize\" IS NULL OR \"MaximumPartySize\" <= 0" || true
+    try_sql "UPDATE config.\"GameConfiguration\" SET \"ExcellentItemDropLevelDelta\" = ${OPENMU_EXCELLENT_DELTA} WHERE \"ExcellentItemDropLevelDelta\" IS NULL" || true
+    # MoneyAmountRate is config.ConstValueAttribute.DefinitionId (GUID Stats.MoneyAmountRate), not data.
+    try_sql "UPDATE config.\"ConstValueAttribute\" SET \"Value\" = ${OPENMU_ZEN_RATE} WHERE \"DefinitionId\" = 'd84d1a5c-3a56-4cb9-8dd4-158afd4d1edb' AND \"Value\" <= 1 AND \"GameConfigurationId\" IS NOT NULL" || true
     return 0
 }
 
 echo "[openmu] aguardando postgres para aplicar taxas (exp ${OPENMU_EXP_RATE}x zen ${OPENMU_ZEN_RATE}x)..."
-if wait_pg && apply_rates; then
-    echo "[openmu] GameConfiguration atualizado"
-else
+if ! wait_pg; then
+    :
+elif ! schema_ready; then
     echo "[openmu] schema ainda não existe — OpenMU sobe com defaults e as taxas valem no próximo restart"
+elif apply_rates; then
+    echo "[openmu] config.GameConfiguration atualizado"
+else
+    echo "[openmu] schema existe mas o seed falhou — OpenMU sobe; conferir logs do postgres" >&2
 fi
 
 cd /opt/openmu
-exec dotnet MUnique.OpenMU.Startup.dll -autostart
+export ASPNETCORE_URLS="${ASPNETCORE_URLS:-http://+:18080}"
+ARGS=(-autostart)
+if [ -n "${OPENMU_RESOLVE_IP:-}" ]; then
+    ARGS+=("-resolveIP:${OPENMU_RESOLVE_IP}")
+fi
+exec dotnet MUnique.OpenMU.Startup.dll "${ARGS[@]}"

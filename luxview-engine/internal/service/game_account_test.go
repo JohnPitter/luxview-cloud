@@ -81,6 +81,21 @@ func TestGameAccountSQLMuEmu(t *testing.T) {
 	}
 }
 
+func TestGameAccountSQLOpenMU(t *testing.T) {
+	info, sql, err := gameAccountSQL("openmu", "testando", "Secret99", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Login != "testando" {
+		t.Fatalf("login %s", info.Login)
+	}
+	for _, part := range []string{"data.\"Account\"", "data.\"ItemStorage\"", "testando", "$2b$", "ON CONFLICT"} {
+		if !strings.Contains(sql, part) {
+			t.Fatalf("missing %q in %s", part, sql)
+		}
+	}
+}
+
 func TestGameAccountSQLRakion(t *testing.T) {
 	info, sql, err := gameAccountSQL("rakion", "testando", "Secret99", "", "")
 	if err != nil {

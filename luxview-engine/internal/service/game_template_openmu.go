@@ -12,7 +12,7 @@ func openmuTemplate() model.GameTemplate {
 		DefaultQueryPort: 55901,
 		DefaultExtraPorts: []model.ExtraPort{
 			{Port: 55980, Protocol: "tcp", Label: "ChatServer"},
-			{Port: 8080, Protocol: "tcp", Label: "Painel Admin"},
+			{Port: 18080, Protocol: "tcp", Label: "Painel Admin"},
 			{Port: 55902, Protocol: "tcp", Label: "GameServer 0b"},
 			{Port: 55903, Protocol: "tcp", Label: "GameServer 1"},
 			{Port: 55904, Protocol: "tcp", Label: "GameServer 1b"},

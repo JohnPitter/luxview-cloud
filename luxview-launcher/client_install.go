@@ -94,6 +94,12 @@ func (a *App) installSplitClient(card GameCard, dir string, updating bool) error
 			needBase = true
 		}
 	}
+	if !needBase {
+		game := normalizeGameID(card.Game)
+		if spec, ok := launchSpecForGame(game); ok && !clientFilesReady(dir, game, spec) {
+			needBase = true
+		}
+	}
 	if needBase {
 		cachePath, err := a.ensureClientBaseCache(card)
 		if err != nil {

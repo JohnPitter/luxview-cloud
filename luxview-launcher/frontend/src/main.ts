@@ -858,13 +858,15 @@ async function doAction() {
 }
 
 // ---------- modais (login + opções) ----------
-function showModal(inner: string): HTMLElement {
+function showModal(inner: string, persist = false): HTMLElement {
   closeModal();
   const ov = document.createElement('div');
   ov.id = 'modal';
   ov.className = 'modal-overlay';
   ov.innerHTML = `<div class="modal">${inner}</div>`;
-  ov.addEventListener('mousedown', (e) => { if (e.target === ov) closeModal(); });
+  if (!persist) {
+    ov.addEventListener('mousedown', (e) => { if (e.target === ov) closeModal(); });
+  }
   document.body.appendChild(ov);
   requestAnimationFrame(() => ov.classList.add('show'));
   return ov;
@@ -893,7 +895,7 @@ async function launchInstalled(g: Card) {
       return;
     }
     if (cardGame(g) === 'muemu') {
-      await openMuServerPicker(g);
+      await launchMu(g);
       return;
     }
     await Play(g as any, '', '');
@@ -932,7 +934,8 @@ function renderMuServerGroup(entries: MuServer[], last: number, isFirstGroup: bo
 
 function renderMuServerRow(s: MuServer, label: string, last: number, preferChecked: boolean): string {
   const full = s.load >= 100;
-  const checked = s.id === last || (last === 0 && preferChecked);
+  const hasLast = Number.isFinite(last);
+  const checked = (hasLast && s.id === last) || (!hasLast && preferChecked);
   return '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid rgba(255,255,255,.12);border-radius:8px;' + (full ? 'opacity:.45;' : 'cursor:pointer;') + '">' +
     '<input type="radio" name="muSrv" value="' + s.id + '" ' + (checked && !full ? 'checked' : '') + ' ' + (full ? 'disabled' : '') + '>' +
     '<strong style="flex:1;">' + esc(label) + '</strong>' +
@@ -940,33 +943,61 @@ function renderMuServerRow(s: MuServer, label: string, last: number, preferCheck
   '</label>';
 }
 
-// Seleção de servidor/canal do MU logo após o JOGAR: consulta o ConnectServer
-// e abre o jogo já logado na seleção de personagem do canal escolhido.
-async function openMuServerPicker(g: Card) {
-  const ov = showModal(`
-    <h3>Escolha o servidor</h3>
-    <div class="modal-err" id="muSrvErr"></div>
-    <div id="muSrvList" style="display:flex;flex-direction:column;gap:8px;margin:12px 0;">
-      <p class="modal-hint">Carregando servidores…</p>
-    </div>
-    <div class="modal-actions">
-      <button class="btn" id="muSrvCancel">Cancelar</button>
-      <button class="btn primary" id="muSrvGo" disabled>▶ Jogar</button>
-    </div>
-    <p class="modal-hint">O jogo abre direto na seleção de personagem.</p>
-  `);
-  document.getElementById('muSrvCancel')!.onclick = closeModal;
+function muLastServerId(appId: string): number {
+  const raw = localStorage.getItem(muServerKey(appId));
+  if (raw === null || raw === '') return Number.NaN;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : Number.NaN;
+}
 
+async function playMuNow(g: Card, serverID: number) {
+  await PlayMu(g as any, serverID);
+  if (serverID >= 0) localStorage.setItem(muServerKey(g.app_id), String(serverID));
+  toast('Iniciando o jogo…');
+  monitorGame(g);
+}
+
+// JOGAR no MU: se já tem season salva (ou só um canal online), abre o jogo
+// direto. O seletor só aparece na primeira vez, e um clique fora do modal
+// não o fecha — isso fazia o JOGAR parecer morto.
+async function launchMu(g: Card) {
   let servers: MuServer[] = [];
   try {
     servers = (await GetMuServers(g as any)) as unknown as MuServer[];
-  } catch (e) {
-    document.getElementById('muSrvErr')!.textContent = String(e).replace(/^Error:\s*/, '');
-    document.getElementById('muSrvList')!.innerHTML = '';
+  } catch {
+    servers = [];
+  }
+  const last = muLastServerId(g.app_id);
+  const available = servers.filter((s) => s.load < 100);
+  const remembered = available.find((s) => s.id === last);
+  if (remembered) {
+    await playMuNow(g, remembered.id);
     return;
   }
+  if (available.length === 1) {
+    await playMuNow(g, available[0].id);
+    return;
+  }
+  if (available.length === 0) {
+    await playMuNow(g, Number.isFinite(last) ? last : -1);
+    return;
+  }
+  await openMuServerPicker(g, available, last);
+}
 
-  const last = Number(localStorage.getItem(muServerKey(g.app_id)) || '');
+async function openMuServerPicker(g: Card, servers: MuServer[], last: number) {
+  const ov = showModal(`
+    <h3>Escolha o servidor</h3>
+    <div class="modal-err" id="muSrvErr"></div>
+    <div id="muSrvList" style="display:flex;flex-direction:column;gap:8px;margin:12px 0;"></div>
+    <div class="modal-actions">
+      <button class="btn" id="muSrvCancel">Cancelar</button>
+      <button class="btn primary" id="muSrvGo">▶ Jogar</button>
+    </div>
+    <p class="modal-hint">O jogo abre direto na seleção de personagem.</p>
+  `, true);
+  document.getElementById('muSrvCancel')!.onclick = closeModal;
+
   const list = document.getElementById('muSrvList')!;
   const groupOrder: number[] = [];
   const groups = new Map<number, MuServer[]>();
@@ -977,17 +1008,18 @@ async function openMuServerPicker(g: Card) {
   list.innerHTML = groupOrder.map((server, i) => renderMuServerGroup(groups.get(server)!, last, i === 0)).join('');
 
   const go = document.getElementById('muSrvGo') as HTMLButtonElement;
-  go.disabled = false;
   go.onclick = async () => {
     const sel = document.querySelector<HTMLInputElement>('input[name="muSrv"]:checked');
-    if (!sel) return;
+    const fallback = servers.find((s) => s.load < 100);
+    const id = sel ? Number(sel.value) : fallback?.id;
+    if (id === undefined || !Number.isFinite(id)) {
+      document.getElementById('muSrvErr')!.textContent = 'Escolha um servidor.';
+      return;
+    }
     go.disabled = true;
     try {
-      await PlayMu(g as any, Number(sel.value));
-      localStorage.setItem(muServerKey(g.app_id), sel.value);
+      await playMuNow(g, id);
       closeModal();
-      toast('Iniciando o jogo…');
-      monitorGame(g);
     } catch (e) {
       go.disabled = false;
       const message = String(e).replace(/^Error:\s*/, '');

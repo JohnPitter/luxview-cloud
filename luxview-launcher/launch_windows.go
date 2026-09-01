@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -74,6 +75,11 @@ func launchMuClient(exePath, workingDir, ip string, port, serverID int, account,
 	}
 	if err := command.Start(); err != nil {
 		return fmt.Errorf("falha ao iniciar o MU: %w", err)
+	}
+	go command.Wait()
+	time.Sleep(2 * time.Second)
+	if !gameProcessRunning(filepath.Base(exePath)) {
+		return fmt.Errorf("o MU abriu e fechou na hora — client incompleto. Clique em INSTALAR de novo")
 	}
 	return nil
 }

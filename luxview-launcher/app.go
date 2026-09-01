@@ -278,7 +278,15 @@ func clientFilesReady(installRoot, game string, spec launchSpec) bool {
 		return pristonExecutable(filepath.Join(installRoot, spec.clientDir)) != ""
 	}
 	if normalizeGameID(game) == "muemu" {
-		return muExecutable(filepath.Join(installRoot, spec.clientDir)) != ""
+		clientDir := filepath.Join(installRoot, spec.clientDir)
+		if muExecutable(clientDir) == "" {
+			return false
+		}
+		// Um patch com só Main.exe não apaga Data/, mas um zip-base de 4 MB
+		// extraído em instalação nova deixa a pasta injogável. Sem Data/ o
+		// launcher mostra INSTALAR de novo em vez de JOGAR.
+		info, err := os.Stat(filepath.Join(clientDir, "Data"))
+		return err == nil && info.IsDir()
 	}
 	for _, relativePath := range requiredClientFiles(game, spec) {
 		if _, err := os.Stat(filepath.Join(installRoot, spec.clientDir, relativePath)); err != nil {

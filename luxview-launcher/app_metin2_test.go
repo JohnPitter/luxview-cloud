@@ -65,6 +65,27 @@ func TestClientNeedsUpdateWhenCatalogHashDiffers(t *testing.T) {
 	}
 }
 
+func TestMuInstallRequiresDataFolder(t *testing.T) {
+	spec := launchSpecs["muemu"]
+	root := t.TempDir()
+	clientDir := filepath.Join(root, spec.clientDir)
+	if err := os.MkdirAll(clientDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(clientDir, "main.exe"), []byte("exe"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if clientFilesReady(root, "muemu", spec) {
+		t.Fatal("MU client without Data/ must not look ready")
+	}
+	if err := os.MkdirAll(filepath.Join(clientDir, "Data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !clientFilesReady(root, "muemu", spec) {
+		t.Fatal("MU client with main.exe and Data/ must be ready")
+	}
+}
+
 func TestMetin2InstallRequiresRuntimeFiles(t *testing.T) {
 	spec := launchSpecs["metin2"]
 	root := t.TempDir()

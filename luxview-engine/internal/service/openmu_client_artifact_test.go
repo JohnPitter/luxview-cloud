@@ -94,6 +94,35 @@ func TestWriteOpenMUClientZipPatchesPackedConnectIP(t *testing.T) {
 	}
 }
 
+func TestWriteOpenMUClientPatchOverlaysMainExeOnly(t *testing.T) {
+	var base bytes.Buffer
+	baseZip := zip.NewWriter(&base)
+	addZipEntry(t, baseZip, "main.exe", "new-main")
+	addZipEntry(t, baseZip, "Data/Local/ServerInfo.bmd", "IP=\"192.168.0.168\"\nPort=1\nChatPort=2\n")
+	addZipEntry(t, baseZip, "Data/World1/player.bmd", "keep-me")
+	if err := baseZip.Close(); err != nil {
+		t.Fatalf("close base zip: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := WriteOpenMUClientPatch(bytes.NewReader(base.Bytes()), int64(base.Len()), &out, OpenMUClientOptions{
+		ServerName: "LuxView",
+		ServerIP:   "187.77.227.65",
+		GamePort:   44405,
+	}); err != nil {
+		t.Fatalf("patch: %v", err)
+	}
+	got := readZipEntries(t, out.Bytes())
+	if got["main.exe"] != "new-main" {
+		t.Fatalf("patch must overlay main.exe, got %q", got["main.exe"])
+	}
+	if _, ok := got["Data/World1/player.bmd"]; ok {
+		t.Fatal("patch must not re-ship the full Data/ tree")
+	}
+	assertContains(t, got["launcher.config"], "<Address>187.77.227.65</Address>")
+	assertContains(t, got["Data/Local/ServerInfo.bmd"], `IP="187.77.227.65"`)
+}
+
 func TestWriteOpenMUClientPatchRetagsEncTerrainWorldID(t *testing.T) {
 	donor := muEncryptMapFile([]byte{0x00, 0x4f, 0x00, 0x00})
 	var base bytes.Buffer

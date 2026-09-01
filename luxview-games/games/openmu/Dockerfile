@@ -17,7 +17,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install PostgreSQL 16 + supervisor
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        ca-certificates curl gnupg2 supervisor \
+        ca-certificates curl gnupg2 supervisor socat \
         postgresql-16 postgresql-client-16 && \
     # .NET 10 ASP.NET runtime (matching OpenMU v0.9+)
     curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
@@ -44,7 +44,7 @@ EXPOSE 44405/tcp
 EXPOSE 55901/tcp
 # ChatServer (whisper/guild chat)
 EXPOSE 55980/tcp
-# Admin Panel (Blazor web UI)
-EXPOSE 8080/tcp
+# Admin Panel proxy (socat 18080 -> loopback Blazor on 5000)
+EXPOSE 18080/tcp
 
 ENTRYPOINT ["/opt/entrypoint.sh"]
