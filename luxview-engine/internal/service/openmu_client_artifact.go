@@ -123,6 +123,10 @@ func WriteOpenMUClientPatch(base io.ReaderAt, size int64, out io.Writer, opts Op
 			if err := writePatchedMuPackedIP(writer, file, opts); err != nil {
 				return err
 			}
+		case isMuFlagTexturePath(file.Name), isMuWorldTerrainPatchPath(file.Name):
+			if err := copyZipFile(writer, file); err != nil {
+				return err
+			}
 		}
 	}
 	return writeMuEncTerrainStubs(writer, reader.File)
@@ -142,6 +146,29 @@ func isMuServerInfoPath(name string) bool {
 func isMuPackedIPPath(name string) bool {
 	base := path.Base(strings.ReplaceAll(name, "\\", "/"))
 	return strings.EqualFold(base, "main.exe") || strings.EqualFold(base, "IGC.dll")
+}
+
+func isMuFlagTexturePath(name string) bool {
+	switch strings.ToLower(strings.ReplaceAll(name, "\\", "/")) {
+	case "data/object31/flag.ozj", "data/object31/flag.ozt", "data/object31/bkflag.ozj":
+		return true
+	default:
+		return false
+	}
+}
+
+// isMuWorldTerrainPatchPath includes EncTerrain*.att (plaza/map collision) in the
+// per-server patch so ATUALIZAR delivers terrain edits without re-downloading 700MiB.
+func isMuWorldTerrainPatchPath(name string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(name, "\\", "/"))
+	if !strings.Contains(normalized, "/world") {
+		return false
+	}
+	base := path.Base(normalized)
+	if !strings.HasPrefix(base, "encterrain") {
+		return false
+	}
+	return strings.EqualFold(path.Ext(base), ".att")
 }
 
 var muPackedDefaultIP = []byte("192.168.0.168")

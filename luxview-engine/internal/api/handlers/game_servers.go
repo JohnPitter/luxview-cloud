@@ -345,6 +345,7 @@ type PublicGameCard struct {
 // listed; no auth required. Disabled cards (not running / no client) render
 // greyed-out in the launcher.
 func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
 	apps, err := h.appRepo.ListAllRunningOrError(ctx)
 	if err != nil {

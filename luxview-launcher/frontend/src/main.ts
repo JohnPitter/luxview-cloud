@@ -477,8 +477,10 @@ let updateWatcherStarted = false;
 function startUpdateWatcher() {
   if (updateWatcherStarted) return;
   updateWatcherStarted = true;
-  setInterval(() => { void checkUpdate(); void refreshCatalog(); }, 10 * 60_000);
-  window.addEventListener('focus', () => { void checkUpdate(); void refreshCatalog(); });
+  // Catálogo (client_hash / ATUALIZAR) a cada 60s; release do launcher a cada 10min.
+  setInterval(() => { void refreshCatalog(); }, 60_000);
+  setInterval(() => { void checkUpdate(); }, 10 * 60_000);
+  window.addEventListener('focus', () => { void checkUpdate(true); void refreshCatalog(); });
 }
 
 async function applyUpdate() {

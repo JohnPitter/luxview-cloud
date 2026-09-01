@@ -85,13 +85,17 @@ func sanitizeCacheKey(raw string) string {
 
 func (a *App) installSplitClient(card GameCard, dir string, updating bool) error {
 	needBase := shouldDownloadClientBase(updating, installedBaseHash(card.AppID), card.BaseHash)
-	// O patch do Tibia contém só o init.lua (IP do servidor). Se o client_hash
-	// mudou, o conteúdo real do client mudou (módulos/overlay) e instalações
-	// legadas sem stamp de base precisam reextrair o zip base inteiro.
-	if !needBase && updating && normalizeGameID(card.Game) == "tibia" {
-		localClient := installedClientHash(card.AppID)
-		if card.ClientHash != "" && localClient != card.ClientHash {
-			needBase = true
+	// Patch overlay não cobre o zip inteiro (Tibia: init.lua; MU: main.exe + flags).
+	// Instalações legadas sem luxview-base.hash só baixavam o patch e ficavam sem
+	// Data/World*/EncTerrain*.att e outros assets do base — mas o client_hash já
+	// era gravado como atualizado e o ATUALIZAR sumia sem entregar o conteúdo novo.
+	if !needBase && updating {
+		switch normalizeGameID(card.Game) {
+		case "tibia", "muemu":
+			localClient := installedClientHash(card.AppID)
+			if card.ClientHash != "" && localClient != card.ClientHash {
+				needBase = true
+			}
 		}
 	}
 	if !needBase {

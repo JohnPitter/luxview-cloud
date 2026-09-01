@@ -100,6 +100,10 @@ func TestWriteOpenMUClientPatchOverlaysMainExeOnly(t *testing.T) {
 	addZipEntry(t, baseZip, "main.exe", "new-main")
 	addZipEntry(t, baseZip, "Data/Local/ServerInfo.bmd", "IP=\"192.168.0.168\"\nPort=1\nChatPort=2\n")
 	addZipEntry(t, baseZip, "Data/World1/player.bmd", "keep-me")
+	addZipEntry(t, baseZip, "Data/World1/EncTerrain1.att", "plaza-att")
+	addZipEntry(t, baseZip, "Data/Object31/flag.OZJ", "lux-flag")
+	addZipEntry(t, baseZip, "Data/Object31/flag.OZT", "lux-flag-alpha")
+	addZipEntry(t, baseZip, "Data/Object31/bkflag.OZJ", "lux-bkflag")
 	if err := baseZip.Close(); err != nil {
 		t.Fatalf("close base zip: %v", err)
 	}
@@ -116,8 +120,14 @@ func TestWriteOpenMUClientPatchOverlaysMainExeOnly(t *testing.T) {
 	if got["main.exe"] != "new-main" {
 		t.Fatalf("patch must overlay main.exe, got %q", got["main.exe"])
 	}
+	if got["Data/Object31/flag.OZJ"] != "lux-flag" {
+		t.Fatalf("patch must overlay flag.OZJ, got %q", got["Data/Object31/flag.OZJ"])
+	}
 	if _, ok := got["Data/World1/player.bmd"]; ok {
 		t.Fatal("patch must not re-ship the full Data/ tree")
+	}
+	if got["Data/World1/EncTerrain1.att"] != "plaza-att" {
+		t.Fatalf("patch must overlay EncTerrain.att, got %q", got["Data/World1/EncTerrain1.att"])
 	}
 	assertContains(t, got["launcher.config"], "<Address>187.77.227.65</Address>")
 	assertContains(t, got["Data/Local/ServerInfo.bmd"], `IP="187.77.227.65"`)
