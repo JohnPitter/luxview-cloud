@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/luxview/engine/internal/model"
 )
@@ -103,55 +106,89 @@ func mapMuPlayer(cols []string) model.PlayerInfo {
 	}
 }
 
-// OpenMU tables live in data/config (quoted identifiers). search_path is public,
-// so FROM "Character" fails. There is no ExperienceLevel or LastLogin column;
-// level is data.StatAttribute where config.AttributeDefinition.Designation = 'Level'.
-const openMUPlayersSQL = `SELECT c."Name",
-	       COALESCE((
-	         SELECT ROUND(sa."Value")::integer
-	         FROM data."StatAttribute" sa
-	         JOIN config."AttributeDefinition" ad ON ad."Id" = sa."DefinitionId"
-	         WHERE sa."CharacterId" = c."Id" AND ad."Designation" = 'Level'
-	         LIMIT 1
-	       ), 1),
-	       COALESCE(cc."Name", ''),
-	       COALESCE(m."Name", ''),
-	       COALESCE(gs."ServerID", 0),
-	       COALESCE(gs."Description", '')
-	FROM data."Character" c
-	LEFT JOIN config."CharacterClass" cc ON cc."Id" = c."CharacterClassId"
-	LEFT JOIN config."GameMapDefinition" m ON m."Id" = c."CurrentMapId"
-	LEFT JOIN LATERAL (
-	  SELECT g."ServerID", g."Description"
-	  FROM config."GameServerDefinition" g
-	WHERE g."GameConfigurationId" = COALESCE(m."GameConfigurationId", cc."GameConfigurationId")
-	  ORDER BY g."ServerID"
-	  LIMIT 1
-	) gs ON true
-	JOIN data."Account" a ON a."Id" = c."AccountId"
-	WHERE COALESCE(a."IsBot", false) = false
-	  AND COALESCE(a."IsTemplate", false) = false
-	LIMIT 200`
+type openMUPlayersResponse struct {
+	Players []struct {
+		Character         string `json:"character"`
+		Account           string `json:"account"`
+		Class             string `json:"class"`
+		Level             int    `json:"level"`
+		Location          string `json:"location"`
+		ServerID          int    `json:"server_id"`
+		ServerDescription string `json:"server_description"`
+	} `json:"players"`
+}
 
-func mapOpenMUPlayer(cols []string) model.PlayerInfo {
-	level, _ := strconv.Atoi(cols[1])
-	info := model.PlayerInfo{
-		Name: cols[0], Character: cols[0], Class: cols[2],
-		Location: cols[3], Level: level,
+func mapOpenMUHTTPPlayer(p struct {
+	Character         string `json:"character"`
+	Account           string `json:"account"`
+	Class             string `json:"class"`
+	Level             int    `json:"level"`
+	Location          string `json:"location"`
+	ServerID          int    `json:"server_id"`
+	ServerDescription string `json:"server_description"`
+}) model.PlayerInfo {
+	name := strings.TrimSpace(p.Character)
+	if name == "" {
+		name = strings.TrimSpace(p.Account)
 	}
-	if len(cols) >= 6 {
-		sid, _ := strconv.Atoi(cols[4])
-		info.Server = formatOpenMUServer(sid, cols[5])
+	return model.PlayerInfo{
+		Name:      name,
+		Character: strings.TrimSpace(p.Character),
+		Account:   strings.TrimSpace(p.Account),
+		Class:     strings.TrimSpace(p.Class),
+		Location:  strings.TrimSpace(p.Location),
+		Level:     p.Level,
+		Server:    formatOpenMUServer(p.ServerID, p.ServerDescription),
 	}
-	return info
+}
+
+func parseOpenMUPlayersJSON(body []byte) ([]model.PlayerInfo, error) {
+	var payload openMUPlayersResponse
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+	players := make([]model.PlayerInfo, 0, len(payload.Players))
+	for _, p := range payload.Players {
+		if strings.TrimSpace(p.Character) == "" && strings.TrimSpace(p.Account) == "" {
+			continue
+		}
+		players = append(players, mapOpenMUHTTPPlayer(p))
+	}
+	return players, nil
 }
 
 func (s *GameServerService) queryOpenMUPlayers(ctx context.Context, container string, cfg *model.GameServerConfig) ([]model.PlayerInfo, error) {
-	out, err := s.execPostgres(ctx, container, cfg, openMUPlayersSQL)
+	body, err := s.fetchOpenMUPlayersJSON(ctx, container)
 	if err != nil {
 		return nil, err
 	}
-	return parseRoster(out, mapOpenMUPlayer), nil
+	return parseOpenMUPlayersJSON(body)
+}
+
+func (s *GameServerService) fetchOpenMUPlayersJSON(ctx context.Context, container string) ([]byte, error) {
+	url := fmt.Sprintf("http://%s:%d/api/players", container, OpenMUAdminPanelPort)
+	if s.docker != nil {
+		out, execErr := s.docker.ContainerExec(ctx, container, []string{
+			"curl", "-fsS", url,
+		})
+		if execErr == nil {
+			return []byte(strings.TrimSpace(out)), nil
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("openmu /api/players: HTTP %d", resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
 }
 
 func (s *GameServerService) queryRakionPlayers(ctx context.Context, container string, cfg *model.GameServerConfig) ([]model.PlayerInfo, error) {

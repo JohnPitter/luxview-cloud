@@ -203,8 +203,8 @@ func (h *GameServerHandler) GetPlayers(w http.ResponseWriter, r *http.Request) {
 
 const gamePlayersPollInterval = time.Second
 
-// StreamPlayers pushes the online roster over SSE. The engine watches the game
-// DB once per second and emits only when someone joins, leaves, or a field
+// StreamPlayers pushes the online roster over SSE. The engine polls the live
+// GameServer session list once per second and emits only when someone joins, leaves, or a field
 // (server, class, level, city) changes — the browser does not poll.
 func (h *GameServerHandler) StreamPlayers(w http.ResponseWriter, r *http.Request) {
 	app, cfg, ok := h.loadGame(w, r)

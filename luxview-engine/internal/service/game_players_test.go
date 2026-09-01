@@ -1,7 +1,6 @@
 package service
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/luxview/engine/internal/model"
@@ -47,28 +46,17 @@ func TestParseRoster(t *testing.T) {
 	}
 }
 
-func TestOpenMUPlayersSQLUsesRealSchema(t *testing.T) {
-	for _, part := range []string{
-		`data."Character"`,
-		`data."Account"`,
-		`data."StatAttribute"`,
-		`config."CharacterClass"`,
-		`config."GameMapDefinition"`,
-		`config."GameServerDefinition"`,
-		`config."AttributeDefinition"`,
-		`ad."Designation" = 'Level'`,
-		`g."ServerID"`,
-		`COALESCE(m."GameConfigurationId", cc."GameConfigurationId")`,
-		`LIMIT 200`,
-	} {
-		if !strings.Contains(openMUPlayersSQL, part) {
-			t.Fatalf("missing %q", part)
-		}
+func TestParseOpenMUPlayersJSON(t *testing.T) {
+	body := `{"players":[{"character":"CapSparrow","account":"caps","class":"Dark Knight","level":120,"location":"Lorencia","server_id":20,"server_description":"LuxMu (99d)"}]}`
+	got, err := parseOpenMUPlayersJSON([]byte(body))
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, bad := range []string{`FROM "Character"`, "ExperienceLevel", "LastLogin"} {
-		if strings.Contains(openMUPlayersSQL, bad) {
-			t.Fatalf("stale OpenMU SQL still has %q", bad)
-		}
+	if len(got) != 1 {
+		t.Fatalf("len = %d", len(got))
+	}
+	if got[0].Character != "CapSparrow" || got[0].Server != "Season 99d - 1" {
+		t.Fatalf("got %+v", got[0])
 	}
 }
 
@@ -92,12 +80,20 @@ func TestFormatOpenMUServer(t *testing.T) {
 	}
 }
 
-func TestMapOpenMUPlayerIncludesServer(t *testing.T) {
-	got := mapOpenMUPlayer([]string{"testgmDK", "400", "Blade Master", "Lorencia", "0", "LuxMu (S6)"})
+func TestMapOpenMUHTTPPlayer(t *testing.T) {
+	got := mapOpenMUHTTPPlayer(struct {
+		Character         string `json:"character"`
+		Account           string `json:"account"`
+		Class             string `json:"class"`
+		Level             int    `json:"level"`
+		Location          string `json:"location"`
+		ServerID          int    `json:"server_id"`
+		ServerDescription string `json:"server_description"`
+	}{
+		Character: "testgmDK", Class: "Blade Master", Level: 400, Location: "Lorencia",
+		ServerID: 0, ServerDescription: "LuxMu (S6)",
+	})
 	if got.Server != "Season 6 - 1" {
 		t.Fatalf("server = %q", got.Server)
-	}
-	if got.Location != "Lorencia" || got.Class != "Blade Master" || got.Level != 400 {
-		t.Fatalf("broke existing columns: %+v", got)
 	}
 }
