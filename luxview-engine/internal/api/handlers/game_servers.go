@@ -325,19 +325,20 @@ func (h *GameServerHandler) DownloadClientBasePublic(w http.ResponseWriter, r *h
 
 // PublicGameCard is one entry in the public launcher catalog.
 type PublicGameCard struct {
-	AppID       string `json:"app_id"`
-	Name        string `json:"name"`         // server name (app.Name)
-	Game        string `json:"game"`         // template id (e.g. "rakion")
-	DisplayName string `json:"display_name"` // template display name
-	Description string `json:"description"`
-	Enabled     bool   `json:"enabled"`      // running + has a downloadable client
-	DownloadURL string `json:"download_url"` // public, shareable client zip
-	PatchURL    string `json:"patch_url,omitempty"`
-	BaseURL     string `json:"base_url,omitempty"`
-	ServerIP    string `json:"server_ip"`
-	AuthHost    string `json:"auth_host"` // <subdomain>.<domain> — onde o launcher faz login
-	ClientHash  string `json:"client_hash,omitempty"`
-	BaseHash    string `json:"base_hash,omitempty"`
+	AppID        string                      `json:"app_id"`
+	Name         string                      `json:"name"`         // server name (app.Name)
+	Game         string                      `json:"game"`         // template id (e.g. "rakion")
+	DisplayName  string                      `json:"display_name"` // template display name
+	Description  string                      `json:"description"`
+	Enabled      bool                        `json:"enabled"`      // running + has a downloadable client
+	DownloadURL  string                      `json:"download_url"` // public, shareable client zip
+	PatchURL     string                      `json:"patch_url,omitempty"`
+	BaseURL      string                      `json:"base_url,omitempty"`
+	ServerIP     string                      `json:"server_ip"`
+	AuthHost     string                      `json:"auth_host"` // <subdomain>.<domain> — onde o launcher faz login
+	ClientHash   string                      `json:"client_hash,omitempty"`
+	BaseHash     string                      `json:"base_hash,omitempty"`
+	ServerGroups []service.OpenMUServerGroup `json:"server_groups,omitempty"`
 }
 
 // ListPublicGames returns the public catalog consumed by the LuxView launcher.
@@ -398,7 +399,7 @@ func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Reque
 			patchURL = gameClientPublicPatchURL(origin, appID, cfg.TemplateID)
 			baseURL = gameClientPublicBaseURL(origin, appID, cfg.TemplateID)
 		}
-		cards = append(cards, PublicGameCard{
+		card := PublicGameCard{
 			AppID:       appID,
 			Name:        app.Name,
 			Game:        cfg.TemplateID,
@@ -412,7 +413,11 @@ func (h *GameServerHandler) ListPublicGames(w http.ResponseWriter, r *http.Reque
 			AuthHost:    authHost,
 			ClientHash:  clientHash,
 			BaseHash:    baseHash,
-		})
+		}
+		if cfg.TemplateID == "openmu" {
+			card.ServerGroups = service.ResolveOpenMUServerGroups(cfg.ConfigFields)
+		}
+		cards = append(cards, card)
 	}
 	writeJSON(w, http.StatusOK, cards)
 }
@@ -563,12 +568,12 @@ func (h *GameServerHandler) serveGameClientPatch(w http.ResponseWriter, r *http.
 			ServerIP:   h.serverIP,
 			GamePort:   cfg.GamePort,
 		})
-		default:
-			err = service.WriteOpenMUClientPatch(baseZip, stat.Size(), &buf, service.OpenMUClientOptions{
-				ServerName: app.Name,
-				ServerIP:   h.serverIP,
-				GamePort:   cfg.GamePort,
-			})
+	default:
+		err = service.WriteOpenMUClientPatch(baseZip, stat.Size(), &buf, service.OpenMUClientOptions{
+			ServerName: app.Name,
+			ServerIP:   h.serverIP,
+			GamePort:   cfg.GamePort,
+		})
 	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate client patch")

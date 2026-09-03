@@ -51,21 +51,22 @@ func validDisplayMode(m string) string {
 
 // GameCard mirrors the engine's /api/public/games payload, plus local state.
 type GameCard struct {
-	AppID           string `json:"app_id"`
-	Name            string `json:"name"`
-	Game            string `json:"game"`
-	DisplayName     string `json:"display_name"`
-	Description     string `json:"description"`
-	Enabled         bool   `json:"enabled"`
-	DownloadURL     string `json:"download_url"`
-	PatchURL        string `json:"patch_url"`
-	BaseURL         string `json:"base_url"`
-	ServerIP        string `json:"server_ip"`
-	AuthHost        string `json:"auth_host"`
-	ClientHash      string `json:"client_hash"`
-	BaseHash        string `json:"base_hash"`
-	Installed       bool   `json:"installed"`        // computed locally
-	UpdateAvailable bool   `json:"update_available"` // computed locally
+	AppID           string          `json:"app_id"`
+	Name            string          `json:"name"`
+	Game            string          `json:"game"`
+	DisplayName     string          `json:"display_name"`
+	Description     string          `json:"description"`
+	Enabled         bool            `json:"enabled"`
+	DownloadURL     string          `json:"download_url"`
+	PatchURL        string          `json:"patch_url"`
+	BaseURL         string          `json:"base_url"`
+	ServerIP        string          `json:"server_ip"`
+	AuthHost        string          `json:"auth_host"`
+	ClientHash      string          `json:"client_hash"`
+	BaseHash        string          `json:"base_hash"`
+	ServerGroups    []MuServerGroup `json:"server_groups,omitempty"`
+	Installed       bool            `json:"installed"`        // computed locally
+	UpdateAvailable bool            `json:"update_available"` // computed locally
 }
 
 // launchSpec tells the launcher how to authenticate and start an installed game,
@@ -595,6 +596,8 @@ func (a *App) GetMuServers(card GameCard) ([]MuServerInfo, error) {
 	if len(servers) == 0 {
 		return nil, fmt.Errorf("nenhum canal online no momento")
 	}
+	applyMuServerCatalog(servers, card.ServerGroups)
+	muSortServers(servers)
 	return servers, nil
 }
 

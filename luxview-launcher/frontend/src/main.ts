@@ -18,6 +18,11 @@ const IMAGES: Record<string, string> = {
   priston: pristonImg,
 };
 
+type MuServerGroupMeta = {
+  group: number; name: string; difficulty: string;
+  channels?: { id: number; mode: string }[];
+};
+
 type Card = {
   app_id: string;
   name: string;
@@ -32,6 +37,7 @@ type Card = {
   auth_host: string;
   client_hash: string;
   base_hash?: string;
+  server_groups?: MuServerGroupMeta[];
   installed: boolean;
   update_available: boolean;
 };
@@ -908,40 +914,79 @@ async function launchInstalled(g: Card) {
   }
 }
 
-type MuServer = { id: number; server: number; channel: number; name: string; load: number };
+type MuServer = {
+  id: number; server: number; channel: number; name: string;
+  difficulty?: string; mode?: string; load: number; players?: number;
+};
 
 function muServerKey(appId: string) {
   return 'luxview:mu-server:' + appId;
 }
 
-function muLoadLabel(load: number): string {
-  if (load >= 100) return 'lotado';
-  if (load >= 70) return 'cheio';
-  if (load >= 30) return 'médio';
+function muPopLabel(s: MuServer): string {
+  if (s.players && s.players > 0) return s.players + ' online';
+  if (s.load >= 100) return 'lotado';
+  if (s.load >= 70) return 'cheio';
+  if (s.load >= 30) return 'médio';
+  if (s.load > 0) return 'online';
   return 'vazio';
 }
 
-// Renders one server group: a single row when it has exactly one channel
-// (today's case for every server), or a "Servidor N" header with one radio
-// row per "Canal M" once a server exposes more than one channel.
-function renderMuServerGroup(entries: MuServer[], last: number, isFirstGroup: boolean): string {
-  if (entries.length === 1) {
-    const s = entries[0];
-    return renderMuServerRow(s, s.name, last, isFirstGroup);
-  }
-  const header = '<div style="font-weight:600;opacity:.85;margin-top:4px;">' + esc(entries[0].name) + '</div>';
-  const rows = entries.map((s, i) => renderMuServerRow(s, 'Canal ' + s.channel, last, isFirstGroup && i === 0)).join('');
-  return header + rows;
+function muServerTitle(name: string): string {
+  const n = (name || '').trim();
+  if (!n) return 'Servidor';
+  if (/^servidor\b/i.test(n)) return n;
+  return 'Servidor ' + n;
 }
 
-function renderMuServerRow(s: MuServer, label: string, last: number, preferChecked: boolean): string {
+function applyMuCardCatalog(servers: MuServer[], groups?: MuServerGroupMeta[]): MuServer[] {
+  if (!groups || groups.length === 0) return servers;
+  const byGroup = new Map<number, MuServerGroupMeta>();
+  const byID = new Map<number, string>();
+  for (const g of groups) {
+    byGroup.set(g.group, g);
+    for (const ch of g.channels || []) {
+      if (ch.mode) byID.set(ch.id, ch.mode);
+    }
+  }
+  return servers.map((s) => {
+    const g = byGroup.get(s.server - 1);
+    const mode = byID.get(s.id);
+    return {
+      ...s,
+      name: g?.name?.trim() || s.name,
+      difficulty: g?.difficulty?.trim() || s.difficulty,
+      mode: mode || s.mode,
+    };
+  });
+}
+
+// Always render a group header (name + difficulty) and indented channel rows.
+// A single-channel season used to collapse into a flat radio labeled with the
+// season name — that made Season 2 / Season 6 look nested under the 99d header.
+function renderMuServerGroup(entries: MuServer[], last: number, isFirstGroup: boolean): string {
+  const head = entries[0];
+  const diff = (head.difficulty || '').trim();
+  const diffClass = diff ? ' mu-diff-' + diff.toLowerCase() : '';
+  const header = '<div class="mu-srv-head">' +
+    '<span class="mu-srv-name">' + esc(muServerTitle(head.name)) + '</span>' +
+    (diff ? '<span class="mu-diff' + diffClass + '">' + esc(diff) + '</span>' : '') +
+    '</div>';
+  const rows = entries.map((s, i) => renderMuServerRow(s, last, isFirstGroup && i === 0)).join('');
+  return '<div class="mu-srv-group">' + header + '<div class="mu-srv-channels">' + rows + '</div></div>';
+}
+
+function renderMuServerRow(s: MuServer, last: number, preferChecked: boolean): string {
   const full = s.load >= 100;
   const hasLast = Number.isFinite(last);
   const checked = (hasLast && s.id === last) || (!hasLast && preferChecked);
-  return '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid rgba(255,255,255,.12);border-radius:8px;' + (full ? 'opacity:.45;' : 'cursor:pointer;') + '">' +
+  const mode = (s.mode || '').trim();
+  const modeClass = mode ? ' mu-mode-' + mode.toLowerCase() : '';
+  return '<label class="mu-srv-row' + (full ? ' is-full' : '') + '">' +
     '<input type="radio" name="muSrv" value="' + s.id + '" ' + (checked && !full ? 'checked' : '') + ' ' + (full ? 'disabled' : '') + '>' +
-    '<strong style="flex:1;">' + esc(label) + '</strong>' +
-    '<span>' + muLoadLabel(s.load) + '</span>' +
+    '<strong>Canal ' + s.channel + '</strong>' +
+    (mode ? '<span class="mu-mode' + modeClass + '">' + esc(mode) + '</span>' : '') +
+    '<span class="mu-pop">' + esc(muPopLabel(s)) + '</span>' +
   '</label>';
 }
 
@@ -969,6 +1014,7 @@ async function launchMu(g: Card) {
   } catch {
     servers = [];
   }
+  servers = applyMuCardCatalog(servers, g.server_groups);
   const last = muLastServerId(g.app_id);
   const available = servers.filter((s) => s.load < 100);
   const remembered = available.find((s) => s.id === last);
@@ -991,7 +1037,7 @@ async function openMuServerPicker(g: Card, servers: MuServer[], last: number) {
   const ov = showModal(`
     <h3>Escolha o servidor</h3>
     <div class="modal-err" id="muSrvErr"></div>
-    <div id="muSrvList" style="display:flex;flex-direction:column;gap:8px;margin:12px 0;"></div>
+    <div id="muSrvList" class="mu-srv-list"></div>
     <div class="modal-actions">
       <button class="btn" id="muSrvCancel">Cancelar</button>
       <button class="btn primary" id="muSrvGo">▶ Jogar</button>

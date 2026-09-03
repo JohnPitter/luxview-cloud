@@ -413,7 +413,7 @@ func (s *GameServerService) CountConnections(ctx context.Context, containerNameO
 
 // GetTemplates returns all available game server templates.
 func Templates() []model.GameTemplate {
-	return []model.GameTemplate{vrisingTemplate(), openmuTemplate(), muemuTemplate(), rakionTemplate(), metin2Template(), tibiaTemplate(), pristonTemplate()}
+	return []model.GameTemplate{vrisingTemplate(), withOpenMUChannelCatalog(openmuTemplate()), muemuTemplate(), rakionTemplate(), metin2Template(), tibiaTemplate(), pristonTemplate()}
 }
 
 func Template(id string) *model.GameTemplate {

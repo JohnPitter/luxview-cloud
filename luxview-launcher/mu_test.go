@@ -131,6 +131,48 @@ func TestEnsureMuEncTerrainRetagsExistingStub(t *testing.T) {
 	}
 }
 
+func TestParseMuServerEntriesGroupsHierarchy(t *testing.T) {
+	// Live layout: S6=0, 99d PvP=20, 99d PvE=21, S2=40.
+	body := make([]byte, 16)
+	ids := []uint16{0, 20, 21, 40}
+	loads := []byte{0, 12, 0, 40}
+	for i, id := range ids {
+		body[i*4] = byte(id)
+		body[i*4+1] = byte(id >> 8)
+		body[i*4+2] = loads[i]
+	}
+	got := parseMuServerEntries(body, 4)
+	if len(got) != 4 {
+		t.Fatalf("len = %d", len(got))
+	}
+	if got[0].ID != 20 || got[0].Name != "99d" || got[0].Difficulty != "Hard" || got[0].Mode != "PvP" || got[0].Channel != 1 {
+		t.Fatalf("first = %+v", got[0])
+	}
+	if got[1].ID != 21 || got[1].Name != "99d" || got[1].Mode != "PvE" || got[1].Channel != 2 {
+		t.Fatalf("pve = %+v", got[1])
+	}
+	if got[2].ID != 40 || got[2].Name != "Season 2" || got[2].Difficulty != "Medium" {
+		t.Fatalf("s2 = %+v", got[2])
+	}
+	if got[3].ID != 0 || got[3].Name != "Season 6 Pt 3" || got[3].Difficulty != "Easy" {
+		t.Fatalf("s6 = %+v", got[3])
+	}
+}
+
+func TestApplyMuServerCatalogOverrides(t *testing.T) {
+	servers := []MuServerInfo{muAnnotate(20, 0), muAnnotate(21, 5)}
+	applyMuServerCatalog(servers, []MuServerGroup{{
+		Group: 1, Name: "Lux 99d", Difficulty: "Medium",
+		Channels: []MuChannelMeta{{ID: 21, Mode: "PvP"}},
+	}})
+	if servers[0].Name != "Lux 99d" || servers[0].Difficulty != "Medium" {
+		t.Fatalf("group overlay = %+v", servers[0])
+	}
+	if servers[1].Mode != "PvP" {
+		t.Fatalf("mode overlay = %+v", servers[1])
+	}
+}
+
 func bytesEqual(a, b []byte) bool {
 	if len(a) != len(b) {
 		return false

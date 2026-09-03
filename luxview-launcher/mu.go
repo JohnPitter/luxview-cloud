@@ -34,40 +34,56 @@ func muConnectPort(_ GameCard) int {
 	return muDefaultConnectPort
 }
 
-// muServerNames maps the ConnectServer group index (ServerId/20) to the
-// friendly name of that physical server, matching config."GameServerDefinition"
-// on the OpenMU database (Description column: "LuxMu (S6)"/"LuxMu (99d)"/
-// "LuxMu (S2)"). A future new server without an entry here falls back to
-// "Servidor N" instead of failing.
-var muServerNames = map[int]string{
-	0: "Season 6 Pt 3",
-	1: "Season 99d",
-	2: "Season 2",
+// muServerMeta is the local fallback for names/difficulty when the engine
+// catalog (GET /api/public/games → server_groups) is missing. Keys are the
+// ConnectServer group index (ServerId/20). Display order: 99d, S2, S6.
+type muServerMeta struct {
+	Name       string
+	Difficulty string
+	Order      int
 }
 
-// muServerDisplayOrder ranks the same group indices for the picker: 99d
-// first, Season 2 second, Season 6 Pt 3 third. This is purely a display
-// order — it does not change the ServerId used to connect. A group missing
-// here sorts after every ranked group, ordered by its raw id.
-var muServerDisplayOrder = map[int]int{
-	1: 0, // 99d
-	2: 1, // Season 2
-	0: 2, // Season 6 Pt 3
+var muServerMetaByGroup = map[int]muServerMeta{
+	1: {Name: "99d", Difficulty: "Hard", Order: 0},
+	2: {Name: "Season 2", Difficulty: "Medium", Order: 1},
+	0: {Name: "Season 6 Pt 3", Difficulty: "Easy", Order: 2},
+}
+
+// muChannelModeByID overrides the default PvP badge for specific ServerIDs.
+// ServerID 21 is the 99d PvE channel (GS :55904).
+var muChannelModeByID = map[int]string{
+	21: "PvE",
+}
+
+// MuServerGroup is the engine-configurable catalog for one physical server
+// (mirrors luxview-engine OpenMUServerGroup).
+type MuServerGroup struct {
+	Group      int             `json:"group"`
+	Name       string          `json:"name"`
+	Difficulty string          `json:"difficulty"`
+	Channels   []MuChannelMeta `json:"channels,omitempty"`
+}
+
+// MuChannelMeta is a known ConnectServer ServerID and its PvP/PvE badge.
+type MuChannelMeta struct {
+	ID   int    `json:"id"`
+	Mode string `json:"mode"`
 }
 
 // MuServerInfo is one game server entry reported by the MU ConnectServer.
 // ConnectServer packs two dimensions into a single ServerId: Server (id/20)
 // identifies which physical game server, and Channel (id%20) identifies a
-// channel within that server. Today every server exposes exactly one channel,
-// but the picker groups by Server so a future multi-channel server renders as
-// the server name with several "Canal M" rows instead of looking like N
-// separate servers.
+// channel within that server. The picker always groups by Server so even a
+// single-channel season renders as a header + indented "Canal M" row.
 type MuServerInfo struct {
-	ID      int    `json:"id"`
-	Server  int    `json:"server"`
-	Channel int    `json:"channel"`
-	Name    string `json:"name"`
-	Load    int    `json:"load"`
+	ID         int    `json:"id"`
+	Server     int    `json:"server"`
+	Channel    int    `json:"channel"`
+	Name       string `json:"name"`
+	Difficulty string `json:"difficulty"`
+	Mode       string `json:"mode"`
+	Load       int    `json:"load"`
+	Players    int    `json:"players"`
 }
 
 // queryMuServers asks the MU ConnectServer for its live server list using the
@@ -107,38 +123,102 @@ func queryMuServers(host string, port int) ([]MuServerInfo, error) {
 		return nil, fmt.Errorf("lista de canais incompleta: %w", err)
 	}
 
+	servers := parseMuServerEntries(body, count)
+	return servers, nil
+}
+
+func parseMuServerEntries(body []byte, count int) []MuServerInfo {
 	servers := make([]MuServerInfo, 0, count)
 	for i := 0; i < count; i++ {
+		if (i+1)*4 > len(body) {
+			break
+		}
 		id := int(binary.LittleEndian.Uint16(body[i*4 : i*4+2]))
 		load := int(body[i*4+2])
-		group := id / 20
-		server := group + 1
-		channel := id%20 + 1
-		name, known := muServerNames[group]
-		if !known {
-			name = fmt.Sprintf("Servidor %d", server)
-		}
-		servers = append(servers, MuServerInfo{
-			ID:      id,
-			Server:  server,
-			Channel: channel,
-			Name:    name,
-			Load:    load,
-		})
+		servers = append(servers, muAnnotate(id, load))
 	}
-	sort.Slice(servers, func(i, j int) bool {
+	applyMuServerCatalog(servers, nil)
+	muSortServers(servers)
+	return servers
+}
+
+func muAnnotate(id, load int) MuServerInfo {
+	group := id / 20
+	server := group + 1
+	channel := id%20 + 1
+	meta, known := muServerMetaByGroup[group]
+	name := meta.Name
+	if !known || name == "" {
+		name = fmt.Sprintf("Servidor %d", server)
+	}
+	return MuServerInfo{
+		ID:         id,
+		Server:     server,
+		Channel:    channel,
+		Name:       name,
+		Difficulty: meta.Difficulty,
+		Mode:       muChannelMode(id),
+		Load:       load,
+	}
+}
+
+func muChannelMode(id int) string {
+	if m, ok := muChannelModeByID[id]; ok && m != "" {
+		return m
+	}
+	return "PvP"
+}
+
+func muGroupOrder(group int) (int, bool) {
+	meta, ok := muServerMetaByGroup[group]
+	return meta.Order, ok
+}
+
+func muSortServers(servers []MuServerInfo) {
+	sort.SliceStable(servers, func(i, j int) bool {
 		gi, gj := servers[i].Server-1, servers[j].Server-1
-		ri, iKnown := muServerDisplayOrder[gi]
-		rj, jKnown := muServerDisplayOrder[gj]
+		ri, iKnown := muGroupOrder(gi)
+		rj, jKnown := muGroupOrder(gj)
 		if iKnown != jKnown {
-			return iKnown // ranked groups sort before unranked ones
+			return iKnown
 		}
 		if iKnown && jKnown && ri != rj {
 			return ri < rj
 		}
 		return servers[i].ID < servers[j].ID
 	})
-	return servers, nil
+}
+
+// applyMuServerCatalog overlays engine-configurable names/difficulty/mode
+// from GET /api/public/games server_groups onto the live ConnectServer list.
+func applyMuServerCatalog(servers []MuServerInfo, groups []MuServerGroup) {
+	if len(servers) == 0 || len(groups) == 0 {
+		return
+	}
+	byGroup := map[int]MuServerGroup{}
+	byID := map[int]string{}
+	for _, g := range groups {
+		byGroup[g.Group] = g
+		for _, ch := range g.Channels {
+			if ch.Mode != "" {
+				byID[ch.ID] = ch.Mode
+			}
+		}
+	}
+	for i := range servers {
+		s := &servers[i]
+		if g, ok := byGroup[s.Server-1]; ok {
+			if strings.TrimSpace(g.Name) != "" {
+				s.Name = strings.TrimSpace(g.Name)
+			}
+			if strings.TrimSpace(g.Difficulty) != "" {
+				s.Difficulty = strings.TrimSpace(g.Difficulty)
+			}
+		}
+		if mode, ok := byID[s.ID]; ok {
+			s.Mode = mode
+		}
+	}
 }
 
 func muLauncherConfigPath(clientDir string) string {
