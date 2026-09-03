@@ -1004,36 +1004,36 @@ async function playMuNow(g: Card, serverID: number) {
   monitorGame(g);
 }
 
-// JOGAR no MU: se já tem season salva (ou só um canal online), abre o jogo
-// direto. O seletor só aparece na primeira vez, e um clique fora do modal
-// não o fecha — isso fazia o JOGAR parecer morto.
+// JOGAR no MU: sempre abre o seletor de servidor/canal. A última escolha
+// fica pré-marcada no rádio; o usuário confirma com Jogar. Clique fora do
+// modal não fecha — isso fazia o JOGAR parecer morto.
 async function launchMu(g: Card) {
   let servers: MuServer[] = [];
+  let fetchError = '';
   try {
     servers = (await GetMuServers(g as any)) as unknown as MuServer[];
-  } catch {
+  } catch (e) {
+    fetchError = String(e).replace(/^Error:\s*/, '');
     servers = [];
   }
   servers = applyMuCardCatalog(servers, g.server_groups);
   const last = muLastServerId(g.app_id);
   const available = servers.filter((s) => s.load < 100);
-  const remembered = available.find((s) => s.id === last);
-  if (remembered) {
-    await playMuNow(g, remembered.id);
-    return;
+
+  let pickerError = '';
+  if (fetchError) {
+    pickerError = fetchError;
+  } else if (available.length === 0) {
+    pickerError = servers.length > 0
+      ? 'Nenhum canal disponível no momento (todos lotados).'
+      : 'Nenhum servidor disponível no momento.';
   }
-  if (available.length === 1) {
-    await playMuNow(g, available[0].id);
-    return;
-  }
-  if (available.length === 0) {
-    await playMuNow(g, Number.isFinite(last) ? last : -1);
-    return;
-  }
-  await openMuServerPicker(g, available, last);
+
+  const displayServers = available.length > 0 ? available : servers;
+  await openMuServerPicker(g, displayServers, last, pickerError);
 }
 
-async function openMuServerPicker(g: Card, servers: MuServer[], last: number) {
+async function openMuServerPicker(g: Card, servers: MuServer[], last: number, initialError = '') {
   const ov = showModal(`
     <h3>Escolha o servidor</h3>
     <div class="modal-err" id="muSrvErr"></div>
@@ -1045,6 +1045,10 @@ async function openMuServerPicker(g: Card, servers: MuServer[], last: number) {
     <p class="modal-hint">O jogo abre direto na seleção de personagem.</p>
   `, true);
   document.getElementById('muSrvCancel')!.onclick = closeModal;
+
+  if (initialError) {
+    document.getElementById('muSrvErr')!.textContent = initialError;
+  }
 
   const list = document.getElementById('muSrvList')!;
   const groupOrder: number[] = [];
