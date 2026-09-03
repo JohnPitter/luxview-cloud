@@ -56,6 +56,17 @@ apply_server_column() {
     fi
 }
 
+# Item/Zen/Jewel percents are also editable in the OpenMU admin Drops page.
+# Seed only when still unset/legacy multiplier (≤ 1) so dashboard and admin don't fight.
+apply_server_drop_if_unset() {
+    local sid="$1" column="$2" varname="$3"
+    local value
+    value="$(eval "printf '%s' \"\${$varname:-}\"")"
+    if [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+        try_sql "UPDATE config.\"GameServerDefinition\" SET \"$column\" = ${value} WHERE \"ServerID\" = ${sid} AND (\"$column\" IS NULL OR \"$column\" <= 1);" || true
+    fi
+}
+
 cleanup_dummy_plugins() {
     try_sql "DELETE FROM config.\"PlugInConfiguration\" WHERE \"TypeId\" IN ('a1b2c3d4-e5f6-4789-a012-3456789abcde', '434fa305-edc2-38bf-8dcb-65657e279e26', 'b17e8c4a-2d91-4f06-9a33-6c0e1b7d4a21');" || true
 }
@@ -64,9 +75,9 @@ apply_server_rates() {
     local sid prefix
     for sid in 0 20 40; do
         prefix="OPENMU_S${sid}_"
-        apply_server_column "$sid" "ItemDropRate" "${prefix}ITEM_DROP"
-        apply_server_column "$sid" "ZenDropRate" "${prefix}ZEN_DROP"
-        apply_server_column "$sid" "JewelDropRate" "${prefix}JEWEL_DROP"
+        apply_server_drop_if_unset "$sid" "ItemDropRate" "${prefix}ITEM_DROP"
+        apply_server_drop_if_unset "$sid" "ZenDropRate" "${prefix}ZEN_DROP"
+        apply_server_drop_if_unset "$sid" "JewelDropRate" "${prefix}JEWEL_DROP"
         apply_server_column "$sid" "MixSuccessRateMultiplier" "${prefix}MIX_MULT"
         apply_server_column "$sid" "BlessUpgradeSuccessRate" "${prefix}BLESS_RATE"
         apply_server_column "$sid" "SoulUpgradeSuccessRate" "${prefix}SOUL_RATE"
@@ -85,7 +96,8 @@ apply_rates() {
     try_sql "UPDATE config.\"GameConfiguration\" SET \"ExperienceRate\" = ${OPENMU_EXP_RATE} WHERE \"ExperienceRate\" IS NULL OR \"ExperienceRate\" <= 1" || return 1
     try_sql "UPDATE config.\"GameConfiguration\" SET \"MasterExperienceRate\" = ${OPENMU_MASTER_EXP_RATE} WHERE \"MasterExperienceRate\" IS NULL OR \"MasterExperienceRate\" <= 1" || true
     try_sql "UPDATE config.\"GameConfiguration\" SET \"MaximumLevel\" = ${OPENMU_MAX_LEVEL} WHERE \"MaximumLevel\" IS NULL OR \"MaximumLevel\" <= 0" || true
-    try_sql "UPDATE config.\"GameConfiguration\" SET \"MaximumMasterLevel\" = ${OPENMU_MAX_MASTER_LEVEL} WHERE \"MaximumMasterLevel\" IS NULL OR \"MaximumMasterLevel\" <= 0" || true
+    # Only seed S6: update 149 sets MaximumMasterLevel=0 on 99d/S2 (no ML on those channels).
+    try_sql "UPDATE config.\"GameConfiguration\" SET \"MaximumMasterLevel\" = ${OPENMU_MAX_MASTER_LEVEL} WHERE \"Id\" = '00000001-0001-0000-0000-000000000000' AND (\"MaximumMasterLevel\" IS NULL OR \"MaximumMasterLevel\" <= 0)" || true
     try_sql "UPDATE config.\"GameConfiguration\" SET \"MaximumPartySize\" = ${OPENMU_MAX_PARTY} WHERE \"MaximumPartySize\" IS NULL OR \"MaximumPartySize\" <= 0" || true
     try_sql "UPDATE config.\"GameConfiguration\" SET \"ExcellentItemDropLevelDelta\" = ${OPENMU_EXCELLENT_DELTA} WHERE \"ExcellentItemDropLevelDelta\" IS NULL" || true
     # MoneyAmountRate is config.ConstValueAttribute.DefinitionId (GUID Stats.MoneyAmountRate), not data.
