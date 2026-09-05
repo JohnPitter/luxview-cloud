@@ -53,20 +53,8 @@ public sealed class MainForm : Form
             TextAlign = ContentAlignment.MiddleLeft,
             Padding = new Padding(20, 0, 0, 0),
         };
-        var addr = new Label
-        {
-            Text = $"{_config.HostAddress}:{_config.HostPort}",
-            ForeColor = Muted,
-            Font = new Font("Consolas", 10F),
-            AutoSize = false,
-            Dock = DockStyle.Right,
-            Width = 220,
-            TextAlign = ContentAlignment.MiddleRight,
-            Padding = new Padding(0, 0, 20, 0),
-        };
         header.Controls.Add(title);
-        header.Controls.Add(addr);
-        this.Controls.Add(header);
+                this.Controls.Add(header);
     }
 
     private void BuildFooter()
@@ -170,7 +158,7 @@ public sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Não foi possível iniciar o jogo", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show("Não foi possível iniciar o jogo. Verifique sua instalação ou baixe o cliente novamente.", "Não foi possível iniciar o jogo", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 }
